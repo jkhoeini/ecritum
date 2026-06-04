@@ -9,18 +9,22 @@ The planned core is a GraalVM Native Image shared library (`.dylib` or `XCFramew
 ## Hard Boundaries
 
 - Use `jj` for version control. Do not use `git` commands.
+- Use `mise` for project tools and `just` for project tasks. Prefer `mise exec -- just <task>` if tool versions matter.
 - Keep the public ABI C-compatible: opaque handles, explicit ownership, explicit error objects, no exceptions crossing FFI.
 - Treat Swift as the primary developer experience, but keep the core host API language-neutral.
 - Do not claim arbitrary JVM/JAR support until a separate Espresso/full-JVM design is implemented, tested, and licensed.
 - Do not bundle a full JDK unless a design document explicitly accepts the size, licensing, and distribution cost.
 - Keep dynamic-library distribution as the default plan: single binary where practical, otherwise a small set of bundled dylibs.
+- Do not rely on SwiftPM running GraalVM builds for consumers. Consumer packages must use prebuilt binary artifacts.
 
 ## Runtime Plan
 
 - First-class host API: register host functions, callbacks, values, and capability objects from C/Swift.
-- First-class Clojure scripting: use SCI or a similar native-image-friendly Clojure interpreter.
-- JavaScript support: target GraalJS where native-image embedding is practical.
-- Python/Ruby support: treat GraalPy and TruffleRuby as optional/experimental until packaging, licensing, and binary size are measured.
+- First-class Clojure scripting: use SCI with Babashka-compatible namespaces and behavior.
+- JavaScript support: target GraalJS.
+- Python support: target GraalPy, with size and resource packaging gates.
+- Ruby support: target TruffleRuby, with size, licensing, and resource packaging gates.
+- Lua support: start with LuaJ or another pure-Java implementation that works in Native Image; do not assume an official Truffle Lua runtime exists.
 - JVM-language support: Clojure via SCI first; arbitrary Kotlin/Clojure/JAR execution is not an MVP feature.
 
 ## Engineering Rules
@@ -31,6 +35,18 @@ The planned core is a GraalVM Native Image shared library (`.dylib` or `XCFramew
 - Maintain a license inventory for GraalVM CE, Native Image/SubstrateVM, Truffle, GraalJS, GraalPy, TruffleRuby, SCI, and transitive dependencies.
 - Prefer small examples that prove distribution behavior: a C host, a SwiftPM host, and a packaged macOS app loading the runtime.
 - Document every public C symbol before stabilizing it.
+- Expose useful JDK capabilities through a curated Ecritum standard library. Do not enable unrestricted Java class lookup, reflection, class loading, native library loading, process execution, filesystem, network, or environment access by default.
+
+## Task Commands
+
+- `just setup`: install project tools with mise.
+- `just doctor`: print tool versions.
+- `just test`: run currently available checks.
+- `just native`: build the Native Image shared library once source scaffolding exists.
+- `just xcframework`: assemble the SwiftPM binary artifact once native artifacts exist.
+- `just license-report`: generate third-party notices once dependencies exist.
+
+Use `mise trust` once before running project commands on a fresh checkout.
 
 ## Naming
 

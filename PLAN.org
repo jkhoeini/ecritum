@@ -1,0 +1,656 @@
+#+title: Ecritum Plan
+#+startup: overview
+
+* Product Goal
+
+Ecritum is a macOS-first SwiftPM package for adding polyglot scripting to Swift desktop apps.
+
+The target developer experience:
+
+#+begin_src swift
+import Ecritum
+
+let runtime = try EcritumRuntime(
+    languages: [.clojure, .javascript, .python, .ruby, .lua],
+    permissions: [.filesystem(.sandboxed(appScriptsURL)), .network(.deny), .process(.deny)]
+)
+
+try runtime.register("app.notify") { call in
+    let message = try call.string(at: 0)
+    await app.showNotification(message)
+    return .null
+}
+
+let result = try runtime.eval(
+    "(app.notify \"hello from clojure\")",
+    as: .clojure,
+    sourceName: "plugin.clj"
+)
+#+end_src
+
+The target user experience:
+
+- No separate GraalVM install.
+- No separate JDK install.
+- No separate Clojure, Python, Ruby, JavaScript, Node, or Lua install.
+- The app ships one Ecritum framework if possible, or a small set of bundled dynamic libraries/resources if unavoidable.
+- The host app decides exactly which capabilities scripts can see.
+
+* Main Technical Decision
+
+Use a prebuilt SwiftPM binary target for consumers, not a source build that tries to run GraalVM from SwiftPM.
+
+SwiftPM can depend on Apple-platform binary artifacts via =.binaryTarget=, and it can wrap C headers with C targets. It cannot reliably run a GraalVM Native Image build as part of normal package resolution. Therefore:
+
+- Contributors build Ecritum from source with =mise= and =just=.
+- Releases publish =EcritumRuntime.xcframework= as a zipped SwiftPM binary artifact.
+- The Swift package contains:
+  - =Ecritum=: Swift wrapper API.
+  - =CEcritum=: C module exposing the generated/stable C ABI header.
+  - =EcritumRuntime=: binary target containing the native runtime.
+
+* Architecture
+
+#+begin_src text
+Swift app
+  |
+  v
+Ecritum Swift API
+  |
+  v
+CEcritum C module
+  |
+  v
+EcritumRuntime.xcframework
+  |
+  v
+GraalVM Native Image shared library
+  |
+  +-- SCI / Babashka-compatible Clojure
+  +-- GraalJS
+  +-- GraalPy
+  +-- TruffleRuby
+  +-- LuaJ or another native-image-friendly Lua runtime
+  +-- Ecritum standard library facades
+#+end_src
+
+Native Image shared libraries export C entry points with =@CEntryPoint=. The generated Graal C API manages isolates and attached threads. Ecritum should hide those details behind stable =ecritum_*= functions.
+
+* Package Layout
+
+#+begin_src text
+Package.swift
+Sources/
+  Ecritum/
+    EcritumRuntime.swift
+    EcritumLanguage.swift
+    EcritumValue.swift
+    EcritumError.swift
+    EcritumPermissions.swift
+    EcritumPlugin.swift
+  CEcritum/
+    include/
+      ecritum.h
+native/
+  pom.xml
+  src/main/java/ecritum/...
+  src/test/java/ecritum/...
+scripts/
+  build-xcframework.sh
+  package-artifact.sh
+dist/
+  EcritumRuntime.xcframework.zip
+Examples/
+  SwiftHost/
+  CHost/
+Tests/
+  EcritumTests/
+#+end_src
+
+* Swift API Design
+
+** Core Types
+
+#+begin_src swift
+public final class EcritumRuntime: Sendable {
+    public init(_ configuration: Configuration = .default) throws
+    public func context(_ configuration: ContextConfiguration = .default) throws -> EcritumContext
+    public func register(_ name: String, function: @escaping EcritumHostFunction) throws
+    public func close()
+}
+
+public final class EcritumContext: Sendable {
+    public func eval(_ source: String, as language: EcritumLanguage, sourceName: String? = nil) async throws -> EcritumValue
+    public func load(_ source: String, as language: EcritumLanguage, sourceName: String? = nil) async throws -> EcritumScript
+    public func set(_ name: String, _ value: EcritumValue) throws
+    public func close()
+}
+
+public enum EcritumLanguage: String, Sendable {
+    case clojure
+    case javascript
+    case python
+    case ruby
+    case lua
+}
+
+public typealias EcritumHostFunction = @Sendable (EcritumCall) async throws -> EcritumValue
+#+end_src
+
+** Values
+
+Use a small explicit cross-language value model:
+
+#+begin_src swift
+public enum EcritumValue: Sendable, Equatable {
+    case null
+    case bool(Bool)
+    case int(Int64)
+    case double(Double)
+    case string(String)
+    case data(Data)
+    case array([EcritumValue])
+    case object([String: EcritumValue])
+}
+#+end_src
+
+Do not expose arbitrary Swift objects directly. Expose named capability objects that are backed by registered functions.
+
+** Capability Registration
+
+#+begin_src swift
+let document = runtime.namespace("document")
+
+try document.register("getText") { call in
+    .string(await model.text)
+}
+
+try document.register("replaceSelection") { call in
+    let text = try call.string(at: 0)
+    await model.replaceSelection(text)
+    return .null
+}
+#+end_src
+
+Scripts see a stable API:
+
+#+begin_src clojure
+(document/getText)
+(document/replaceSelection "new text")
+#+end_src
+
+#+begin_src javascript
+await ecritum.document.replaceSelection("new text")
+#+end_src
+
+#+begin_src python
+await ecritum.document.replace_selection("new text")
+#+end_src
+
+#+begin_src ruby
+Ecritum.document.replace_selection("new text")
+#+end_src
+
+#+begin_src lua
+ecritum.document.replace_selection("new text")
+#+end_src
+
+** Permissions
+
+Permissions must be explicit at runtime/context creation:
+
+#+begin_src swift
+public struct EcritumPermissions: OptionSet, Sendable {
+    public static let clock
+    public static let random
+    public static let filesystemRead
+    public static let filesystemWrite
+    public static let network
+    public static let process
+    public static let environment
+}
+#+end_src
+
+The real implementation should use richer associated policies than a flat bitset:
+
+- Filesystem: denied, read-only roots, read-write roots.
+- Network: denied, allowed hosts, loopback-only.
+- Process: denied by default, allowlisted commands only.
+- Environment: denied by default, allowlisted variable names only.
+
+* C ABI Design
+
+The C ABI is the real stable layer. Swift, Rust, Zig, C++, and other wrappers sit above it.
+
+#+begin_src c
+typedef struct ecritum_runtime ecritum_runtime_t;
+typedef struct ecritum_context ecritum_context_t;
+typedef struct ecritum_value ecritum_value_t;
+typedef struct ecritum_error ecritum_error_t;
+typedef struct ecritum_call ecritum_call_t;
+
+typedef int (*ecritum_host_fn_t)(
+    ecritum_call_t *call,
+    void *user_data,
+    ecritum_value_t **result,
+    ecritum_error_t **error
+);
+
+int ecritum_runtime_create(const char *config_json, ecritum_runtime_t **out, ecritum_error_t **error);
+void ecritum_runtime_destroy(ecritum_runtime_t *runtime);
+
+int ecritum_context_create(ecritum_runtime_t *runtime, const char *config_json, ecritum_context_t **out, ecritum_error_t **error);
+void ecritum_context_destroy(ecritum_context_t *context);
+
+int ecritum_register_function(
+    ecritum_runtime_t *runtime,
+    const char *name,
+    ecritum_host_fn_t function,
+    void *user_data,
+    void (*destroy_user_data)(void *)
+);
+
+int ecritum_eval(
+    ecritum_context_t *context,
+    const char *language,
+    const char *source,
+    const char *source_name,
+    const char *options_json,
+    ecritum_value_t **result,
+    ecritum_error_t **error
+);
+#+end_src
+
+Rules:
+
+- No exceptions cross the C boundary.
+- Every allocated object has a matching =destroy= or =free= function.
+- Strings returned from the runtime are copied and freed by =ecritum_string_free=.
+- Callbacks may be invoked on Ecritum-managed threads, so Swift wrappers must hop to the right executor when needed.
+- Async should be added via job handles, not by blocking arbitrary native threads forever.
+
+* Language Plan
+
+** Clojure
+
+Requirement: Clojure support is first-class and Babashka-like.
+
+Implementation plan:
+
+- Use SCI as the embeddable interpreter.
+- Treat Babashka as the compatibility target, not as a subprocess.
+- Include a curated Babashka-style namespace set:
+  - =clojure.core=
+  - =clojure.string=
+  - =clojure.set=
+  - =clojure.walk=
+  - =clojure.edn=
+  - =clojure.java.io=, permission-gated
+  - =babashka.fs=, permission-gated
+  - =babashka.process=, disabled by default
+  - JSON support
+  - HTTP client support, permission-gated
+  - =java.time= classes
+
+Why: Babashka itself is a native executable built with GraalVM Native Image and SCI. For a library, embedding SCI and Babashka-compatible namespaces is cleaner than shelling out to =bb=.
+
+Non-goals for v0:
+
+- JVM Clojure compiler support.
+- Runtime classpath mutation.
+- Arbitrary Maven dependency loading after the native image is built.
+
+** JavaScript
+
+Requirement: JavaScript support.
+
+Implementation plan:
+
+- Use GraalJS through the GraalVM Polyglot API.
+- Support modern ECMAScript.
+- Do not promise full Node.js in v0.
+- Provide =console= and =ecritum= globals.
+- Provide host-backed =fetch= only if the network permission allows it.
+
+Non-goals for v0:
+
+- npm packages with native modules.
+- Node built-ins such as =fs=, =child_process=, or =net= unless mapped through Ecritum permissions.
+
+** Python
+
+Requirement: Python support.
+
+Implementation plan:
+
+- Use GraalPy embedding.
+- Start with the Python standard library included so scripts work without extra installation.
+- Measure the size cost, then offer a slim artifact later if needed.
+- Allow pure-Python package loading from host-approved plugin directories.
+- Do not support arbitrary native wheels in v0.
+
+GraalPy documentation says Native Image can build Java applications that use GraalPy, and that generated projects can include the Python standard library inside the native binary.
+
+** Ruby
+
+Requirement: Ruby support.
+
+Implementation plan:
+
+- Use TruffleRuby through the Polyglot API if native-image packaging works.
+- Include enough Ruby standard library for scripting.
+- Keep RubyGems/native C-extension support out of v0.
+- Track current Maven coordinates separately because TruffleRuby packaging has changed over time.
+
+Risk:
+
+- TruffleRuby has more packaging/licensing complexity than Clojure and JavaScript.
+- Ruby should be behind a size and smoke-test gate before being included in the default artifact.
+
+** Lua
+
+Requirement: Lua support with proper licensing and a solid implementation.
+
+Research result:
+
+- There is no current official GraalVM Lua runtime comparable to GraalJS, GraalPy, or TruffleRuby.
+- Old GraalVM docs listed LuaTruffle as an experiment, but it is not the practical default for a product package.
+- Pure-Java Lua implementations are more realistic for a Native Image shared library.
+
+Candidates:
+
+- LuaJ: mature Java-centric Lua interpreter, Lua 5.2-ish, embeddable, lightweight. Best first spike.
+- Rembulan: clean-room Lua 5.3 on the JVM, Apache-2.0 in Maven metadata, but may rely on runtime bytecode loading that is hostile to Native Image.
+- Cobalt: MIT fork of LuaJ, but its own README says it is developed for CC: Tweaked and recommends alternatives for general use.
+- LuaJIT or PUC Lua: technically strong, MIT, but would add a separate native runtime and FFI surface.
+
+Decision:
+
+- v0 Lua spike should start with LuaJ.
+- Accept LuaJ only if it compiles into the same Native Image shared library and passes sandbox tests.
+- If LuaJ is not good enough, evaluate Rembulan.
+- If pure-Java options fail, make Lua an optional separate dylib track instead of blocking Ecritum.
+
+* Ecritum Standard Library
+
+The user asked for useful JDK classes such as file and IO. In Native Image, Ecritum should not claim "the entire JDK is dynamically available." Native Image is closed-world: reachable application, dependency, runtime, and JDK classes are analyzed and compiled into the image.
+
+Correct product design:
+
+- Include selected JDK-backed services.
+- Expose them through Ecritum standard APIs.
+- Gate dangerous services through permissions.
+- Let Clojure expose selected Java classes where it is idiomatic.
+- Do not enable arbitrary Java type lookup for untrusted scripts by default.
+
+Initial standard library:
+
+- =ecritum.fs=: paths, read, write, copy, move, remove, list, metadata, temp files.
+- =ecritum.io=: text, bytes, streams-as-values where practical.
+- =ecritum.json=: parse, stringify.
+- =ecritum.edn=: Clojure EDN.
+- =ecritum.http=: simple HTTP client with permission checks.
+- =ecritum.time=: instants, durations, local dates, formatting.
+- =ecritum.regex=: regular expressions.
+- =ecritum.crypto=: hashes, HMAC, random bytes.
+- =ecritum.env=: allowlisted environment access.
+- =ecritum.process=: allowlisted subprocess execution, off by default.
+- =ecritum.log=: host-routed logging.
+
+JDK classes to include or wrap:
+
+- =java.lang.String=, =Boolean=, =Long=, =Double=, =Throwable=
+- =java.math.BigInteger=, =BigDecimal=
+- =java.util.List=, =Map=, =Set=, =UUID=, =Base64=, =Locale=
+- =java.util.regex.Pattern=
+- =java.time.*=
+- =java.nio.file.Path=, =Paths=, =Files=, =StandardOpenOption=
+- =java.io.File= and selected readers/writers
+- =java.net.URI=, =URL=, =java.net.http.HttpClient=
+- =java.security.MessageDigest=, =SecureRandom=
+- =javax.crypto.Mac=
+- =java.util.zip.*=
+
+Dangerous or non-default:
+
+- =ProcessBuilder=
+- arbitrary reflection
+- arbitrary class loading
+- arbitrary native library loading
+- unrestricted filesystem
+- unrestricted network
+- host environment variables
+
+* SwiftPM Distribution Design
+
+** Release Package
+
+Use a binary target for the runtime:
+
+#+begin_src swift
+.binaryTarget(
+    name: "EcritumRuntime",
+    url: "https://github.com/ecritum/ecritum/releases/download/VERSION/EcritumRuntime.xcframework.zip",
+    checksum: "..."
+)
+#+end_src
+
+Use a Swift target for the nice API:
+
+#+begin_src swift
+.target(
+    name: "Ecritum",
+    dependencies: ["CEcritum", "EcritumRuntime"]
+)
+#+end_src
+
+Use a C target for public headers:
+
+#+begin_src swift
+.target(
+    name: "CEcritum",
+    publicHeadersPath: "include"
+)
+#+end_src
+
+** Artifact Format
+
+Preferred:
+
+- =EcritumRuntime.xcframework=
+- macOS arm64 slice
+- macOS x86_64 slice later
+- signed release artifacts
+- generated SwiftPM checksum
+
+Open point:
+
+- Whether GraalPy and TruffleRuby resources can be embedded fully in the native image.
+- If not, package resources inside the framework bundle and load them relative to the framework path.
+
+* Build Tooling
+
+Use =mise= to install contributor dependencies:
+
+- GraalVM Community JDK 25.0.2
+- Maven 3.9.16
+- just 1.51.0
+
+On a fresh checkout, run =mise trust= once, then =mise install=.
+
+Use =just= for every common task:
+
+- =just setup=: install tools.
+- =just doctor=: show Java, Maven, Swift, and Native Image versions.
+- =just build-java=: build the Java/Graal runtime jar.
+- =just test-java=: run Java tests.
+- =just native=: build the Native Image shared library.
+- =just xcframework=: assemble the macOS XCFramework.
+- =just build-swift=: build the Swift package.
+- =just test-swift=: run Swift tests.
+- =just test=: run the current applicable tests.
+- =just size=: print artifact sizes.
+- =just license-report=: generate third-party notices.
+
+* Testing Strategy
+
+** Unit Tests
+
+- C value conversion.
+- Swift value conversion.
+- Error conversion.
+- Permission decisions.
+- Host callback registration.
+- Context lifecycle.
+
+** Language Smoke Tests
+
+Each language must prove:
+
+- eval string returns a scalar.
+- eval string returns object/array data.
+- script calls host function.
+- host function returns value to script.
+- script error returns language stack.
+- timeout cancels long-running script.
+- filesystem denied by default.
+- filesystem works inside allowed root.
+
+** Packaging Tests
+
+- SwiftPM consumer app can add Ecritum and build.
+- SwiftPM consumer app can run all bundled language smoke tests.
+- Clean macOS VM with no GraalVM/JDK/language runtimes installed can run the app.
+- Signed macOS app can load the framework.
+- Artifact checksum is reproducible for release.
+
+** Size Gates
+
+Record size after each runtime:
+
+- base C ABI runtime
+- + SCI/Babashka layer
+- + GraalJS
+- + Lua
+- + GraalPy with stdlib
+- + TruffleRuby with stdlib
+
+Default artifact should include only runtimes that pass the size and reliability gate. If Python/Ruby make the default artifact too large, provide =EcritumFull= and =EcritumCore= artifacts.
+
+* Implementation Sequence
+
+** Phase 0: Scaffolding
+
+- Add =Package.swift= with Swift wrapper, C target, and local binary target placeholder.
+- Add =native/pom.xml=.
+- Add minimal Java class exporting =ecritum_version= through =@CEntryPoint=.
+- Build one macOS arm64 shared library.
+- Wrap it in an XCFramework.
+- Prove =swift test= calls =Ecritum.version=.
+
+** Phase 1: C ABI and Swift API
+
+- Implement runtime/context creation.
+- Implement eval API for one language.
+- Implement value model.
+- Implement errors.
+- Implement host function registration.
+- Implement lifecycle and leak tests.
+
+** Phase 2: Clojure First
+
+- Embed SCI.
+- Add Babashka-compatible namespaces.
+- Add =ecritum= Clojure namespace.
+- Add filesystem/time/json/http wrappers.
+- Build native dylib.
+- Run Clojure smoke tests from Swift.
+
+** Phase 3: JavaScript
+
+- Add GraalJS dependency.
+- Add JS =ecritum= global.
+- Add JS smoke tests.
+- Measure size and startup.
+
+** Phase 4: Lua
+
+- Spike LuaJ in native image.
+- If LuaJ passes, add =ecritum= Lua table and smoke tests.
+- If LuaJ fails, spike Rembulan.
+- Decide whether Lua ships in default artifact.
+
+** Phase 5: Python
+
+- Add GraalPy.
+- Include Python stdlib.
+- Add Python =ecritum= module.
+- Measure size and resource packaging.
+- Add smoke tests.
+
+** Phase 6: Ruby
+
+- Add TruffleRuby.
+- Include Ruby stdlib subset or full set.
+- Add Ruby =Ecritum= module.
+- Measure size and resource packaging.
+- Add smoke tests.
+
+** Phase 7: Distribution Hardening
+
+- Build arm64 and x86_64.
+- Assemble XCFramework.
+- Sign artifacts.
+- Produce SwiftPM binary checksum.
+- Generate license inventory.
+- Test in clean consumer app.
+
+* Licensing Plan
+
+This must be tracked before any public release.
+
+Known starting points:
+
+- GraalVM Community Edition is GPLv2 with Classpath Exception.
+- Native Image Community is GPLv2 with Classpath Exception.
+- Truffle framework is UPL.
+- Babashka and SCI are EPL-1.0.
+- GraalPy Community docs identify the community standalone runtime as UPL.
+- TruffleRuby Maven metadata includes EPL-2.0 plus BSD/MIT dependencies.
+- LuaJ license must be reviewed from its source distribution before inclusion.
+- Rembulan Maven metadata reports Apache-2.0.
+- Lua itself and LuaJIT are MIT, relevant only if a native Lua track is used.
+
+Release requirements:
+
+- Generate =THIRD_PARTY_NOTICES.md=.
+- Keep exact artifact versions pinned.
+- Separate license obligations for build tools from shipped runtime bits.
+- Avoid Oracle GraalVM GFTC for shipped runtime unless redistribution terms are intentionally accepted.
+- Prefer GraalVM Community builds for the public open-source distribution.
+
+* Research Sources
+
+- GraalVM Native Image C API: https://www.graalvm.org/jdk25/reference-manual/native-image/native-code-interoperability/C-API/
+- GraalVM shared library support: https://www.graalvm.org/22.0/reference-manual/native-image/
+- GraalVM embedding languages: https://www.graalvm.org/jdk23/reference-manual/embed-languages/
+- GraalJS embedding: https://www.graalvm.org/jdk24/reference-manual/js/
+- GraalPy native applications: https://www.graalvm.org/jdk23/reference-manual/python/native-applications/
+- Babashka overview: https://babashka.org/
+- Babashka repository/license: https://github.com/babashka/babashka
+- LuaJ repository: https://github.com/luaj/luaj
+- Cobalt repository: https://github.com/cc-tweaked/Cobalt
+- Lua implementation list including Rembulan: https://lua-users.org/wiki/LuaImplementations
+- SwiftPM C targets: https://docs.swift.org/swiftpm/documentation/packagemanagerdocs/creatingclanguagetargets/
+- SwiftPM binary targets: https://docs.swift.org/package-manager/PackageDescription/PackageDescription.html
+
+* Current Decision Summary
+
+- Ecritum should be a SwiftPM package with a prebuilt binary target.
+- The public long-term stable ABI should be C.
+- The Swift API should be small, async-friendly, and capability-based.
+- Clojure via SCI/Babashka compatibility is the first runtime.
+- JavaScript is the second runtime.
+- Lua should use a pure-Java implementation first, likely LuaJ.
+- Python and Ruby are wanted, but must pass size/resource-packaging gates.
+- Useful JDK functionality should be exposed as curated Ecritum APIs, not as unrestricted Java interop.

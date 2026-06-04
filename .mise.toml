@@ -1,0 +1,4 @@
+[tools]
+java = "graalvm-community-25.0.2"
+maven = "3.9.16"
+"aqua:casey/just" = "1.51.0"

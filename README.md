@@ -1,10 +1,10 @@
 # Ecritum
 
-Ecritum is a planned macOS-first polyglot scripting library for Swift apps. It gives desktop app developers a C/Swift API for exposing host functions to embedded user scripts, without asking end users to install a JDK or language runtimes.
+Ecritum is a planned macOS-first polyglot scripting library for Swift apps. It gives desktop app developers a SwiftPM package for exposing host functions to embedded user scripts, without asking end users to install a JDK or language runtimes.
 
 ## What It Is
 
-Ecritum is intended to be distributed as a native dynamic library, likely produced with GraalVM Native Image. The library exposes a stable C ABI, and the Swift package wraps that ABI with a Swift-native API.
+Ecritum is intended to be distributed as a prebuilt native dynamic library inside an XCFramework, likely produced with GraalVM Native Image. The library exposes a stable C ABI, and the Swift package wraps that ABI with a Swift-native API.
 
 At runtime, a host app registers capabilities:
 
@@ -16,15 +16,60 @@ At runtime, a host app registers capabilities:
 
 User scripts then call those registered capabilities from supported scripting languages.
 
+## Planned Swift API
+
+```swift
+import Ecritum
+
+let runtime = try EcritumRuntime(
+    languages: [.clojure, .javascript, .python, .ruby, .lua],
+    permissions: [.filesystemRead]
+)
+
+try runtime.register("app.notify") { call in
+    let message = try call.string(at: 0)
+    await app.showNotification(message)
+    return .null
+}
+
+let value = try await runtime.context().eval(
+    "(app.notify \"hello\")",
+    as: .clojure,
+    sourceName: "plugin.clj"
+)
+```
+
+The public API should be capability-based: scripts only see functions, objects, and standard-library services that the host explicitly enables.
+
 ## Initial Language Plan
 
 The first target is not "run every language on the JVM." The first target is a practical, packageable scripting runtime.
 
-- Clojure: first-class through SCI or a similar native-image-friendly interpreter.
-- JavaScript: through GraalJS if native-image packaging stays practical.
-- Python: optional/experimental through GraalPy after size and packaging tests.
-- Ruby: optional/experimental through TruffleRuby after size and packaging tests.
+- Clojure: first-class through SCI with Babashka-compatible namespaces.
+- JavaScript: through GraalJS.
+- Lua: through LuaJ or another pure-Java Lua implementation that compiles into Native Image.
+- Python: through GraalPy after size and packaging tests.
+- Ruby: through TruffleRuby after size, licensing, and packaging tests.
 - JVM bytecode/JARs: future research, not an MVP promise.
+
+## Standard Library Plan
+
+Ecritum should expose useful JDK-backed scripting APIs without exposing the whole JDK dynamically.
+
+Planned modules:
+
+- `ecritum.fs`
+- `ecritum.io`
+- `ecritum.json`
+- `ecritum.http`
+- `ecritum.time`
+- `ecritum.regex`
+- `ecritum.crypto`
+- `ecritum.env`
+- `ecritum.process`
+- `ecritum.log`
+
+Filesystem, network, process, and environment access are denied by default and must be enabled by the host app.
 
 ## Distribution Model
 
@@ -43,7 +88,7 @@ The desired user experience is that the app ships with everything it needs:
 - single binary where possible
 - otherwise a small number of bundled dylibs
 
-This is why the current plan favors Native Image shared-library output over embedding a full JVM distribution.
+This is why the current plan favors Native Image shared-library output over embedding a full JVM distribution. SwiftPM consumers should receive a prebuilt binary target; contributors use `mise` and `just` to build the runtime from source.
 
 ## What It Is Not
 
@@ -66,8 +111,31 @@ Native Image shared library
   |
   | curated embedded runtimes
   v
-SCI / GraalJS / optional Truffle languages
+SCI / GraalJS / GraalPy / TruffleRuby / LuaJ
 ```
+
+## Development
+
+Install tools:
+
+```bash
+mise trust
+mise install
+```
+
+List tasks:
+
+```bash
+mise exec -- just
+```
+
+Run available checks:
+
+```bash
+mise exec -- just test
+```
+
+The source targets are not scaffolded yet. See [PLAN.org](PLAN.org) for the implementation sequence.
 
 ## Design Priorities
 
