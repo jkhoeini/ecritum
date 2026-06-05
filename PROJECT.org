@@ -649,7 +649,7 @@ Size impact:
 - Public wrapper: 33,568 bytes. Private Graal runtime: 12,931,416 bytes. Artifact SHA256: `ec66bb6b8f335d4a179d9b6ee431253ec4486fb11b87a3c1802bd800700da103`.
 #+end_src
 
-*** TODO M1-005 Establish CI and release gate baselines
+*** DONE M1-005 Establish CI and release gate baselines
 
 Lead persona: Release.
 Reviewer personas: Tests, Unix, Technical Debt.
@@ -671,6 +671,55 @@ Definition of done:
 - C host smoke test is represented in the task plan.
 - Java runtime unit tests are represented in the task plan once native sources
   exist.
+
+Notes:
+
+- Added checked ABI manifest =docs/abi/ecritum-c-abi.json= and
+  =just check-abi=.
+- Added JSON size baseline, deterministic packaging, SwiftPM checksum, SPDX 2.3
+  license inventory, strict shipped-license blocker, and =just release-check=.
+- Added =docs/release-gates.md= for CI smoke, release gates, SBOM choice,
+  reproducibility policy, clean =dlopen + ecritum_version= smoke, M1-006 C host
+  representation, and Java runtime unit-test representation.
+- Unknown shipped licenses currently block release for
+  =EcritumRuntime.xcframework= and GraalVM Native Image embedded runtime code.
+- Claude plan review initially failed until paths were grounded against the tree;
+  post-implementation review reported one stale justfile blocker and useful
+  hardening risks. The useful risks were fixed: SPDX expressions, standard SPDX
+  annotations, artifact-required release size, and broader private-symbol match.
+- Final persona signoff: Release PASS, Tests PASS, Unix PASS, Technical Debt
+  PASS.
+
+#+begin_src markdown
+## Verification
+
+Layers tested: Unit, Contract, Integration, Packaging, Release
+Commands run:
+- `mise exec -- just native` -> exit 0; Native Image rebuilt and `check-native` found `_ecritum_graal_version`, `_graal_create_isolate`, `_graal_tear_down_isolate`.
+- `mise exec -- just xcframework` -> exit 0; local XCFramework assembled and `check-xcframework` passed.
+- `mise exec -- just test` -> exit 0; 4 Swift runtime tests passed with 0 skips, and 3 Java tests passed with 0 failures.
+- `mise exec -- just check-abi` -> exit 0; public header constants, Java status constants, public declaration, public `_ecritum_version`, and private symbol exclusions verified.
+- `mise exec -- just check-xcframework` -> exit 0; packaged `dlopen + dlsym` smoke and negative buffer paths passed.
+- `mise exec -- just inspect` -> exit 0 and emitted valid JSON.
+- `mise exec -- just size` -> exit 0 and emitted valid JSON with artifact 12,967,170 bytes, wrapper 33,568 bytes, private runtime 12,931,448 bytes, no budget violations.
+- `mise exec -- just license-report` -> exit 0 and emitted valid SPDX 2.3 JSON using SPDX expressions `UPL-1.0`, `EPL-2.0`, and `NOASSERTION`.
+- `mise exec -- just package-artifact` twice -> exit 0 both times with stable SHA256 `209367dcb81f57a2fe2cba2c48bf412eaa84cdf7c3d139ec37780763345cabd5`.
+- `mise exec -- just checksum` -> exit 0 and printed `209367dcb81f57a2fe2cba2c48bf412eaa84cdf7c3d139ec37780763345cabd5`.
+- `mise exec -- just license-report-strict` -> expected exit 1; printed release blockers for unknown shipped licenses on `EcritumRuntime.xcframework` and GraalVM Native Image embedded runtime code.
+- `mise exec -- just release-check` -> expected exit 1; all preceding gates ran, then strict license gate blocked on the same two unknown shipped-license blockers.
+New tests added:
+- `scripts/check-abi.sh` manifest/header/Java/artifact symbol gate.
+- `scripts/size-artifact.py` JSON size gate.
+- `scripts/license-report.py` SPDX 2.3 inventory and strict blocker gate.
+- `scripts/package-artifact.py` deterministic zip/checksum baseline.
+- `scripts/release-check.sh` release-gate composition.
+Negative paths tested:
+- Unknown shipped licenses block strict release gates.
+- Private artifact symbols are rejected by `check-abi`.
+- Release size gate requires an artifact inside `release-check`.
+Size impact:
+- Current artifact 12,967,170 bytes. Release zip SHA256 `209367dcb81f57a2fe2cba2c48bf412eaa84cdf7c3d139ec37780763345cabd5`.
+#+end_src
 
 *** TODO M1-006 Add minimal Swift and C host examples
 

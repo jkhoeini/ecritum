@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "name": "Ecritum C ABI M1 baseline",
+  "publicHeader": "Sources/CEcritum/include/ecritum.h",
+  "javaStatus": "native/src/main/java/ecritum/EcritumStatus.java",
+  "statusConstants": [
+    {
+      "c": "ECRITUM_OK",
+      "java": "OK",
+      "value": 0
+    },
+    {
+      "c": "ECRITUM_ERROR_INVALID_ARGUMENT",
+      "java": "INVALID_ARGUMENT",
+      "value": 1
+    },
+    {
+      "c": "ECRITUM_ERROR_BUFFER_TOO_SMALL",
+      "java": "BUFFER_TOO_SMALL",
+      "value": 2
+    },
+    {
+      "c": "ECRITUM_ERROR_RUNTIME_UNAVAILABLE",
+      "java": "RUNTIME_UNAVAILABLE",
+      "value": 3
+    }
+  ],
+  "functions": [
+    {
+      "name": "ecritum_version",
+      "machoSymbol": "_ecritum_version",
+      "declaration": "int ecritum_version(char *buffer, size_t buffer_len);"
+    }
+  ],
+  "privateSymbols": [
+    "_ecritum_graal_version",
+    "_graal_create_isolate",
+    "_graal_tear_down_isolate"
+  ]
+}

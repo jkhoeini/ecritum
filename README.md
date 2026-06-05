@@ -135,7 +135,9 @@ Run available checks:
 mise exec -- just test
 ```
 
-The source targets are not scaffolded yet. See [PLAN.org](PLAN.org) for the implementation sequence.
+Release gate baselines are documented in
+[docs/release-gates.md](docs/release-gates.md). See [PLAN.org](PLAN.org) and
+[PROJECT.org](PROJECT.org) for the implementation sequence.
 
 ## Design Priorities
 

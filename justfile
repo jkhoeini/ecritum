@@ -59,6 +59,9 @@ xcframework:
 check-xcframework:
     scripts/check-xcframework.sh
 
+check-abi:
+    scripts/check-abi.sh
+
 build-swift:
     test -f Package.swift
     swift build
@@ -82,11 +85,24 @@ test: plan-check test-swift-auto test-java
 inspect:
     python3 scripts/inspect-artifact.py
 
+package-artifact:
+    python3 scripts/package-artifact.py
+
+checksum:
+    test -f dist/release/EcritumRuntime.xcframework.zip
+    @swift package compute-checksum dist/release/EcritumRuntime.xcframework.zip
+
 size:
-    @if [ -d dist ]; then du -sh dist/*; else echo "No dist artifacts yet."; fi
+    python3 scripts/size-artifact.py
 
 license-report:
-    @echo "TODO: generate Maven, SwiftPM, and bundled-runtime license inventory."
+    python3 scripts/license-report.py
+
+license-report-strict:
+    python3 scripts/license-report.py --strict
+
+release-check:
+    scripts/release-check.sh
 
 clean:
     rm -rf .build target build dist native/target
