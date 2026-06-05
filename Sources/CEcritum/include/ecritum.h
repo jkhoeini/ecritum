@@ -72,8 +72,8 @@ int ecritum_version(char *buffer, size_t buffer_len);
  * Creates an Ecritum runtime.
  *
  * `out_runtime` is required and is set to 0 before work starts. Empty
- * `config_json` means default configuration. Non-empty configuration fails
- * closed until the versioned policy parser lands.
+ * `config_json` means the schema v1 default-deny runtime configuration.
+ * Non-empty configuration must be an Ecritum schema v1 JSON object.
  *
  * Public callers never manage GraalVM isolate threads. The wrapper owns one
  * isolate per runtime and attaches/detaches native threads internally when a
@@ -94,9 +94,9 @@ int ecritum_runtime_destroy(ecritum_runtime_t *runtime, ecritum_error_t *out_err
 /**
  * Creates a lifecycle context under a runtime.
  *
- * Contexts cannot outlive their parent runtime. Empty `config_json` means
- * default configuration. Non-empty configuration fails closed until M2 policy
- * parsing lands.
+ * Contexts cannot outlive their parent runtime. Empty `config_json` inherits
+ * the parent runtime's effective configuration. Non-empty configuration must be
+ * an Ecritum schema v1 JSON object that only narrows policy/resource limits.
  */
 int ecritum_context_create(ecritum_runtime_t runtime, ecritum_bytes_t config_json, ecritum_context_t *out_context, ecritum_error_t *out_error);
 

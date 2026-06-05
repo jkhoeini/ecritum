@@ -1334,12 +1334,94 @@ Definition of done:
   bridging remains owned by the future invocation/job task.
 - Tests cover callback success, callback error, and callback lifetime.
 
-*** TODO M2-005 Implement policy/config parsing core
+*** DONE M2-005 Implement policy/config parsing core
 
 Lead persona: Security.
 Reviewer personas: Clean Code, Tests, Architecture, Swift DX.
 Depends on: M2-001, M2-001A, M2-002.
 Write scope: Sources/, native/, Tests/.
+
+Assignment:
+
+- Engineering manager: Codex.
+- Lead persona agent: Security and Sandboxing Engineer (Descartes).
+- Reviewer agents: Architecture (Noether), Clean Code (Halley), Tests/TDD
+  (Hume), Swift DX (Maxwell).
+
+Initial scope decision:
+
+- Do not block M2-005 on ADR-004. ADR-004 remains the M2.5 enforcement and
+  untrusted-script threat-model ADR; M2-005 owns parsing, validation,
+  deterministic serialization, and storing policy/config as data only.
+- Added proposed ADR-020 for the narrower config schema because M2-005 fixes a
+  cross-language schema consumed by the public C create APIs and Swift wrapper.
+- Split M2-005 into M2-005A if needed: pure policy/config data model,
+  deterministic Swift serialization, C schema parser/validator, and runtime
+  vs context narrowing checks. Do not implement filesystem/network/process/env
+  access or runtime enforcement yet.
+- Keep runtime policy as the maximum grant. Context configuration may only
+  narrow. Widening fails before context creation with
+  `ECRITUM_ERROR_INVALID_CONFIG` in M2-005.
+- Preserve safe defaults: empty runtime config and Swift runtime `.default` mean
+  schema v1 defaults with denied capabilities and no raw GraalVM passthrough
+  options; empty context config means no additional narrowing and inherits the
+  parent runtime effective config.
+- Implement tests before production code per TDD. Red tests must cover default
+  deny, explicit narrow allowlists, unknown key/version failure, invalid JSON/
+  UTF-8, deterministic canonical JSON, C parser rejection, and context widening.
+
+Research completed:
+
+- Read M2-005 task, PLAN permissions section, ADR-002 config safety, ADR-014
+  resource limits, ADR-016 Swift API/policy shape, current Swift lifecycle
+  configuration, current C `config_is_invalid`, and existing Swift/C tests.
+- Claude plan consult: PASS for proceeding without ADR-004 as a prerequisite;
+  recommended M2-005A for pure parsing/serialization/storage and deferring
+  enforcement/canonical filesystem resolution to M2.5.
+- Security plan review: recommends ADR-first split and explicit parser abuse
+  cases; conflicts with Claude on whether ADR-004 itself is required, but the
+  engineering-manager decision is to satisfy the blocker with ADR-020 and keep
+  ADR-004 for M2.5 enforcement.
+- Swift DX plan review: PASS if ADR-004 or an M2-005 ADR pins JSON schema,
+  sub-policy shapes, and narrowing semantics; ADR-020 now does this.
+- Tests/TDD plan review: PASS for red tests at current seams and scoped ADR
+  before implementation; recommends `policy_config_contract.c` and
+  `EcritumPolicyTests.swift`.
+- Architecture review: PASS after ADR-020 pinned empty context config semantics,
+  runtime/context policy key requirements, parser caps, duplicate-set tests, and
+  process/clock/random/log narrowing coverage.
+- Clean Code review: PASS after ADR-020 kept parsing/serialization pure, avoided
+  new public ABI symbols, and required duplicate-key/set rejection plus a
+  dedicated canonical writer.
+- Security review: PASS for unblocking M2-005 with data-only parsing/storage
+  while ADR-004 remains the M2.5 enforcement/threat-model gate.
+- Tests/TDD review: PASS after ADR-020 added parser-cap, context-empty,
+  process/resource-limit/clock/random/log narrowing, null, and required-runtime
+  key red-test coverage.
+- Swift DX review: PASS after ADR-020 pinned public Swift value shapes, explicit
+  JSON tags, and runtime/context narrowing semantics.
+- Claude ADR review: PASS. One verification gap was fixed by adding explicit
+  resource-limit narrowing, required-runtime-key, and null-rejection tests; the
+  targeted Claude second review returned PASS.
+
+Post-change review completed:
+
+- Security review: PASS. No blockers; parsing fails closed before runtime handle
+  allocation, context failures zero outputs before allocation, duplicate
+  key/set and UTF-8/cap coverage is present, and the work stays data-only before
+  ADR-004.
+- Architecture review: PASS. No blockers; public ABI is unchanged, parser and
+  storage remain internal, and lifecycle ownership is sound.
+- Clean Code review: PASS. No blockers; parser/writer boundaries remain pure
+  and deterministic, with correct cleanup/ownership transfer.
+- Tests/TDD review: PASS after follow-up fixes for the verification footer and
+  complete null coverage, including all seven resource-limit fields.
+- Swift DX review: PASS after follow-up fixes for file-URL-only filesystem
+  helpers, Swift-side schema validation, cap validation, README sample updates,
+  and artifact-backed explicit default/non-default config tests.
+- Claude diff review: PASS. Non-blocking note: context creation clones the
+  parent config twice for lock safety; accepted for M2-005 because it is correct
+  and low overhead.
 
 Definition of done:
 
@@ -1348,6 +1430,61 @@ Definition of done:
   allowlists, and resource limits parse as pure data.
 - Path canonicalization and symlink handling are specified before use.
 - Denied-by-default tests exist before language runtimes rely on the policy.
+
+Red/green evidence:
+
+- Red: `mise exec -- just test-swift-scaffold` failed before implementation
+  because `EcritumRuntime.Configuration.canonicalJSONData`,
+  `EcritumPermissionPolicy`, `EcritumResourceLimits`, and
+  `EcritumConfigurationSchemaVersion` did not exist.
+- Red: `mise exec -- just test-c-abi-policy-config` failed before
+  implementation because non-empty runtime/context config still hit the
+  fail-closed stub and status mappings were incomplete.
+- Green: policy/config parsing and Swift canonical serialization now pass
+  focused, full, artifact-backed, and sanitizer checks.
+
+## Verification
+
+Layers tested: Unit, Contract, Integration, Packaging
+Commands run:
+- `mise exec -- just test-swift-scaffold` -> exit 0, 45 Swift tests passed in
+  scaffold mode with artifact-only tests skipped.
+- `mise exec -- just test-c-abi-policy-config` -> exit 0.
+- `mise exec -- just test-c-abi-policy-config-asan` -> exit 0, ASan/UBSan
+  clean.
+- `mise exec -- just test-swift` -> exit 0, 45 Swift tests passed against the
+  rebuilt local runtime artifact.
+- `mise exec -- just test` -> exit 0; Swift runtime-mode tests, Java tests,
+  C lifecycle/host-registration/policy-config contracts, ASan/UBSan variants,
+  and Swift/C examples passed.
+- `mise exec -- just xcframework` -> exit 0.
+- `mise exec -- just check-abi` -> exit 0.
+- `mise exec -- just check-xcframework` -> exit 0.
+- `clang -DECRITUM_TESTING -Wall -Wextra -Werror ... lifecycle_contract.c`
+  -> exit 0.
+- `clang -DECRITUM_TESTING -Wall -Wextra -Werror ... host_registration_contract.c`
+  -> exit 0.
+- `clang -DECRITUM_TESTING -Wall -Wextra -Werror ... policy_config_contract.c`
+  -> exit 0.
+New tests added:
+- `Tests/EcritumTests/EcritumPolicyTests.swift`
+- `Tests/C/policy_config_contract.c`
+Negative paths tested:
+- Invalid UTF-8, null data with non-zero length, config >64 KiB, invalid JSON,
+  missing/unsupported/ill-formed schema versions, unknown keys, duplicate JSON
+  keys, duplicate set elements, null v1 fields, parser depth/array/string caps,
+  bad path strings, runtime-only context keys, context policy/resource widening,
+  invalid Swift policy values before ABI handoff, and artifact-backed explicit
+  default/non-default config handoff.
+Size impact:
+- N/A for this milestone task; release artifact size budgets remain owned by
+  the performance/release gates.
+Sanitizers:
+- clean: C lifecycle, host registration, and policy config contracts under
+  ASan/UBSan.
+Not verified:
+- Clean-machine consumer validation and notarized release packaging; owned by
+  M7 release tasks.
 
 *** TODO M2-006 Create shared conformance suite
 
@@ -1791,6 +1928,8 @@ Output of: M2-001A.
 Output of: M1-004, M1-005, and M7-001.
 ** DONE ADR-019 Host function registration lifecycle
 Output of: M2-004.
+** DONE ADR-020 Versioned policy config schema
+Output of: M2-005.
 ** DONE ADR-018 Performance and artifact budget policy
 Output of: M1-007.
 

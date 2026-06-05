@@ -17,7 +17,22 @@ public final class EcritumRuntime {
     public struct Configuration: Equatable, Sendable {
         public static let `default` = Configuration()
 
-        public init() {}
+        public var languages: Set<EcritumLanguage>
+        public var policy: EcritumPermissionPolicy
+        public var diagnostics: EcritumDiagnosticsPolicy
+        public var resourceLimits: EcritumResourceLimits
+
+        public init(
+            languages: Set<EcritumLanguage> = [],
+            policy: EcritumPermissionPolicy = .defaultDeny,
+            diagnostics: EcritumDiagnosticsPolicy = .redacted,
+            resourceLimits: EcritumResourceLimits = EcritumResourceLimits()
+        ) {
+            self.languages = languages
+            self.policy = policy
+            self.diagnostics = diagnostics
+            self.resourceLimits = resourceLimits
+        }
     }
 
     private let adapter: EcritumLifecycleABI
@@ -72,7 +87,16 @@ public final class EcritumContext {
     public struct Configuration: Equatable, Sendable {
         public static let `default` = Configuration()
 
-        public init() {}
+        public var policy: EcritumPermissionPolicy.Narrowing
+        public var resourceLimits: EcritumResourceLimits.Narrowing
+
+        public init(
+            policy: EcritumPermissionPolicy.Narrowing = EcritumPermissionPolicy.Narrowing(),
+            resourceLimits: EcritumResourceLimits.Narrowing = EcritumResourceLimits.Narrowing()
+        ) {
+            self.policy = policy
+            self.resourceLimits = resourceLimits
+        }
     }
 
     private let parent: EcritumRuntime
@@ -105,12 +129,13 @@ private final class EcritumCLifecycleABI: EcritumLifecycleABI {
 
     func runtimeCreate(configuration: EcritumRuntime.Configuration) throws -> ecritum_runtime_t {
         #if ECRITUM_HAS_RUNTIME_ARTIFACT
+        let configData = try configuration.abiConfigData()
         var runtime: ecritum_runtime_t = 0
         var error: ecritum_error_t = 0
-        let status = ecritum_runtime_create(emptyBytes(), &runtime, &error)
-        guard status == ECRITUM_OK else {
-            throw copyError(status: status, error: error)
+        let status = configData.withUnsafeBytes { buffer in
+            ecritum_runtime_create(bytes(buffer), &runtime, &error)
         }
+        guard status == ECRITUM_OK else { throw copyError(status: status, error: error) }
         return runtime
         #else
         throw EcritumError.runtimeArtifactMissing
@@ -131,12 +156,13 @@ private final class EcritumCLifecycleABI: EcritumLifecycleABI {
 
     func contextCreate(runtime: ecritum_runtime_t, configuration: EcritumContext.Configuration) throws -> ecritum_context_t {
         #if ECRITUM_HAS_RUNTIME_ARTIFACT
+        let configData = try configuration.abiConfigData()
         var context: ecritum_context_t = 0
         var error: ecritum_error_t = 0
-        let status = ecritum_context_create(runtime, emptyBytes(), &context, &error)
-        guard status == ECRITUM_OK else {
-            throw copyError(status: status, error: error)
+        let status = configData.withUnsafeBytes { buffer in
+            ecritum_context_create(runtime, bytes(buffer), &context, &error)
         }
+        guard status == ECRITUM_OK else { throw copyError(status: status, error: error) }
         return context
         #else
         throw EcritumError.runtimeArtifactMissing
@@ -224,8 +250,11 @@ private final class EcritumCLifecycleABI: EcritumLifecycleABI {
     }
 
     #if ECRITUM_HAS_RUNTIME_ARTIFACT
-    private func emptyBytes() -> ecritum_bytes_t {
-        ecritum_bytes_t(data: nil, len: 0)
+    private func bytes(_ buffer: UnsafeRawBufferPointer) -> ecritum_bytes_t {
+        ecritum_bytes_t(
+            data: buffer.bindMemory(to: UInt8.self).baseAddress,
+            len: buffer.count
+        )
     }
 
     private func stringView(_ buffer: UnsafeBufferPointer<UInt8>) -> ecritum_string_view_t {

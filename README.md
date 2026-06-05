@@ -25,7 +25,7 @@ let runtime = try EcritumRuntime(
     .init(
         languages: [.clojure],
         policy: .defaultDeny.withFilesystem(
-            .readOnly(roots: [.directory(appScriptsURL)])
+            .readOnly(roots: [try .directory(appScriptsURL)])
         )
     )
 )
