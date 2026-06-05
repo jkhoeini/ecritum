@@ -484,6 +484,148 @@ final class EcritumEvalTests: XCTestCase {
         throw XCTSkip("requires local runtime artifact")
         #endif
     }
+
+    func testArtifactBackedLuaEvalReturnsNativeValuesAndErrors() async throws {
+        #if ECRITUM_HAS_RUNTIME_ARTIFACT
+        let runtime = try EcritumRuntime()
+        let context = try runtime.context()
+
+        let value = try await context.eval(EcritumScript(
+            "return {answer = 40 + 2, items = {1, 'two', true}, nil_value = nil, flag = true, ratio = 3.5, text = 'hello'}",
+            language: .lua,
+            sourceName: "swift-artifact-smoke.lua"
+        ))
+
+        XCTAssertEqual(value, .object([
+            "answer": .int(42),
+            "items": .array([.int(1), .string("two"), .bool(true)]),
+            "flag": .bool(true),
+            "ratio": .double(3.5),
+            "text": .string("hello"),
+        ]))
+
+        do {
+            _ = try await context.eval(EcritumScript("error('boom')", language: .lua, sourceName: "swift-error.lua"))
+            XCTFail("expected eval to throw")
+        } catch let error as EcritumError {
+            XCTAssertEqual(error.status, .script)
+            XCTAssertEqual(error.category, .runtime)
+            XCTAssertEqual(error.details?.language, "lua")
+            XCTAssertEqual(error.details?.sourceName, "swift-error.lua")
+        }
+
+        do {
+            _ = try await context.eval(EcritumScript("io.open('/tmp/ecritum')", language: .lua, sourceName: "swift-permission.lua"))
+            XCTFail("expected permission denial")
+        } catch let error as EcritumError {
+            XCTAssertEqual(error.status, .permissionDenied)
+            XCTAssertEqual(error.category, .permission)
+            XCTAssertEqual(error.details?.language, "lua")
+            XCTAssertEqual(error.details?.sourceName, "swift-permission.lua")
+        }
+        #else
+        throw XCTSkip("requires local runtime artifact")
+        #endif
+    }
+
+    func testArtifactBackedLuaEvalCallsRegisteredSwiftHostFunctions() async throws {
+        #if ECRITUM_HAS_RUNTIME_ARTIFACT
+        let runtime = try EcritumRuntime()
+        let app = try runtime.namespace(.init("app"))
+        try app.register(.init("answer")) { call in
+            XCTAssertEqual(try call.argumentCount(), 0)
+            return .int(42)
+        }
+        try app.register(.init("fail")) { _ in
+            throw EcritumError.callback(EcritumErrorDetails(
+                status: .callback,
+                category: .callback,
+                message: "token=SECRET",
+                operation: "host_callback"
+            ))
+        }
+        let tools = try runtime.namespace(.init("app.tools"))
+        try tools.register(.init("notify")) { call in
+            XCTAssertEqual(try call.argumentCount(), 3)
+            XCTAssertEqual(try call.value(at: 0), .int(41))
+            XCTAssertEqual(try call.value(at: 1), .string("done"))
+            XCTAssertEqual(try call.value(at: 2), .object(["ok": .bool(true)]))
+            return .array([.int(42), .string("done")])
+        }
+        let context = try runtime.context()
+
+        let answer = try await context.eval(EcritumScript(
+            "return ecritum.app.answer()",
+            language: .lua,
+            sourceName: "swift-host-success.lua"
+        ))
+        XCTAssertEqual(answer, .int(42))
+
+        let notify = try await context.eval(EcritumScript(
+            "return ecritum.app.tools.notify(41, 'done', {ok = true})",
+            language: .lua,
+            sourceName: "swift-host-notify.lua"
+        ))
+        XCTAssertEqual(notify, .array([.int(42), .string("done")]))
+
+        do {
+            _ = try await context.eval(EcritumScript("return ecritum.app.fail()", language: .lua, sourceName: "swift-host-fail.lua"))
+            XCTFail("expected callback failure")
+        } catch let error as EcritumError {
+            XCTAssertEqual(error.status, .callback)
+            XCTAssertEqual(error.category, .callback)
+            XCTAssertEqual(error.details?.operation, "eval")
+            XCTAssertEqual(error.details?.language, "lua")
+            XCTAssertEqual(error.details?.sourceName, "swift-host-fail.lua")
+            XCTAssertFalse(error.details?.message.contains("SECRET") ?? false)
+        }
+        _ = app
+        _ = tools
+        #else
+        throw XCTSkip("requires local runtime artifact")
+        #endif
+    }
+
+    func testArtifactBackedLuaStandardLibraryFacadesAndDefaultDenials() async throws {
+        #if ECRITUM_HAS_RUNTIME_ARTIFACT
+        let runtime = try EcritumRuntime()
+        let context = try runtime.context()
+
+        let json = try await context.eval(EcritumScript(
+            "return ecritum.json.writeString({b = 2, a = 1})",
+            language: .lua,
+            sourceName: "swift-lua-facade-json.lua"
+        ))
+        XCTAssertEqual(json, .string("{\"a\":1,\"b\":2}"))
+
+        let time = try await context.eval(EcritumScript(
+            "return ecritum.time.formatInstant(ecritum.time.parseInstant('2026-06-05T00:00:00Z'))",
+            language: .lua,
+            sourceName: "swift-lua-facade-time.lua"
+        ))
+        XCTAssertEqual(time, .string("2026-06-05T00:00:00Z"))
+
+        do {
+            _ = try await context.eval(EcritumScript("return ecritum.time.now()", language: .lua, sourceName: "swift-lua-time-denied.lua"))
+            XCTFail("expected time permission denial")
+        } catch let error as EcritumError {
+            XCTAssertEqual(error.status, .permissionDenied)
+            XCTAssertEqual(error.category, .permission)
+            XCTAssertEqual(error.details?.sourceName, "swift-lua-time-denied.lua")
+        }
+
+        do {
+            _ = try await context.eval(EcritumScript("return ecritum.http.request({url = 'https://example.com'})", language: .lua, sourceName: "swift-lua-http-denied.lua"))
+            XCTFail("expected http permission denial")
+        } catch let error as EcritumError {
+            XCTAssertEqual(error.status, .permissionDenied)
+            XCTAssertEqual(error.category, .permission)
+            XCTAssertEqual(error.details?.sourceName, "swift-lua-http-denied.lua")
+        }
+        #else
+        throw XCTSkip("requires local runtime artifact")
+        #endif
+    }
 }
 
 private final class FakeEvalABI: EcritumLifecycleABI, EcritumEvalABI {

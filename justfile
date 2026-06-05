@@ -54,6 +54,7 @@ check-native:
     nm -gU {{native_stable_dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_clojure_with_host$'
     nm -gU {{native_stable_dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_clojure_with_stdlib$'
     nm -gU {{native_stable_dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_javascript_with_stdlib$'
+    nm -gU {{native_stable_dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_lua_with_stdlib$'
     nm -gU {{native_stable_dir}}/libecritum.dylib | grep -q ' _graal_create_isolate$'
     nm -gU {{native_stable_dir}}/libecritum.dylib | grep -q ' _graal_tear_down_isolate$'
 
@@ -91,7 +92,7 @@ test-swift-auto:
 
 conformance:
     mkdir -p build/conformance
-    python3 -m py_compile scripts/run-conformance.py Tests/Conformance/fixtures/provider.py Tests/Conformance/fixtures/clojure_native_provider.py Tests/Conformance/fixtures/javascript_native_provider.py
+    python3 -m py_compile scripts/run-conformance.py Tests/Conformance/fixtures/provider.py Tests/Conformance/fixtures/clojure_native_provider.py Tests/Conformance/fixtures/javascript_native_provider.py Tests/Conformance/fixtures/lua_native_provider.py
     python3 -m unittest Tests/Conformance/test_runner.py
     python3 scripts/run-conformance.py --manifest Tests/Conformance/manifest.json --provider python3 Tests/Conformance/fixtures/provider.py --mode scaffold > build/conformance/scaffold.json
 
@@ -107,6 +108,11 @@ conformance-javascript-native:
     mkdir -p build/conformance
     python3 scripts/run-conformance.py --manifest Tests/Conformance/manifest.json --category eval --category host --category error --category stdlib --strict --provider-timeout-seconds 30 --provider python3 Tests/Conformance/fixtures/javascript_native_provider.py > build/conformance/javascript-native.json
 
+conformance-lua-native:
+    test -d dist/local/EcritumRuntime.xcframework
+    mkdir -p build/conformance
+    python3 scripts/run-conformance.py --manifest Tests/Conformance/manifest.json --category eval --category host --category error --category stdlib --strict --provider-timeout-seconds 30 --provider python3 Tests/Conformance/fixtures/lua_native_provider.py > build/conformance/lua-native.json
+
 test-facades-clojure:
     test -d dist/local/EcritumRuntime.xcframework
     mkdir -p build/facades
@@ -119,7 +125,7 @@ conformance-clojure-facades:
 
 security:
     mkdir -p build/security
-    python3 -m py_compile scripts/check-security-static.py scripts/run-security-abuse.py scripts/check-parser-abuse.py Tests/Security/fixtures/abuse_provider.py Tests/Security/fixtures/javascript_abuse_provider.py
+    python3 -m py_compile scripts/check-security-static.py scripts/run-security-abuse.py scripts/check-parser-abuse.py Tests/Security/fixtures/abuse_provider.py Tests/Security/fixtures/javascript_abuse_provider.py Tests/Security/fixtures/lua_abuse_provider.py
     python3 -m unittest Tests/Security/test_security_baseline.py
     just test-security-static
     just test-security-abuse
@@ -143,6 +149,11 @@ security-javascript:
     test -d dist/local/EcritumRuntime.xcframework
     mkdir -p build/security
     python3 scripts/run-security-abuse.py --manifest Tests/Security/abuse-manifest.json --strict --provider-timeout-seconds 30 --provider python3 Tests/Security/fixtures/javascript_abuse_provider.py > build/security/javascript.json
+
+security-lua:
+    test -d dist/local/EcritumRuntime.xcframework
+    mkdir -p build/security
+    python3 scripts/run-security-abuse.py --manifest Tests/Security/abuse-manifest.json --strict --provider-timeout-seconds 30 --provider python3 Tests/Security/fixtures/lua_abuse_provider.py > build/security/lua.json
 
 # Parser-abuse-equivalent gate until eval/value/error/callback fuzz surfaces exist.
 test-security-fuzz:
@@ -191,6 +202,8 @@ test-native-eval-smoke:
 
 test-javascript-native-smoke: test-native-eval-smoke
 
+test-lua-native-smoke: test-native-eval-smoke
+
 test-native-eval-smoke-asan:
     test -f build/native/macos-arm64/libecritum.dylib
     mkdir -p build/c-abi
@@ -228,6 +241,12 @@ test-m3-002c: native test-java test-c-abi-eval test-c-abi-eval-asan test-native-
 test-m3-003: native test-java test-c-abi-eval test-c-abi-eval-asan test-c-abi-policy-config test-c-abi-policy-config-asan test-native-eval-smoke test-native-eval-smoke-asan xcframework test-xcframework-eval-smoke test-facades-clojure conformance-clojure-facades security-clojure-facades security check-abi license-report check-dep-delta
 
 test-javascript-xcframework-smoke: test-swift
+
+bench-lua-first-eval:
+    test -d dist/local/EcritumRuntime.xcframework
+    python3 scripts/measure-first-eval.py --name lua-first-eval --language lua --source "return 40 + 2" --source-name bench-first-eval.lua --runs 10 > build/perf/lua-first-eval.json
+
+test-m5-001: native test-java test-native-eval-smoke xcframework test-swift conformance-lua-native security-lua check-abi inspect size bench-lua-first-eval license-report check-dep-delta
 
 test-m4-002: native test-java test-native-eval-smoke xcframework test-swift conformance-javascript-native security-javascript check-abi inspect size bench-javascript-first-eval license-report check-dep-delta
 

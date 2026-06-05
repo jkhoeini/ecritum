@@ -26,6 +26,7 @@ BASELINE = {
         "org.graalvm.truffle:truffle-api",
         "org.graalvm.truffle:truffle-compiler",
         "org.graalvm.truffle:truffle-runtime",
+        "org.luaj:luaj-jme",
     ],
     "build": [
         "org.graalvm.sdk:nativeimage",

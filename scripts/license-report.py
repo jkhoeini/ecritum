@@ -21,9 +21,11 @@ def pom_license(path):
         return None
     root = ET.parse(path).getroot()
     license_node = root.find("m:licenses/m:license", POM_NS)
+    if license_node is None:
+        license_node = root.find("licenses/license")
     return {
-        "name": text_at(license_node, "m:name") if license_node is not None else None,
-        "url": text_at(license_node, "m:url") if license_node is not None else None,
+        "name": (text_at(license_node, "m:name") or text_at(license_node, "name")) if license_node is not None else None,
+        "url": (text_at(license_node, "m:url") or text_at(license_node, "url")) if license_node is not None else None,
     }
 
 
@@ -33,6 +35,7 @@ def spdx_license_expression(license_name):
         "Eclipse Public License 1.0": "EPL-1.0",
         "Eclipse Public License 2.0": "EPL-2.0",
         "Unicode/ICU License": "ICU",
+        "MIT License": "MIT",
     }
     if license_name in (None, "NOASSERTION", "UNKNOWN"):
         return "NOASSERTION"
@@ -94,6 +97,7 @@ core_specs_alpha_license = pom_license(m2 / "org" / "clojure" / "core.specs.alph
 edamame_license = pom_license(m2 / "borkdude" / "edamame" / "1.5.37" / "edamame-1.5.37.pom")
 tools_reader_license = pom_license(m2 / "org" / "clojure" / "tools.reader" / "1.5.2" / "tools.reader-1.5.2.pom")
 graal_locking_license = pom_license(m2 / "borkdude" / "graal.locking" / "0.0.2" / "graal.locking-0.0.2.pom")
+luaj_jme_license = pom_license(m2 / "org" / "luaj" / "luaj-jme" / "3.0.1" / "luaj-jme-3.0.1.pom")
 if "SOURCE_DATE_EPOCH" in os.environ:
     created_at = dt.datetime.fromtimestamp(int(os.environ["SOURCE_DATE_EPOCH"]), dt.timezone.utc)
 else:
@@ -288,6 +292,15 @@ packages = [
         graal_locking_license["name"] if graal_locking_license else None,
         created,
         "https://github.com/borkdude/graal.locking",
+    ),
+    package(
+        "SPDXRef-Package-LuaJ-JME",
+        "org.luaj:luaj-jme",
+        "3.0.1",
+        "shipped",
+        luaj_jme_license["name"] if luaj_jme_license else None,
+        created,
+        "https://sourceforge.net/projects/luaj/",
     ),
     package(
         "SPDXRef-Package-GraalVM-Word-SDK",

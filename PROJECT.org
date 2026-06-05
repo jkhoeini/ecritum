@@ -3225,17 +3225,120 @@ Definition of done:
   claims.
 - Spike code is hardened with tests or removed.
 
-*** TODO M5-001 Spike LuaJ in Native Image
+*** DONE M5-001 Spike LuaJ in Native Image
 
 Lead persona: GraalVM Runtime.
 Reviewer personas: Tests, Security, Release.
-Write scope: native/, Tests/, docs/adr/.
+Write scope: native/, Tests/, docs/adr/, scripts/, justfile, PROJECT.org,
+DEBT.md, docs/release-gates.md.
 
 Definition of done:
 
 - LuaJ compiles into the shared library or failure is documented with evidence.
 - Smoke tests cover eval, values, host calls, errors, timeout, and permissions.
 - ADR decides default artifact inclusion or deferral.
+
+Implementation plan:
+
+- Use `org.luaj:luaj-jme:3.0.1` from Maven Central, not `luaj-jse`, to avoid
+  the JSE Luajava bridge classes in the first adapter.
+- Add `LuaEvaluator` with custom LuaJ globals, internal DebugLib instruction
+  budget hook, and guest-visible removal of `debug`, `package`, `require`,
+  `dofile`, `loadfile`, `load`, `loadstring`, `coroutine`, and `string.dump`;
+  omit `CoroutineLib` until a hook-bypass review proves it safe.
+- Add private Native Image entrypoint `ecritum_graal_eval_lua_with_stdlib` and
+  route `"lua"` through the existing public eval/job/value ABI.
+- Extend Java/native/conformance/security tests before claiming support.
+- Update shipped dependency/license inventory and dependency delta for LuaJ.
+- Record size/perf evidence; Lua remains an experimental measured candidate
+  until artifact classification is resolved.
+
+Review:
+
+- Release review: LuaJ must be shipped MIT inventory, `check-dep-delta` must
+  change only with review, size/perf data are required, and Lua cannot silently
+  become Core while ADR-018 size gates already fail.
+- Release gating update: `org.luaj:luaj-jme:3.0.1` is accepted as a shipped MIT
+  experimental dependency with no transitive runtime dependencies. M5-001
+  verification proved `CoroutineLib` is omitted and `string.dump`/binary chunks
+  are denied. Lua Core promotion remains blocked on ADR-018/Core-Full
+  classification and a memory-limiting plan for untrusted Lua workloads.
+- Tests/Security review: support claim requires strict eval/value/host/error/
+  timeout/permission coverage and denial of LuaJ escape hatches including
+  Luajava, Java classes, IO/OS/debug/package/require/load, native loading,
+  process/env, and bytecode/classpath mutation.
+- Tests/Security fixture preparation: added Lua native conformance and abuse
+  providers scoped to the packaged XCFramework. Coverage probes now include
+  eval scalar/array/object, host callback, script error, timeout, standard
+  library default-deny/allowed-root cases, and LuaJ-specific escape hatches for
+  Luajava/Java lookup, IO/OS/debug/package/require/loadfile/dofile/load/
+  loadstring/string.dump, collectgarbage, and coroutine budget bypass attempts.
+- Claude fixture review attempts: scoped diff review was interrupted after the
+  CLI stalled without output; scoped read-only consult exited by `timeout 120`
+  with no JSON response. No Claude findings were available for this fixture
+  handoff.
+- Tests/Security fixture verification:
+  - `python3 -m py_compile Tests/Conformance/fixtures/lua_native_provider.py
+    Tests/Security/fixtures/lua_abuse_provider.py` -> exit 0.
+  - `python3 scripts/run-security-abuse.py --manifest
+    Tests/Security/abuse-manifest.json --validate-manifest` -> exit 0, 68 cases.
+  - Forced missing-artifact contract checks for both Lua providers -> exit 0.
+  - Not verified by this subtask: strict `conformance-lua-native` and
+    `security-lua` against the packaged artifact; owner is the runtime
+    integration task after the Lua native entrypoint and XCFramework are rebuilt.
+- Implementation result: LuaJ compiled into the Native Image shared library
+  through `org.luaj:luaj-jme:3.0.1`; the public C ABI stayed unchanged and the
+  only new native symbol is private: `ecritum_graal_eval_lua_with_stdlib`.
+- Timeout-state correction: backend `ECRITUM_ERROR_TIMEOUT` now maps to
+  `ECRITUM_JOB_TIMED_OUT`, matching ADR-003/ADR-014.
+- Runtime verification:
+  - `mise exec -- just test-java` -> exit 0, 44 tests including 10 Lua adapter
+    tests.
+  - `mise exec -- just native` -> exit 0; Native Image size 152.18 MB, LuaJ JME
+    code area about 542.6 KB.
+  - `mise exec -- just test-native-eval-smoke` -> exit 0.
+  - `mise exec -- just test-native-eval-smoke-asan` -> exit 0.
+  - `mise exec -- just xcframework` -> exit 0.
+  - `mise exec -- just test-swift` -> exit 0, 65 runtime tests including Lua
+    Swift artifact tests.
+  - `mise exec -- just conformance-lua-native` -> exit 0, 13/13 strict cases.
+  - `mise exec -- just security-lua` -> exit 0, 68/68 strict abuse probes.
+  - `mise exec -- just check-abi` -> exit 0.
+  - `mise exec -- just check-xcframework` -> exit 0.
+  - `mise exec -- just test-security-static` -> exit 0.
+  - `mise exec -- just license-report` -> exit 0; LuaJ JME is MIT and
+    non-blocking.
+  - `mise exec -- just check-dep-delta` -> exit 0.
+  - `mise exec -- just inspect` -> exit 0; embedded runtime list includes LuaJ
+    JME.
+  - `mise exec -- just size` -> expected exit 1 under ADR-018: artifact
+    152,317,307 bytes and private runtime 152,175,352 bytes exceed Core budgets;
+    wrapper 130,096 bytes stays within budget.
+  - `mise exec -- just bench-cold-start` -> exit 0; startup process elapsed p50
+    18.317 ms, p95 60.483 ms; first call p95 9.017 ms.
+  - `mise exec -- just bench-idle-rss` -> exit 0; RSS after call p95
+    15,810,560 bytes.
+  - `mise exec -- just bench-lua-first-eval` -> exit 0; Lua first eval p50
+    1.006 ms, p95 1.835 ms.
+  - `mise exec -- just license-report-strict` -> expected exit 1 only for the
+    pre-existing `EcritumRuntime.xcframework` and GraalVM Native Image embedded
+    runtime `NOASSERTION` shipped-license blockers.
+- Claude plan review: BLOCKER until the adapter avoids LuaJ coroutine budget
+  bypasses and strips `string.dump`. Engineering-manager decision: omit
+  `CoroutineLib`, deny coroutine probes, strip `string.dump`, and track heap
+  allocation limits as a follow-up before any Core promotion.
+- Claude implementation review: full-diff review stalled with no output and was
+  interrupted; scoped Lua implementation review returned PASS with no blockers.
+  Residual risks were LuaJ age, no heap accounting, BaseLib surface, and regex
+  denial being defense-in-depth rather than enforcement; these are accepted by
+  ADR-0023/ECRITUM-DEBT-0011 while Lua remains experimental.
+- GraalVM Runtime review: recommended the existing dedicated-evaluator/private
+  entrypoint pattern and initially suggested `luaj-jse`; engineering manager
+  resolved this to `luaj-jme` after local jar inspection found JSE Luajava
+  bridge classes unnecessary for the M5 adapter.
+- Local feasibility probes: custom LuaJ globals evaluated `return 40 + 2`,
+  hid `debug`/`package`, and interrupted `while true do end` with an internal
+  DebugLib instruction hook.
 
 ** Milestone M6: Python and Ruby Gates
 
@@ -3342,7 +3445,7 @@ Output of: M2.5-001.
 Output of: M3-001.
 ** DONE ADR-006 JavaScript support scope and Node.js non-goals
 Output of: M4-001.
-** TODO ADR-007 Lua runtime choice and default artifact policy
+** DONE ADR-0023 Lua support through LuaJ spike
 Output of: M5-001.
 ** TODO ADR-008 GraalPy inclusion gate and artifact policy
 Output of: M6-001.

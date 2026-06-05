@@ -75,6 +75,11 @@ RULES = [
     ("native_image.reflect_all", r'"(?:allDeclaredMethods|allPublicMethods|allDeclaredFields|allPublicFields|allDeclaredConstructors|allPublicConstructors)"\s*:\s*true'),
     ("native_image.resource_wildcard", r'"pattern"\s*:\s*"\.\*"'),
     ("native_image.jni_all", r'"(?:allDeclaredMethods|allPublicMethods|allDeclaredFields|allPublicFields|allDeclaredConstructors|allPublicConstructors)"\s*:\s*true'),
+    ("luaj.standard_globals", r"\b(?:JsePlatform|JmePlatform)\s*\.\s*standardGlobals\s*\("),
+    ("luaj.jse_bridge", r"\borg\.luaj\.vm2\.lib\.jse\."),
+    ("luaj.luajava_lib", r"\b(?:LuajavaLib|CoerceJavaToLua|CoerceLuaToJava)\b"),
+    ("luaj.coroutine_lib", r"\bCoroutineLib\b"),
+    ("luaj.luajc", r"\bLuaJC\b"),
 ]
 
 

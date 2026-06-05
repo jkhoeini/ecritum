@@ -4282,7 +4282,7 @@ static int backend_apply_result_to_job(const uint8_t *data, size_t len, ecritum_
     }
     if (status == ECRITUM_OK) {
         int terminal_status = backend_status_is_known((int)raw_status) ? (int)raw_status : ECRITUM_ERROR_INTERNAL;
-        job->state = ECRITUM_JOB_FAILED;
+        job->state = terminal_status == ECRITUM_ERROR_TIMEOUT ? ECRITUM_JOB_TIMED_OUT : ECRITUM_JOB_FAILED;
         job->terminal_status = terminal_status;
         copy_text(job->language, sizeof(job->language), language);
         copy_text(job->source_name, sizeof(job->source_name), source_name);
@@ -4473,6 +4473,25 @@ static void *eval_worker_main(void *raw_work) {
             sizeof(backend_buffer),
             &backend_bytes_written
         );
+    } else if (backend_status == ECRITUM_OK && work->language != NULL && strcmp(work->language, "lua") == 0) {
+        backend_status = ecritum_graal_eval_lua_with_stdlib(
+            thread,
+            (char *)work->source,
+            work->source_len,
+            work->source_name,
+            work->source_name_len,
+            work->host_manifest,
+            work->host_manifest_len,
+            host_call_bridge_from_graal,
+            (size_t)work->runtime,
+            work->standard_library_manifest,
+            work->standard_library_manifest_len,
+            standard_library_bridge_from_graal,
+            (size_t)work->context,
+            (char *)backend_buffer,
+            sizeof(backend_buffer),
+            &backend_bytes_written
+        );
     } else if (backend_status == ECRITUM_OK && work->language != NULL && strcmp(work->language, "clojure") == 0) {
         backend_status = ecritum_graal_eval_clojure_with_stdlib(
             thread,
@@ -4548,7 +4567,7 @@ __attribute__((visibility("default"))) int ecritum_eval_start(
     if (validation != ECRITUM_OK) {
         return fail_with_error(validation, "eval_start", "invalid eval input", out_error);
     }
-    if (!view_equals(language, "clojure") && !view_equals(language, "javascript")) {
+    if (!view_equals(language, "clojure") && !view_equals(language, "javascript") && !view_equals(language, "lua")) {
         return fail_with_error(ECRITUM_ERROR_RUNTIME_UNAVAILABLE, "eval_start", "language is not available in this artifact", out_error);
     }
     if (options_json.len != 0) {

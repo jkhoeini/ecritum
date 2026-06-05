@@ -210,6 +210,10 @@ static ecritum_value_t eval_js(ecritum_context_t context, const char *source) {
     return eval_language(context, "javascript", source, "native-smoke.js");
 }
 
+static ecritum_value_t eval_lua(ecritum_context_t context, const char *source) {
+    return eval_language(context, "lua", source, "native-smoke.lua");
+}
+
 static void expect_failed_eval(ecritum_context_t context, const char *source, const char *source_name, const char *category) {
     ecritum_job_t failed_job = 0;
     ecritum_error_t error = 0;
@@ -250,7 +254,7 @@ static void expect_failed_eval_status_language(ecritum_context_t context, const 
     CHECK(ecritum_eval_start(context, view(language), bytes(source), view(source_name), empty_bytes(), &failed_job, &error) == ECRITUM_OK);
     CHECK(failed_job != 0);
     CHECK(wait_for_terminal_job(failed_job, &state, &error) == ECRITUM_OK);
-    CHECK(state == ECRITUM_JOB_FAILED);
+    CHECK(state == (expected_status == ECRITUM_ERROR_TIMEOUT ? ECRITUM_JOB_TIMED_OUT : ECRITUM_JOB_FAILED));
     CHECK(ecritum_job_result(failed_job, &failed_value, &error) == expected_status);
     CHECK(failed_value == 0);
     CHECK(error != 0);
@@ -443,6 +447,77 @@ int main(void) {
     expect_failed_eval_status_language(context, "javascript", "Java.type('java.lang.System')", "permission-source.js", ECRITUM_ERROR_PERMISSION_DENIED, "permission");
     expect_failed_eval_status_language(context, "javascript", "(async function(){ return 42; })()", "promise-source.js", ECRITUM_ERROR_SCRIPT, "runtime");
 
+    ecritum_value_t lua_scalar = eval_lua(context, "return 40 + 2");
+    assert_int(lua_scalar, 42);
+    CHECK(ecritum_value_destroy(&lua_scalar) == ECRITUM_OK);
+
+    ecritum_value_t lua_nil = eval_lua(context, "return nil");
+    assert_null(lua_nil);
+    CHECK(ecritum_value_destroy(&lua_nil) == ECRITUM_OK);
+
+    ecritum_value_t lua_bool = eval_lua(context, "return true");
+    assert_bool(lua_bool, 1);
+    CHECK(ecritum_value_destroy(&lua_bool) == ECRITUM_OK);
+
+    ecritum_value_t lua_string = eval_lua(context, "return 'hello'");
+    assert_string(lua_string, "hello");
+    CHECK(ecritum_value_destroy(&lua_string) == ECRITUM_OK);
+
+    ecritum_value_t lua_double = eval_lua(context, "return 3.5");
+    assert_double(lua_double, 3.5);
+    CHECK(ecritum_value_destroy(&lua_double) == ECRITUM_OK);
+
+    ecritum_value_t lua_array = eval_lua(context, "return {1, 2, 3}");
+    if (lua_array != 0) {
+        CHECK(ecritum_value_kind(lua_array, &kind) == ECRITUM_OK);
+        CHECK(kind == ECRITUM_VALUE_KIND_ARRAY);
+        CHECK(ecritum_value_count(lua_array, &count) == ECRITUM_OK);
+        CHECK(count == 3);
+        ecritum_value_t first = 0;
+        CHECK(ecritum_value_array_get(lua_array, 0, &first, &error) == ECRITUM_OK);
+        assert_int(first, 1);
+        CHECK(ecritum_value_destroy(&first) == ECRITUM_OK);
+        CHECK(ecritum_value_destroy(&lua_array) == ECRITUM_OK);
+    }
+
+    ecritum_value_t lua_object = eval_lua(context, "return {answer = 42}");
+    if (lua_object != 0) {
+        CHECK(ecritum_value_kind(lua_object, &kind) == ECRITUM_OK);
+        CHECK(kind == ECRITUM_VALUE_KIND_OBJECT);
+        CHECK(ecritum_value_count(lua_object, &count) == ECRITUM_OK);
+        CHECK(count == 1);
+        ecritum_string_view_t key = {0};
+        ecritum_value_t object_value = 0;
+        CHECK(ecritum_value_object_entry(lua_object, 0, &key, &object_value, &error) == ECRITUM_OK);
+        CHECK(key.len == 6);
+        CHECK(memcmp(key.data, "answer", 6) == 0);
+        assert_int(object_value, 42);
+        CHECK(ecritum_value_destroy(&object_value) == ECRITUM_OK);
+        CHECK(ecritum_value_destroy(&lua_object) == ECRITUM_OK);
+    }
+
+    ecritum_value_t lua_json = eval_lua(context, "return ecritum.json.writeString({b = 2, a = 1})");
+    assert_string(lua_json, "{\"a\":1,\"b\":2}");
+    CHECK(ecritum_value_destroy(&lua_json) == ECRITUM_OK);
+
+    ecritum_value_t lua_time = eval_lua(context, "return ecritum.time.formatInstant(ecritum.time.parseInstant('2026-06-05T00:00:00Z'))");
+    assert_string(lua_time, "2026-06-05T00:00:00Z");
+    CHECK(ecritum_value_destroy(&lua_time) == ECRITUM_OK);
+
+    ecritum_value_t lua_host_value = eval_lua(context, "return ecritum.app.answer()");
+    assert_int(lua_host_value, 42);
+    CHECK(ecritum_value_destroy(&lua_host_value) == ECRITUM_OK);
+
+    ecritum_value_t lua_host_arg_value = eval_lua(context, "return ecritum.app.add_one(41)");
+    assert_int(lua_host_arg_value, 42);
+    CHECK(ecritum_value_destroy(&lua_host_arg_value) == ECRITUM_OK);
+
+    expect_failed_eval_status_language(context, "lua", "return ecritum.app.fail()", "callback-source.lua", ECRITUM_ERROR_CALLBACK, "callback");
+    expect_failed_eval_status_language(context, "lua", "io.open('/tmp/ecritum')", "permission-source.lua", ECRITUM_ERROR_PERMISSION_DENIED, "permission");
+    expect_failed_eval_status_language(context, "lua", "string.dump(function() end)", "dump-source.lua", ECRITUM_ERROR_PERMISSION_DENIED, "permission");
+    expect_failed_eval_status_language(context, "lua", "coroutine.resume(coroutine.create(function() while true do end end))", "coroutine-source.lua", ECRITUM_ERROR_PERMISSION_DENIED, "permission");
+    expect_failed_eval_status_language(context, "lua", "while true do end", "timeout-source.lua", ECRITUM_ERROR_TIMEOUT, "timeout");
+
     expect_failed_eval_status(context, "(app/fail)", "callback-source.clj", ECRITUM_ERROR_CALLBACK, "callback");
     expect_eval_start_error(context, view("python"), empty_bytes(), ECRITUM_ERROR_RUNTIME_UNAVAILABLE);
     expect_eval_start_error(context, view("clojure"), bytes("{\"rawSciOption\":true}"), ECRITUM_ERROR_INVALID_ARGUMENT);
@@ -463,6 +538,23 @@ int main(void) {
     expect_eval_start_error(js_context, view("clojure"), empty_bytes(), ECRITUM_ERROR_PERMISSION_DENIED);
     CHECK(ecritum_context_destroy(&js_context, &error) == ECRITUM_OK);
     CHECK(ecritum_runtime_destroy(&js_runtime, &error) == ECRITUM_OK);
+
+    ecritum_runtime_t lua_runtime = 0;
+    ecritum_context_t lua_context = 0;
+    ecritum_bytes_t lua_only_config = bytes(
+        "{\"schemaVersion\":1,\"languages\":[\"lua\"],"
+        "\"policy\":{\"filesystem\":{\"mode\":\"denied\"},\"network\":{\"mode\":\"denied\"},\"process\":{\"mode\":\"denied\"},"
+        "\"environment\":{\"mode\":\"denied\"},\"clock\":{\"mode\":\"denied\"},\"random\":{\"mode\":\"denied\"},\"log\":{\"mode\":\"denied\"}},"
+        "\"diagnostics\":{\"mode\":\"redacted\"},\"resourceLimits\":{}}"
+    );
+    CHECK(ecritum_runtime_create(lua_only_config, &lua_runtime, &error) == ECRITUM_OK);
+    CHECK(ecritum_context_create(lua_runtime, empty_bytes(), &lua_context, &error) == ECRITUM_OK);
+    ecritum_value_t lua_only_value = eval_language(lua_context, "lua", "return 40 + 2", "lua-only.lua");
+    assert_int(lua_only_value, 42);
+    CHECK(ecritum_value_destroy(&lua_only_value) == ECRITUM_OK);
+    expect_eval_start_error(lua_context, view("clojure"), empty_bytes(), ECRITUM_ERROR_PERMISSION_DENIED);
+    CHECK(ecritum_context_destroy(&lua_context, &error) == ECRITUM_OK);
+    CHECK(ecritum_runtime_destroy(&lua_runtime, &error) == ECRITUM_OK);
 
     CHECK(ecritum_context_destroy(&context, &error) == ECRITUM_OK);
     CHECK(ecritum_runtime_destroy(&runtime, &error) == ECRITUM_OK);

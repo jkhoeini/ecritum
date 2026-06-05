@@ -309,6 +309,81 @@ public final class NativeEntrypoints {
         }
     }
 
+    @CEntryPoint(name = "ecritum_graal_eval_lua_with_stdlib")
+    public static int ecritumGraalEvalLuaWithStdlib(
+        IsolateThread thread,
+        CCharPointer source,
+        UnsignedWord sourceSize,
+        CCharPointer sourceName,
+        UnsignedWord sourceNameSize,
+        CCharPointer hostManifest,
+        UnsignedWord hostManifestSize,
+        HostCallCallback hostCallback,
+        UnsignedWord hostRuntime,
+        CCharPointer standardLibraryManifest,
+        UnsignedWord standardLibraryManifestSize,
+        StandardLibraryCallback standardLibraryCallback,
+        UnsignedWord standardLibraryContext,
+        CCharPointer outBuffer,
+        UnsignedWord outBufferSize,
+        CLongPointer outBytesWritten
+    ) {
+        if (source.isNull() || outBuffer.isNull() || outBytesWritten.isNull()) {
+            return EcritumStatus.INVALID_ARGUMENT;
+        }
+
+        try {
+            String sourceText = CTypeConversion.toJavaString(source, sourceSize, StandardCharsets.UTF_8);
+            String sourceNameText = sourceName.isNull()
+                ? ""
+                : CTypeConversion.toJavaString(sourceName, sourceNameSize, StandardCharsets.UTF_8);
+            List<HostProjection> projections = hostManifest.isNull()
+                ? List.of()
+                : parseHostManifest(CTypeConversion.toJavaString(hostManifest, hostManifestSize, StandardCharsets.UTF_8));
+            HostFunctionInvoker hostInvoker = hostCallback.isNull()
+                ? (namespace, function, arguments) -> {
+                    throw new HostFunctionException(EcritumStatus.PERMISSION_DENIED, "permission", "host bridge is unavailable");
+                }
+                : new NativeHostFunctionInvoker(hostCallback, hostRuntime);
+            StandardLibraryPolicy policy = standardLibraryManifest.isNull()
+                ? StandardLibraryPolicy.denied()
+                : StandardLibraryPolicy.fromManifest(CTypeConversion.toJavaString(
+                    standardLibraryManifest,
+                    standardLibraryManifestSize,
+                    StandardCharsets.UTF_8
+                ));
+            StandardLibraryBridge bridge = standardLibraryCallback.isNull()
+                ? StandardLibraryBridge.denying()
+                : new NativeStandardLibraryBridge(standardLibraryCallback, standardLibraryContext, sourceNameText);
+            byte[] encoded = BackendResultCodec.encode(LuaEvaluator.evaluate(
+                sourceText,
+                sourceNameText,
+                projections,
+                hostInvoker,
+                policy,
+                bridge
+            ));
+            outBytesWritten.write(encoded.length);
+            if (encoded.length > outBufferSize.rawValue()) {
+                return EcritumStatus.BUFFER_TOO_SMALL;
+            }
+            for (int index = 0; index < encoded.length; index++) {
+                outBuffer.write(index, encoded[index]);
+            }
+            return EcritumStatus.OK;
+        } catch (Throwable ex) {
+            SciEvalResult failure = SciEvalResult.internalError("lua", "", "lua backend failed");
+            byte[] encoded = BackendResultCodec.encode(failure);
+            outBytesWritten.write(encoded.length);
+            if (encoded.length <= outBufferSize.rawValue()) {
+                for (int index = 0; index < encoded.length; index++) {
+                    outBuffer.write(index, encoded[index]);
+                }
+            }
+            return EcritumStatus.OK;
+        }
+    }
+
     static List<HostProjection> parseHostManifest(String manifest) {
         if (manifest == null || manifest.isBlank()) {
             return List.of();

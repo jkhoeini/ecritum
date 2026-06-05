@@ -16,6 +16,7 @@
     <native.maven.plugin.version>1.1.1</native.maven.plugin.version>
     <sci.version>0.12.51</sci.version>
     <graaljs.version>${graalvm.version}</graaljs.version>
+    <luaj.version>3.0.1</luaj.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
 
@@ -53,6 +54,11 @@
       <groupId>org.babashka</groupId>
       <artifactId>sci</artifactId>
       <version>${sci.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.luaj</groupId>
+      <artifactId>luaj-jme</artifactId>
+      <version>${luaj.version}</version>
     </dependency>
     <dependency>
       <groupId>org.junit.jupiter</groupId>

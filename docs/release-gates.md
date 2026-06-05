@@ -163,6 +163,23 @@ dev.ecritum:ecritum-native:jar:0.1.0-SNAPSHOT
    \- borkdude:graal.locking:jar:0.0.2:compile
 ```
 
+M5-001 adds experimental Lua through LuaJ. The accepted shipped dependency is:
+
+- `org.luaj:luaj-jme:3.0.1`, MIT.
+
+The LuaJ JME POM has no transitive runtime dependencies. The accepted M5-001
+dependency-tree delta is:
+
+```text
++- org.luaj:luaj-jme:jar:3.0.1:compile
+```
+
+Lua remains an experimental measured candidate, not a release-ready Core
+runtime. M5-001 verification proved `CoroutineLib` is omitted and
+`string.dump`/binary chunks are denied. Core promotion is blocked until
+ADR-018/Core-Full classification is resolved with Lua size/startup/RSS/
+first-eval data and a memory-limiting plan exists for untrusted Lua workloads.
+
 ## Reproducibility
 
 M1 uses rebuildable provenance plus deterministic archive metadata:

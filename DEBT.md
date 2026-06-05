@@ -19,6 +19,29 @@ not done if it introduced debt without an entry.
 
 ## Active Debt
 
+- ID: ECRITUM-DEBT-0011
+- Source task: M5-001
+- Introduced by: LuaJ Native Image spike release gate
+- Owner persona: Release, Licensing, and Distribution Engineer
+- Date: 2026-06-06
+- Impact: LuaJ is inventoried as a shipped experimental dependency, but Lua is
+  not release-ready Core until the artifact-size classification, Lua-specific
+  performance data, and untrusted-memory controls are accepted.
+- Reason accepted: M5-001 needs a measured Native Image Lua smoke path before
+  Ecritum can decide whether LuaJ belongs in the default artifact, a Full-only
+  artifact, or a deferred runtime.
+- Resolve-by phase: M5
+- Exit condition: ADR-018/Core-Full policy explicitly classifies Lua with
+  recorded size, cold-start, idle-RSS, and first-Lua-eval data; LuaJ guest
+  exposure tests prove `CoroutineLib` is omitted and `string.dump`/binary
+  chunks are denied; memory limiting is accepted or Lua remains outside Core.
+- Removal task: M5 Lua runtime classification and release-readiness decision.
+- Verification required: `mise exec -- just size`, `mise exec -- just
+  bench-cold-start`, `mise exec -- just bench-idle-rss`, `mise exec -- just
+  bench-lua-first-eval`, `mise exec -- just security-lua`, `mise exec -- just
+  license-report`, `mise exec -- just check-dep-delta`, and documented
+  Core/Full decision.
+
 - ID: ECRITUM-DEBT-0010
 - Source task: M4-002
 - Introduced by: GraalJS smoke path
