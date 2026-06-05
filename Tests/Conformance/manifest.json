@@ -1,0 +1,345 @@
+{
+  "schemaVersion": 1,
+  "suite": "ecritum-conformance",
+  "cases": [
+    {
+      "caseId": "allocation.public_c_release_coverage",
+      "title": "Public C allocations have matching release coverage",
+      "category": "allocation",
+      "required": true,
+      "capabilities": ["c_allocation_release"],
+      "description": "Every public C allocation path has matching release or destroy coverage.",
+      "expected": {
+        "evidenceCommands": [
+          "mise exec -- just test-c-abi-lifecycle",
+          "mise exec -- just test-c-abi-host-registration",
+          "mise exec -- just test-c-abi-policy-config"
+        ]
+      }
+    },
+    {
+      "caseId": "error.script_to_structured_error",
+      "title": "Script error converts to structured Ecritum error",
+      "category": "error",
+      "required": true,
+      "capabilities": ["script_error"],
+      "description": "A guest-language failure is reported as a structured Ecritum error.",
+      "request": {
+        "source": "raise a script error"
+      },
+      "expected": {
+        "status": "ECRITUM_ERROR_SCRIPT",
+        "category": "script",
+        "operation": "eval"
+      }
+    },
+    {
+      "caseId": "eval.array",
+      "title": "Eval returns array values",
+      "category": "eval",
+      "required": true,
+      "capabilities": ["eval"],
+      "description": "A script can return an array value with typed elements.",
+      "request": {
+        "source": "return [1, \"two\", true]"
+      },
+      "expected": {
+        "value": {
+          "kind": "array",
+          "value": [
+            {"kind": "int", "value": 1},
+            {"kind": "string", "value": "two"},
+            {"kind": "bool", "value": true}
+          ]
+        }
+      }
+    },
+    {
+      "caseId": "eval.object",
+      "title": "Eval returns object values",
+      "category": "eval",
+      "required": true,
+      "capabilities": ["eval"],
+      "description": "A script can return an object value with string keys.",
+      "request": {
+        "source": "return {\"answer\": 42}"
+      },
+      "expected": {
+        "value": {
+          "kind": "object",
+          "value": {
+            "answer": {"kind": "int", "value": 42}
+          }
+        }
+      }
+    },
+    {
+      "caseId": "eval.scalar",
+      "title": "Eval returns scalar values",
+      "category": "eval",
+      "required": true,
+      "capabilities": ["eval"],
+      "description": "A script can return a scalar value without losing its Ecritum value kind.",
+      "request": {
+        "source": "return 42"
+      },
+      "expected": {
+        "value": {"kind": "int", "value": 42}
+      }
+    },
+    {
+      "caseId": "host.host_function_returns_value",
+      "title": "Host function returns value to script",
+      "category": "host",
+      "required": true,
+      "capabilities": ["host_call"],
+      "description": "A host callback can return a typed Ecritum value to guest code.",
+      "request": {
+        "hostFunction": "app.answer"
+      },
+      "expected": {
+        "value": {"kind": "int", "value": 42}
+      }
+    },
+    {
+      "caseId": "host.script_calls_host_function",
+      "title": "Script calls host function",
+      "category": "host",
+      "required": true,
+      "capabilities": ["host_call"],
+      "description": "A script can call an explicitly registered host function.",
+      "request": {
+        "hostFunction": "app.notify"
+      },
+      "expected": {
+        "hostCalls": [
+          {"namespace": "app", "function": "notify"}
+        ]
+      }
+    },
+    {
+      "caseId": "lifecycle.c.create_destroy_no_leak",
+      "title": "C lifecycle create and destroy paths do not leak",
+      "category": "lifecycle",
+      "required": true,
+      "capabilities": ["c_lifecycle"],
+      "description": "Runtime, context, namespace, function, and error handles are released through the public C ABI.",
+      "expected": {
+        "evidenceCommands": [
+          "mise exec -- just test-c-abi-lifecycle",
+          "mise exec -- just test-c-abi-asan",
+          "mise exec -- just test-c-abi-host-registration",
+          "mise exec -- just test-c-abi-host-registration-asan"
+        ]
+      }
+    },
+    {
+      "caseId": "lifecycle.swift.create_destroy_no_leak",
+      "title": "Swift lifecycle create and destroy paths do not leak",
+      "category": "lifecycle",
+      "required": true,
+      "capabilities": ["swift_lifecycle"],
+      "description": "Swift runtime, context, namespace, and function wrappers release their owned C handles exactly once.",
+      "expected": {
+        "evidenceCommands": [
+          "mise exec -- just test-swift-scaffold"
+        ]
+      }
+    },
+    {
+      "caseId": "model.swift.policy_config_serialization",
+      "title": "Swift policy config serializes to schema v1",
+      "category": "model",
+      "required": false,
+      "capabilities": ["policy_config"],
+      "description": "Swift policy/config models serialize to the deny-by-default schema consumed by the C ABI.",
+      "expected": {
+        "evidenceCommands": [
+          "mise exec -- just test-swift-scaffold",
+          "mise exec -- just test-c-abi-policy-config"
+        ]
+      }
+    },
+    {
+      "caseId": "model.swift.structured_errors",
+      "title": "Swift structured errors preserve safe diagnostics",
+      "category": "model",
+      "required": false,
+      "capabilities": ["swift_error_model"],
+      "description": "Swift structured errors preserve status/category while redacting unsafe diagnostics.",
+      "expected": {
+        "evidenceCommands": [
+          "mise exec -- just test-swift-scaffold"
+        ]
+      }
+    },
+    {
+      "caseId": "model.swift.value_kinds",
+      "title": "Swift value model preserves all M2 value kinds",
+      "category": "model",
+      "required": false,
+      "capabilities": ["swift_value_model"],
+      "description": "Swift value modeling preserves null, bool, int, double, string, data, array, and object values.",
+      "expected": {
+        "evidenceCommands": [
+          "mise exec -- just test-swift-scaffold"
+        ]
+      }
+    },
+    {
+      "caseId": "permission.default_deny.class_loading",
+      "title": "Class loading is denied by default",
+      "category": "permission",
+      "required": true,
+      "capabilities": ["permission_default_deny"],
+      "description": "Guest code cannot load arbitrary classes unless the host explicitly grants a capability.",
+      "request": {
+        "attempt": "class_loading"
+      },
+      "expected": {
+        "status": "ECRITUM_ERROR_PERMISSION_DENIED"
+      }
+    },
+    {
+      "caseId": "permission.default_deny.environment",
+      "title": "Environment access is denied by default",
+      "category": "permission",
+      "required": true,
+      "capabilities": ["permission_default_deny"],
+      "description": "Guest code cannot read environment variables unless explicitly granted.",
+      "request": {
+        "attempt": "environment"
+      },
+      "expected": {
+        "status": "ECRITUM_ERROR_PERMISSION_DENIED"
+      }
+    },
+    {
+      "caseId": "permission.default_deny.filesystem",
+      "title": "Filesystem access is denied by default",
+      "category": "permission",
+      "required": true,
+      "capabilities": ["permission_default_deny"],
+      "description": "Guest code cannot read or write files unless explicitly granted.",
+      "request": {
+        "attempt": "filesystem"
+      },
+      "expected": {
+        "status": "ECRITUM_ERROR_PERMISSION_DENIED"
+      }
+    },
+    {
+      "caseId": "permission.default_deny.native_library_loading",
+      "title": "Native library loading is denied by default",
+      "category": "permission",
+      "required": true,
+      "capabilities": ["permission_default_deny"],
+      "description": "Guest code cannot load native libraries unless explicitly granted.",
+      "request": {
+        "attempt": "native_library_loading"
+      },
+      "expected": {
+        "status": "ECRITUM_ERROR_PERMISSION_DENIED"
+      }
+    },
+    {
+      "caseId": "permission.default_deny.network",
+      "title": "Network access is denied by default",
+      "category": "permission",
+      "required": true,
+      "capabilities": ["permission_default_deny"],
+      "description": "Guest code cannot open network connections unless explicitly granted.",
+      "request": {
+        "attempt": "network"
+      },
+      "expected": {
+        "status": "ECRITUM_ERROR_PERMISSION_DENIED"
+      }
+    },
+    {
+      "caseId": "permission.default_deny.process",
+      "title": "Process execution is denied by default",
+      "category": "permission",
+      "required": true,
+      "capabilities": ["permission_default_deny"],
+      "description": "Guest code cannot spawn processes unless explicitly granted.",
+      "request": {
+        "attempt": "process"
+      },
+      "expected": {
+        "status": "ECRITUM_ERROR_PERMISSION_DENIED"
+      }
+    },
+    {
+      "caseId": "permission.default_deny.reflection",
+      "title": "Reflection is denied by default",
+      "category": "permission",
+      "required": true,
+      "capabilities": ["permission_default_deny"],
+      "description": "Guest code cannot use reflection escape hatches unless explicitly granted.",
+      "request": {
+        "attempt": "reflection"
+      },
+      "expected": {
+        "status": "ECRITUM_ERROR_PERMISSION_DENIED"
+      }
+    },
+    {
+      "caseId": "permission.default_deny.unrestricted_java_lookup",
+      "title": "Unrestricted Java lookup is denied by default",
+      "category": "permission",
+      "required": true,
+      "capabilities": ["permission_default_deny"],
+      "description": "Guest code cannot perform unrestricted Java lookup unless explicitly granted.",
+      "request": {
+        "attempt": "unrestricted_java_lookup"
+      },
+      "expected": {
+        "status": "ECRITUM_ERROR_PERMISSION_DENIED"
+      }
+    },
+    {
+      "caseId": "permission.filesystem.allowed_root_inside",
+      "title": "Allowed filesystem root permits access inside the root",
+      "category": "permission",
+      "required": true,
+      "capabilities": ["filesystem_allowed_root"],
+      "description": "A filesystem capability permits access inside its configured root only.",
+      "request": {
+        "attempt": "filesystem_inside_allowed_root"
+      },
+      "expected": {
+        "status": "ECRITUM_OK"
+      }
+    },
+    {
+      "caseId": "permission.filesystem.allowed_root_outside_denied",
+      "title": "Allowed filesystem root denies access outside the root",
+      "category": "permission",
+      "required": true,
+      "capabilities": ["filesystem_allowed_root"],
+      "description": "A filesystem capability denies path traversal outside its configured root.",
+      "request": {
+        "attempt": "filesystem_outside_allowed_root"
+      },
+      "expected": {
+        "status": "ECRITUM_ERROR_PERMISSION_DENIED"
+      }
+    },
+    {
+      "caseId": "timeout.long_running_script",
+      "title": "Timeout cancels long-running script",
+      "category": "timeout",
+      "required": true,
+      "capabilities": ["timeout"],
+      "description": "A long-running script reaches terminal timeout/cancel status per ADR-014.",
+      "request": {
+        "source": "run forever",
+        "executionTimeoutNanos": 1000000
+      },
+      "expected": {
+        "status": "ECRITUM_ERROR_TIMEOUT"
+      }
+    }
+  ]
+}

@@ -80,6 +80,14 @@ test-swift-auto:
         scripts/swift-test.sh --mode scaffold; \
     fi
 
+conformance:
+    mkdir -p build/conformance
+    python3 -m py_compile scripts/run-conformance.py Tests/Conformance/fixtures/provider.py
+    python3 -m unittest Tests/Conformance/test_runner.py
+    python3 scripts/run-conformance.py --manifest Tests/Conformance/manifest.json --provider python3 Tests/Conformance/fixtures/provider.py --mode scaffold > build/conformance/scaffold.json
+
+test-conformance: conformance
+
 test-c-abi-lifecycle:
     mkdir -p build/c-abi
     clang -DECRITUM_TESTING -I Sources/CEcritum/include -I build/native/macos-arm64/include/private scripts/ecritum_runtime_wrapper.c Tests/C/lifecycle_contract.c -o build/c-abi/lifecycle_contract
@@ -120,7 +128,7 @@ test-lifecycle-leak-smoke:
         binary="dist/local/EcritumRuntime.xcframework/$slice/EcritumRuntime.framework/EcritumRuntime"; \
         leaks --atExit -- build/c-abi/framework_lifecycle_smoke "$binary"
 
-test: plan-check test-swift-auto test-java test-c-abi-lifecycle test-c-abi-asan test-c-abi-host-registration test-c-abi-host-registration-asan test-c-abi-policy-config test-c-abi-policy-config-asan test-examples-auto
+test: plan-check conformance test-swift-auto test-java test-c-abi-lifecycle test-c-abi-asan test-c-abi-host-registration test-c-abi-host-registration-asan test-c-abi-policy-config test-c-abi-policy-config-asan test-examples-auto
 
 example-swift:
     @test -d dist/local/EcritumRuntime.xcframework || { echo "missing dist/local/EcritumRuntime.xcframework; run mise exec -- just xcframework first" >&2; exit 1; }

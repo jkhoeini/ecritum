@@ -1486,12 +1486,111 @@ Not verified:
 - Clean-machine consumer validation and notarized release packaging; owned by
   M7 release tasks.
 
-*** TODO M2-006 Create shared conformance suite
+*** DONE M2-006 Create shared conformance suite
 
 Lead persona: Tests.
 Reviewer personas: Clean Code, Security, Unix.
 Depends on: M2-002, M2-005.
-Write scope: Tests/, scripts/, justfile.
+Write scope: Tests/, scripts/, justfile, .gitignore.
+
+Assignment:
+
+- Engineering manager: Codex.
+- Lead persona agent: Tests/TDD (Ada).
+- Reviewer agents: Clean Code (Beck), Security (Fermat), Unix tooling (Ken).
+- Architecture consult: requested from Architecture Expert (Dewey) because the
+  provider protocol has architectural weight; proceed only with an internal,
+  reversible test-harness contract unless that review requires an ADR.
+- Claude plan consult: PASS. Claude agreed M2-006 should build the authoritative
+  manifest, runner, and fixture provider protocol now because no eval/job ABI
+  exists yet; real language providers must plug into the same manifest later.
+
+Accepted plan:
+
+- Create a data-driven `Tests/Conformance/` suite that enumerates every required
+  Cross-Language Conformance Suite case.
+- Add `scripts/run-conformance.py` as the runner. It owns manifest parsing,
+  provider invocation, result normalization, deterministic JSON stdout,
+  diagnostics on stderr, and CI-friendly exit codes.
+- Keep the provider protocol internal to the test harness for M2-006. It is not
+  public ABI, not a language-support promise, and can change before real
+  providers land.
+- Add fixture providers/tests that prove pass, fail, pending capability,
+  malformed provider output, provider crash, provider timeout, filtering, and
+  stable summary behavior.
+- Make unsupported eval, timeout, script-host-call, and script-permission cases
+  explicit pending capability evidence until the eval/job/provider ABI exists.
+  Pending required cases must prevent any language from being reported
+  conformant.
+- Reuse existing C and Swift checks for lifecycle, host-registration,
+  policy/config, value, error, and allocation/release evidence instead of
+  duplicating their implementation in the runner.
+
+Scope guardrails:
+
+- Do not implement real language adapters in M2-006.
+- Do not claim Clojure, JavaScript, Python, Ruby, Lua, or JVM conformance from
+  fixture-provider results.
+- Do not define public C ABI, Swift API, sandbox enforcement semantics, or
+  filesystem canonicalization behavior in the runner. If implementation needs
+  those decisions, stop and write an ADR first.
+- Default-deny permission cases must include filesystem, network, process,
+  environment, reflection, class loading, native library loading, and
+  unrestricted Java lookup.
+
+Pre-implementation review:
+
+- Tests/TDD: PASS. Red tests must cover required-case catalog completeness,
+  explicit pending capability behavior, provider capability mismatch, conformant
+  summary false with pending required cases, and current C/Swift evidence.
+- Clean Code: PASS with guardrail. Keep manifest validation pure/table-driven,
+  provider invocation in a thin side-effect boundary, and no framework
+  dependency.
+- Security: PASS with guardrail. False-green output is the main risk; denied
+  cases must be visible pending/failing evidence, not silent skips.
+- Unix tooling: PASS. Runner must use deterministic JSON stdout, stderr-only
+  diagnostics, `--list`, filters, and distinct exit codes.
+- Architecture: PASS. No ADR is required while the protocol stays test-internal
+  under `Tests/`, `scripts/`, and `justfile`, mirrors ADR-002/003/014/020, and
+  does not define new public value/error/timeout/policy semantics. ADR required
+  if the provider JSON becomes stable, shipped, third-party-facing, or a support
+  contract.
+
+Internal protocol details:
+
+- Manifest fields: `schemaVersion`, `suite`, `cases`; each case has `caseId`,
+  `title`, `category`, `required`, `capabilities`, `description`, optional
+  `request`, and optional `expected`.
+- Provider stdin: one JSON object with `protocolVersion`, `provider`, and the
+  selected `cases`.
+- Provider stdout: one JSON object with `protocolVersion`, `provider.id`,
+  `provider.capabilities`, and `results`.
+- Provider result fields: `caseId`, `status` (`pass`, `fail`,
+  `pending_capability`, or `error`), `reason`, optional `evidence`, and optional
+  normalized `actual`.
+- Runner exit codes: `0` for harness success, `1` for required failures or
+  strict-mode pending required cases, and `2` for runner/provider protocol
+  errors.
+- Pending required cases are allowed in normal harness validation only when the
+  provider lacks the case capabilities and gives a non-empty reason. They must
+  set the provider summary `conformant` value to false. Strict mode is the
+  support-claim gate and fails on pending required cases.
+
+Verification plan:
+
+- Red: `mise exec -- just conformance` fails before the just task/runner exists.
+- Red: `python3 -m unittest Tests/Conformance/test_runner.py` fails before the
+  runner and manifest exist.
+- Green: `python3 -m py_compile scripts/run-conformance.py`.
+- Green: `python3 -m unittest Tests/Conformance/test_runner.py`.
+- Green: `mise exec -- just conformance`.
+- Green: `mise exec -- just test-swift-scaffold`.
+- Green: `mise exec -- just test-c-abi-lifecycle`.
+- Green: `mise exec -- just test-c-abi-host-registration`.
+- Green: `mise exec -- just test-c-abi-policy-config`.
+- Green: `mise exec -- just test`.
+- Review: Claude diff review, then persona review; run one second Claude review
+  if fixes are required.
 
 Definition of done:
 
@@ -1499,6 +1598,83 @@ Definition of done:
   Conformance Suite section.
 - Suite can run against each language provider through the same contract.
 - Output is scriptable and CI-friendly.
+- Required pending cases are visible and make the provider/language summary
+  non-conformant until real runtime support exists.
+
+Post-change review completed:
+
+- Security review: PASS. Default-deny catalog, false-pass guards,
+  strict/pending gate, fixture-only boundary, and just integration had no
+  blockers.
+- Clean Code review: PASS. Manifest validation and provider side effects are
+  separated, and fixture I/O is contained.
+- Tests/TDD review: BLOCKER then PASS. Initial review found that a provider
+  could declare `eval`, return a bare `pass`, and become conformant without
+  proving expected output. Fixed by validating pass results against manifest
+  `expected` values/evidence and adding regression tests.
+- Unix tooling review: BLOCKER then PASS. Initial review found provider stderr
+  was embedded in JSON stdout and help did not document streams/exit codes.
+  Fixed by forwarding provider stderr to stderr only and documenting runner
+  streams and exit codes.
+- Claude diff review: found false-green/test-gap risks around all-pass fixture
+  mode, pass-without-capability coverage, expected-output validation, stderr
+  handling, and CLI edge cases.
+- Claude second review: PASS. Confirmed all prior blockers were resolved and no
+  new issues were introduced.
+
+Red/green evidence:
+
+- Red: `mise exec -- just conformance` failed before implementation because
+  `justfile` did not contain recipe `conformance`.
+- Red: `python3 -m unittest Tests/Conformance/test_runner.py` failed before
+  implementation because `Tests/Conformance/manifest.json` and
+  `scripts/run-conformance.py` did not exist.
+- Red after review: expanded regression tests failed on `all-pass` fixture mode,
+  missing help text, bare pass without expected `actual`, wrong expected
+  `actual`, and provider stderr in JSON stdout.
+- Green: runner now validates manifest coverage, provider protocol shape,
+  pass-without-capability, pass-vs-expected actual/evidence, pending
+  capability reasons, strict pending gates, malformed output, provider crash,
+  provider timeout, filtering, listing, unknown cases, empty selections, and
+  stderr/stdout separation.
+
+## Verification
+
+Layers tested: Unit, Contract, Integration
+Commands run:
+- `python3 -m py_compile scripts/run-conformance.py
+  Tests/Conformance/fixtures/provider.py` -> exit 0.
+- `python3 -m unittest Tests/Conformance/test_runner.py` -> exit 0, 22 tests.
+- `mise exec -- just conformance` -> exit 0.
+- `python3 scripts/run-conformance.py --manifest
+  Tests/Conformance/manifest.json --strict --provider python3
+  Tests/Conformance/fixtures/provider.py --mode scaffold; test $? -eq 1`
+  -> exit 0; strict mode correctly treats pending required cases as
+  non-conformant.
+- `mise exec -- just test-swift-scaffold` -> exit 0, 45 Swift tests in scaffold
+  mode.
+- `mise exec -- just test-c-abi-lifecycle` -> exit 0.
+- `mise exec -- just test-c-abi-host-registration` -> exit 0.
+- `mise exec -- just test-c-abi-policy-config` -> exit 0.
+- `mise exec -- just test` -> exit 0; conformance, Swift runtime-mode tests,
+  Java tests, C lifecycle/host-registration/policy-config contracts,
+  ASan/UBSan variants, and Swift/C examples passed.
+New tests added:
+- `Tests/Conformance/test_runner.py`
+Negative paths tested:
+- Missing capabilities, pending without reason, provider declares capability but
+  returns pending, pass without declared capability, pass without expected
+  actual/evidence, wrong actual value, malformed provider JSON, provider crash,
+  provider timeout, unknown case ID, empty selection, strict pending support
+  gate, provider stderr separation, and fixture all-pass absence.
+Generated artifacts:
+- `build/conformance/scaffold.json` shows harness `ok: true`,
+  `conformant: false`, `passed: 6`, `pending: 17`, `failed: 0`, `errors: 0`.
+  The file is build output and not committed.
+Not verified:
+- Real language conformance. Eval, host-call, script-error, timeout, and
+  script-permission cases remain pending capability evidence until real
+  eval/job/provider APIs and runtime adapters exist.
 
 *** DONE M2-007 ADR for async, cancellation, and teardown
 
