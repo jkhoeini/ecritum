@@ -92,6 +92,16 @@ test-c-abi-asan:
     clang -DECRITUM_TESTING -fsanitize=address,undefined -fno-omit-frame-pointer -I Sources/CEcritum/include -I build/native/macos-arm64/include/private scripts/ecritum_runtime_wrapper.c Tests/C/lifecycle_contract.c -o build/c-abi/lifecycle_contract_asan
     ASAN_OPTIONS=detect_leaks=0 build/c-abi/lifecycle_contract_asan
 
+test-c-abi-host-registration:
+    mkdir -p build/c-abi
+    clang -DECRITUM_TESTING -I Sources/CEcritum/include -I build/native/macos-arm64/include/private scripts/ecritum_runtime_wrapper.c Tests/C/host_registration_contract.c -o build/c-abi/host_registration_contract
+    build/c-abi/host_registration_contract
+
+test-c-abi-host-registration-asan:
+    mkdir -p build/c-abi
+    clang -DECRITUM_TESTING -fsanitize=address,undefined -fno-omit-frame-pointer -I Sources/CEcritum/include -I build/native/macos-arm64/include/private scripts/ecritum_runtime_wrapper.c Tests/C/host_registration_contract.c -o build/c-abi/host_registration_contract_asan
+    ASAN_OPTIONS=detect_leaks=0 build/c-abi/host_registration_contract_asan
+
 test-lifecycle-leak-smoke:
     test -d dist/local/EcritumRuntime.xcframework
     mkdir -p build/c-abi
@@ -100,7 +110,7 @@ test-lifecycle-leak-smoke:
         binary="dist/local/EcritumRuntime.xcframework/$slice/EcritumRuntime.framework/EcritumRuntime"; \
         leaks --atExit -- build/c-abi/framework_lifecycle_smoke "$binary"
 
-test: plan-check test-swift-auto test-java test-c-abi-lifecycle test-c-abi-asan test-examples-auto
+test: plan-check test-swift-auto test-java test-c-abi-lifecycle test-c-abi-asan test-c-abi-host-registration test-c-abi-host-registration-asan test-examples-auto
 
 example-swift:
     @test -d dist/local/EcritumRuntime.xcframework || { echo "missing dist/local/EcritumRuntime.xcframework; run mise exec -- just xcframework first" >&2; exit 1; }

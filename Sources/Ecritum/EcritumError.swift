@@ -70,6 +70,7 @@ public enum EcritumStatus: Int32, CaseIterable, Sendable {
     case callback = 18
     case teardownFailed = 19
     case internalFailure = 20
+    case alreadyExists = 21
 }
 
 /// Stable machine-readable category for an Ecritum error.
@@ -95,6 +96,7 @@ public enum EcritumErrorCategory: String, Sendable {
     case runtimeUnavailable = "runtime_unavailable"
     case teardownFailed = "teardown_failed"
     case internalFailure = "internal"
+    case alreadyExists = "already_exists"
     case unknown
 
     public init(status: EcritumStatus) {
@@ -141,6 +143,8 @@ public enum EcritumErrorCategory: String, Sendable {
             self = .teardownFailed
         case .internalFailure:
             self = .internalFailure
+        case .alreadyExists:
+            self = .alreadyExists
         }
     }
 }
@@ -231,6 +235,7 @@ public enum EcritumError: Error, Equatable, Sendable {
     case runtimeUnavailable(EcritumErrorDetails)
     case teardownFailed(EcritumErrorDetails)
     case internalFailure(EcritumErrorDetails)
+    case alreadyExists(EcritumErrorDetails)
     case unknownStatus(rawStatus: Int32, details: EcritumErrorDetails?)
 
     static func from(
@@ -290,6 +295,8 @@ public enum EcritumError: Error, Equatable, Sendable {
             return .teardownFailed(details)
         case .internalFailure:
             return .internalFailure(details)
+        case .alreadyExists:
+            return .alreadyExists(details)
         }
     }
 
@@ -337,6 +344,8 @@ public enum EcritumError: Error, Equatable, Sendable {
             return .teardownFailed
         case .internalFailure:
             return .internalFailure
+        case .alreadyExists:
+            return .alreadyExists
         case let .unknownStatus(_, details):
             return details?.status
         }
@@ -386,6 +395,8 @@ public enum EcritumError: Error, Equatable, Sendable {
             return .teardownFailed
         case .internalFailure:
             return .internalFailure
+        case .alreadyExists:
+            return .alreadyExists
         case let .unknownStatus(_, details):
             return details?.category ?? .unknown
         }
@@ -414,7 +425,8 @@ public enum EcritumError: Error, Equatable, Sendable {
              let .callback(details),
              let .runtimeUnavailable(details),
              let .teardownFailed(details),
-             let .internalFailure(details):
+             let .internalFailure(details),
+             let .alreadyExists(details):
             return details
         case let .unknownStatus(_, details):
             return details
@@ -465,6 +477,8 @@ public enum EcritumError: Error, Equatable, Sendable {
             return "Ecritum teardown failed"
         case .internalFailure:
             return "Ecritum operation failed"
+        case .alreadyExists:
+            return "Ecritum object already exists"
         }
     }
 }

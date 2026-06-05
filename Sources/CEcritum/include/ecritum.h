@@ -29,11 +29,16 @@ extern "C" {
 #define ECRITUM_ERROR_CALLBACK 18
 #define ECRITUM_ERROR_TEARDOWN_FAILED 19
 #define ECRITUM_ERROR_INTERNAL 20
+#define ECRITUM_ERROR_ALREADY_EXISTS 21
 
 #define ECRITUM_VERSION_BUFFER_SIZE 64
 
 typedef uint64_t ecritum_runtime_t;
 typedef uint64_t ecritum_context_t;
+typedef uint64_t ecritum_namespace_t;
+typedef uint64_t ecritum_function_t;
+typedef uint64_t ecritum_value_t;
+typedef uint64_t ecritum_call_t;
 typedef uint64_t ecritum_error_t;
 
 typedef struct {
@@ -45,6 +50,15 @@ typedef struct {
     const char *data;
     size_t len;
 } ecritum_string_view_t;
+
+typedef int (*ecritum_host_fn_t)(
+    ecritum_call_t call,
+    ecritum_value_t *out_result,
+    ecritum_error_t *out_error,
+    void *user_data
+);
+
+typedef void (*ecritum_user_data_destroy_fn_t)(void *user_data);
 
 /**
  * Writes the Ecritum runtime version into `buffer`.
@@ -94,6 +108,46 @@ int ecritum_context_create(ecritum_runtime_t runtime, ecritum_bytes_t config_jso
  * active operations.
  */
 int ecritum_context_destroy(ecritum_context_t *context, ecritum_error_t *out_error);
+
+/**
+ * Creates a namespace registration scope under a runtime.
+ *
+ * The name is borrowed for the duration of the call and copied on success.
+ * Names are ASCII, dot-separated, capped at 255 bytes, and may not use reserved
+ * runtime prefixes.
+ */
+int ecritum_namespace_create(ecritum_runtime_t runtime, ecritum_string_view_t name, ecritum_namespace_t *out_namespace, ecritum_error_t *out_error);
+
+/**
+ * Destroys a namespace registration scope and all registered functions in it.
+ *
+ * Registered user_data destructors run exactly once and never while Ecritum
+ * holds internal registry locks.
+ */
+int ecritum_namespace_destroy(ecritum_namespace_t *namespace_handle, ecritum_error_t *out_error);
+
+/**
+ * Registers a synchronous host function under a namespace.
+ *
+ * `user_data` ownership transfers to Ecritum only after successful
+ * registration. Failed registration never calls `destroy_user_data`.
+ */
+int ecritum_namespace_register_function(
+    ecritum_namespace_t namespace_handle,
+    ecritum_string_view_t name,
+    ecritum_host_fn_t callback,
+    void *user_data,
+    ecritum_user_data_destroy_fn_t destroy_user_data,
+    ecritum_function_t *out_function,
+    ecritum_error_t *out_error
+);
+
+/**
+ * Unregisters a host function and zeros the caller's handle.
+ *
+ * The registered user_data destructor runs exactly once when present.
+ */
+int ecritum_function_destroy(ecritum_function_t *function, ecritum_error_t *out_error);
 
 /** Destroys an owned error object and zeros the caller's handle. */
 int ecritum_error_destroy(ecritum_error_t *error);

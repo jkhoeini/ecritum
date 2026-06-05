@@ -1201,18 +1201,137 @@ Verification:
 `mise exec -- just test` -> exit 0; Swift tests, Java tests, C lifecycle, C ASan/UBSan, SwiftHost, and CHost passed.
 #+end_src
 
-*** TODO M2-004 Implement host function registration
+*** DONE M2-004 Implement host function registration
 
 Lead persona: Architecture Expert.
 Reviewer personas: Clean Code, Security, Tests, Swift DX.
 Depends on: M2-002, M2-003, M2-007.
-Write scope: Sources/, native/, Tests/.
+Write scope: Sources/, native/, Tests/, scripts/, docs/abi/, docs/adr/,
+justfile.
+
+Assignment:
+
+- Engineering manager: Codex.
+- Lead persona agent: Architecture Expert (Euclid).
+- Reviewer agents: Clean Code (Ohm), Security (Dirac), Tests/TDD (Linnaeus),
+  Swift DX (Jason).
+
+Accepted plan:
+
+- Scope this as M2-004A: host registration lifecycle only.
+- Do not claim scripts can call registered functions until eval/job dispatch,
+  call accessors, and value-handle conversion are implemented.
+- Add ADR-019 for namespace/function handle ownership, duplicate semantics,
+  cleanup, and the registration-only boundary before implementation.
+- Add `ECRITUM_ERROR_ALREADY_EXISTS = 21` for duplicate namespace/function
+  registration. Do not add `NOT_FOUND` because M2-004A has no unregister-by-name
+  API.
+- Add public C typedefs for `ecritum_namespace_t`, `ecritum_function_t`,
+  `ecritum_value_t`, `ecritum_call_t`, `ecritum_host_fn_t`, and
+  `ecritum_user_data_destroy_fn_t`.
+- Add public C APIs for namespace create/destroy, namespace function
+  registration, and function destroy.
+- Store namespace/function records in the existing generational registry and
+  under the owning runtime. Names are copied and validated before ownership
+  transfer.
+- User data transfers only after successful registration. Failed registration
+  never calls `destroy_user_data`; successful registration cleanup runs exactly
+  once through function destroy, namespace destroy, or runtime destroy.
+- Destructors and future callbacks must never run while registry/runtime/
+  context/job/function locks are held.
+- Swift adds `EcritumNamespace`, `EcritumNamespace.Name`,
+  `EcritumFunctionName`, `EcritumHostFunction`, and an `EcritumCall` shell with
+  no public raw-handle exposure.
+- Swift callbacks run directly on the future Ecritum worker thread by default;
+  no implicit `MainActor` hop.
+- Callback success/error is tested through Swift fake adapters and
+  `ECRITUM_TESTING` C hooks only.
+
+Plan review:
+
+- Claude ADR-019 review: PASS; non-blocking name-length cap added.
+- Architecture persona: PASS.
+- Clean Code persona: PASS.
+- Security persona: PASS.
+- Tests/TDD persona: PASS.
+- Swift DX persona: PASS.
+
+Implementation notes:
+
+- Added ADR-019 as the accepted host-registration lifecycle decision record.
+- Added public C ABI typedefs and entrypoints for namespaces, functions,
+  callback typedefs, reserved value/call handles, and duplicate status
+  `ECRITUM_ERROR_ALREADY_EXISTS = 21`.
+- Implemented namespace/function records in the existing generational C registry
+  with copied validated names, per-runtime isolation, stale/wrong-kind handle
+  rejection, and destructor cleanup outside the registry lock.
+- Runtime destroy now refuses live contexts as before, then tombstones and
+  cleans owned namespaces/functions before Native Image isolate teardown.
+- Added Swift registration wrappers: `EcritumRuntime.namespace`,
+  `EcritumNamespace`, `EcritumNamespace.Name`, `EcritumFunctionName`,
+  `EcritumHostFunction`, and an internal-handle `EcritumCall` shell.
+- Added C and Swift contract tests for name validation, duplicates, failed
+  registration ownership, namespace/function/runtime cleanup, stale handles,
+  runtime isolation, callback success, and callback failure.
+- Updated Java/Swift/C status tables, ABI manifest, C++ header smoke, just
+  tasks, and XCFramework `dlopen` smoke coverage for the new public symbols.
+- Fixed post-review issues: Swift namespace close after runtime cascade is a
+  no-op, duplicate namespace is covered in C, Swift fake runtime ownership is
+  runtime-scoped, `function_destroy` uses a single cleanup slot, and the real
+  Swift C-adapter failed-registration path now has weak-reference release
+  coverage.
+- Added the security reviewer follow-up regression instead of ledgering debt:
+  runtime destroy with a live context leaves registered functions alive and only
+  runs destructors after the context is closed and runtime destroy succeeds.
+
+Red evidence:
+
+- `mise exec -- just test-c-abi-host-registration` -> exit 1 before
+  implementation; missing namespace/function/call/value typedefs, registration
+  APIs, and `ECRITUM_ERROR_ALREADY_EXISTS`.
+- `mise exec -- just test-swift-scaffold` -> exit 1 before implementation;
+  missing Swift registration wrappers and status/error mapping.
+
+Review:
+
+- Claude first diff review: PASS with four non-blocking findings. Fixed the
+  single-function cleanup array, duplicate namespace coverage, fake runtime
+  ownership, and namespace close-after-runtime-close behavior.
+- Claude second diff review: PASS; all prior findings verified fixed. Non-
+  blocking note: namespace/runtime cascade cleanup uses 64 KB stack arrays while
+  registry size is 4096; accepted for M2-004A.
+- Architecture persona: PASS.
+- Clean Code persona: PASS; Claude timed out inside the persona review, so the
+  engineering-manager Claude review is the counted Claude evidence.
+- Security persona: PASS.
+- Swift DX persona: PASS.
+- Tests/TDD persona: first review FAIL for vacuous Swift failed-registration
+  cleanup coverage; fixed with the real adapter weak-probe regression. Second
+  review PASS.
+
+Final verification:
+
+#+begin_src text
+`mise exec -- just test-c-abi-host-registration` -> exit 0.
+`mise exec -- just test-swift-scaffold` -> exit 0; 38 Swift tests, 5 expected artifact skips.
+`mise exec -- just test-c-abi-host-registration-asan` -> exit 0; ASan/UBSan, macOS leak detection disabled in ASan.
+`mise exec -- just test-c-abi-lifecycle` -> exit 0.
+`mise exec -- just test-java` -> exit 0; 4 Java tests.
+`mise exec -- just native` -> exit 0; Native Image dylib rebuilt, 12.93 MB.
+`mise exec -- just xcframework` -> exit 0; rebuilt `dist/local/EcritumRuntime.xcframework` and passed XCFramework smoke.
+`mise exec -- just check-abi` -> exit 0.
+`mise exec -- just check-xcframework` -> exit 0.
+`clang -DECRITUM_TESTING -Wall -Wextra -Werror ... host_registration_contract.c` -> exit 0.
+`mise exec -- just test-swift` -> exit 0; 38 Swift tests, 0 skips against artifact.
+`mise exec -- just test` -> exit 0; Swift runtime tests, Java tests, C lifecycle, C ASan/UBSan, host-registration C tests, host-registration ASan/UBSan, SwiftHost, and CHost passed.
+#+end_src
 
 Definition of done:
 
 - Function names are validated.
 - user_data ownership and cleanup are explicit.
-- Swift callbacks hop to the correct executor when needed.
+- Swift does not add an implicit executor hop in M2-004A; explicit executor
+  bridging remains owned by the future invocation/job task.
 - Tests cover callback success, callback error, and callback lifetime.
 
 *** TODO M2-005 Implement policy/config parsing core
@@ -1670,6 +1789,8 @@ Output of: M2.5-002 and M7-003.
 Output of: M2-001A.
 ** TODO ADR-017 Artifact reproducibility, signing, and checksum policy
 Output of: M1-004, M1-005, and M7-001.
+** DONE ADR-019 Host function registration lifecycle
+Output of: M2-004.
 ** DONE ADR-018 Performance and artifact budget policy
 Output of: M1-007.
 

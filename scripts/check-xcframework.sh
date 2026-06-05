@@ -70,15 +70,37 @@ cat > "$smoke_dir/smoke.c" <<'C'
 typedef int (*ecritum_version_fn)(char *, size_t);
 typedef uint64_t ecritum_runtime_t;
 typedef uint64_t ecritum_context_t;
+typedef uint64_t ecritum_namespace_t;
+typedef uint64_t ecritum_function_t;
+typedef uint64_t ecritum_value_t;
+typedef uint64_t ecritum_call_t;
 typedef uint64_t ecritum_error_t;
 typedef struct {
     const uint8_t *data;
     size_t len;
 } ecritum_bytes_t;
+typedef struct {
+    const char *data;
+    size_t len;
+} ecritum_string_view_t;
+typedef int (*ecritum_host_fn_t)(ecritum_call_t, ecritum_value_t *, ecritum_error_t *, void *);
+typedef void (*ecritum_user_data_destroy_fn_t)(void *);
 typedef int (*ecritum_runtime_create_fn)(ecritum_bytes_t, ecritum_runtime_t *, ecritum_error_t *);
 typedef int (*ecritum_runtime_destroy_fn)(ecritum_runtime_t *, ecritum_error_t *);
 typedef int (*ecritum_context_create_fn)(ecritum_runtime_t, ecritum_bytes_t, ecritum_context_t *, ecritum_error_t *);
 typedef int (*ecritum_context_destroy_fn)(ecritum_context_t *, ecritum_error_t *);
+typedef int (*ecritum_namespace_create_fn)(ecritum_runtime_t, ecritum_string_view_t, ecritum_namespace_t *, ecritum_error_t *);
+typedef int (*ecritum_namespace_destroy_fn)(ecritum_namespace_t *, ecritum_error_t *);
+typedef int (*ecritum_namespace_register_function_fn)(
+    ecritum_namespace_t,
+    ecritum_string_view_t,
+    ecritum_host_fn_t,
+    void *,
+    ecritum_user_data_destroy_fn_t,
+    ecritum_function_t *,
+    ecritum_error_t *
+);
+typedef int (*ecritum_function_destroy_fn)(ecritum_function_t *, ecritum_error_t *);
 typedef int (*ecritum_error_destroy_fn)(ecritum_error_t *);
 typedef int (*ecritum_error_status_fn)(ecritum_error_t, int *);
 
@@ -88,6 +110,25 @@ enum {
     ECRITUM_ERROR_BUFFER_TOO_SMALL = 2,
     ECRITUM_ERROR_CONTEXTS_ALIVE = 10,
 };
+
+static int smoke_callback(ecritum_call_t call, ecritum_value_t *out_result, ecritum_error_t *out_error, void *user_data) {
+    (void)call;
+    (void)user_data;
+    if (out_result != NULL) {
+        *out_result = 0;
+    }
+    if (out_error != NULL) {
+        *out_error = 0;
+    }
+    return ECRITUM_OK;
+}
+
+static void smoke_destroy(void *user_data) {
+    int *destroy_count = (int *)user_data;
+    if (destroy_count != NULL) {
+        (*destroy_count)++;
+    }
+}
 
 int main(int argc, char **argv) {
     if (argc != 2) {
@@ -109,10 +150,16 @@ int main(int argc, char **argv) {
     ecritum_runtime_destroy_fn runtime_destroy = (ecritum_runtime_destroy_fn)dlsym(handle, "ecritum_runtime_destroy");
     ecritum_context_create_fn context_create = (ecritum_context_create_fn)dlsym(handle, "ecritum_context_create");
     ecritum_context_destroy_fn context_destroy = (ecritum_context_destroy_fn)dlsym(handle, "ecritum_context_destroy");
+    ecritum_namespace_create_fn namespace_create = (ecritum_namespace_create_fn)dlsym(handle, "ecritum_namespace_create");
+    ecritum_namespace_destroy_fn namespace_destroy = (ecritum_namespace_destroy_fn)dlsym(handle, "ecritum_namespace_destroy");
+    ecritum_namespace_register_function_fn namespace_register_function = (ecritum_namespace_register_function_fn)dlsym(handle, "ecritum_namespace_register_function");
+    ecritum_function_destroy_fn function_destroy = (ecritum_function_destroy_fn)dlsym(handle, "ecritum_function_destroy");
     ecritum_error_destroy_fn error_destroy = (ecritum_error_destroy_fn)dlsym(handle, "ecritum_error_destroy");
     ecritum_error_status_fn error_status = (ecritum_error_status_fn)dlsym(handle, "ecritum_error_status");
     if (runtime_create == NULL || runtime_destroy == NULL || context_create == NULL ||
-        context_destroy == NULL || error_destroy == NULL || error_status == NULL) {
+        context_destroy == NULL || namespace_create == NULL || namespace_destroy == NULL ||
+        namespace_register_function == NULL || function_destroy == NULL ||
+        error_destroy == NULL || error_status == NULL) {
         fprintf(stderr, "%s\n", dlerror());
         return 10;
     }
@@ -160,6 +207,27 @@ int main(int argc, char **argv) {
     }
     if (context_destroy(&context, &error) != ECRITUM_OK || context != 0 || error != 0) {
         return 16;
+    }
+    ecritum_string_view_t namespace_name = {"app", 3};
+    ecritum_string_view_t first_function_name = {"notify", 6};
+    ecritum_string_view_t second_function_name = {"replaceSelection", 16};
+    ecritum_namespace_t namespace_handle = 0;
+    ecritum_function_t function = 0;
+    int destroy_count = 0;
+    if (namespace_create(runtime, namespace_name, &namespace_handle, &error) != ECRITUM_OK || namespace_handle == 0 || error != 0) {
+        return 18;
+    }
+    if (namespace_register_function(namespace_handle, first_function_name, smoke_callback, &destroy_count, smoke_destroy, &function, &error) != ECRITUM_OK || function == 0 || error != 0) {
+        return 19;
+    }
+    if (function_destroy(&function, &error) != ECRITUM_OK || function != 0 || error != 0 || destroy_count != 1) {
+        return 20;
+    }
+    if (namespace_register_function(namespace_handle, second_function_name, smoke_callback, &destroy_count, smoke_destroy, &function, &error) != ECRITUM_OK || function == 0 || error != 0) {
+        return 21;
+    }
+    if (namespace_destroy(&namespace_handle, &error) != ECRITUM_OK || namespace_handle != 0 || error != 0 || destroy_count != 2) {
+        return 22;
     }
     if (runtime_destroy(&runtime, &error) != ECRITUM_OK || runtime != 0 || error != 0) {
         return 17;

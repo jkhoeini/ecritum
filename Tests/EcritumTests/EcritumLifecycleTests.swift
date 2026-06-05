@@ -207,6 +207,22 @@ private final class FakeLifecycleABI: EcritumLifecycleABI {
         }
         handle = 0
     }
+
+    func namespaceCreate(runtime: ecritum_runtime_t, name: EcritumNamespace.Name) throws -> ecritum_namespace_t {
+        throw EcritumError.runtimeArtifactMissing
+    }
+
+    func namespaceDestroy(_ handle: inout ecritum_namespace_t) throws {
+        handle = 0
+    }
+
+    func registerFunction(namespace: ecritum_namespace_t, name: EcritumFunctionName, callback: @escaping EcritumHostFunction) throws -> ecritum_function_t {
+        throw EcritumError.runtimeArtifactMissing
+    }
+
+    func functionDestroy(_ handle: inout ecritum_function_t) throws {
+        handle = 0
+    }
 }
 
 private extension EcritumErrorDetails {

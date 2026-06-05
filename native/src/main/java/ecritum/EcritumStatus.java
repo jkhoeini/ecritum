@@ -22,6 +22,7 @@ public final class EcritumStatus {
     public static final int CALLBACK = 18;
     public static final int TEARDOWN_FAILED = 19;
     public static final int INTERNAL = 20;
+    public static final int ALREADY_EXISTS = 21;
 
     private EcritumStatus() {
     }

@@ -26,6 +26,7 @@ final class EcritumErrorTests: XCTestCase {
             (Int32(ECRITUM_ERROR_CALLBACK), .callback),
             (Int32(ECRITUM_ERROR_TEARDOWN_FAILED), .teardownFailed),
             (Int32(ECRITUM_ERROR_INTERNAL), .internalFailure),
+            (Int32(ECRITUM_ERROR_ALREADY_EXISTS), .alreadyExists),
         ]
 
         XCTAssertEqual(EcritumStatus.allCases.count, expected.count)
@@ -86,6 +87,7 @@ final class EcritumErrorTests: XCTestCase {
             (.runtimeUnavailable, .runtimeUnavailable(.fixture(.runtimeUnavailable))),
             (.teardownFailed, .teardownFailed(.fixture(.teardownFailed))),
             (.internalFailure, .internalFailure(.fixture(.internalFailure))),
+            (.alreadyExists, .alreadyExists(.fixture(.alreadyExists))),
         ]
 
         for (status, expected) in cases {

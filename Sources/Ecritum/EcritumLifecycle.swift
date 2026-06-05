@@ -6,6 +6,10 @@ protocol EcritumLifecycleABI: AnyObject {
     func runtimeDestroy(_ handle: inout ecritum_runtime_t) throws
     func contextCreate(runtime: ecritum_runtime_t, configuration: EcritumContext.Configuration) throws -> ecritum_context_t
     func contextDestroy(_ handle: inout ecritum_context_t) throws
+    func namespaceCreate(runtime: ecritum_runtime_t, name: EcritumNamespace.Name) throws -> ecritum_namespace_t
+    func namespaceDestroy(_ handle: inout ecritum_namespace_t) throws
+    func registerFunction(namespace: ecritum_namespace_t, name: EcritumFunctionName, callback: @escaping EcritumHostFunction) throws -> ecritum_function_t
+    func functionDestroy(_ handle: inout ecritum_function_t) throws
 }
 
 /// Owns a packaged Ecritum runtime instance.
@@ -32,6 +36,10 @@ public final class EcritumRuntime {
         try? close()
     }
 
+    var isOpen: Bool {
+        handle != 0
+    }
+
     public func context(_ configuration: EcritumContext.Configuration = .default) throws -> EcritumContext {
         guard handle != 0 else {
             throw EcritumError.closed(.lifecycle(.closed, operation: "context_create"))
@@ -39,6 +47,15 @@ public final class EcritumRuntime {
 
         let contextHandle = try adapter.contextCreate(runtime: handle, configuration: configuration)
         return EcritumContext(parent: self, handle: contextHandle, adapter: adapter)
+    }
+
+    public func namespace(_ name: EcritumNamespace.Name) throws -> EcritumNamespace {
+        guard handle != 0 else {
+            throw EcritumError.closed(.lifecycle(.closed, operation: "namespace_create"))
+        }
+
+        let namespaceHandle = try adapter.namespaceCreate(runtime: handle, name: name)
+        return EcritumNamespace(parent: self, handle: namespaceHandle, adapter: adapter)
     }
 
     public func close() throws {
@@ -138,9 +155,84 @@ private final class EcritumCLifecycleABI: EcritumLifecycleABI {
         #endif
     }
 
+    func namespaceCreate(runtime: ecritum_runtime_t, name: EcritumNamespace.Name) throws -> ecritum_namespace_t {
+        #if ECRITUM_HAS_RUNTIME_ARTIFACT
+        var namespace: ecritum_namespace_t = 0
+        var error: ecritum_error_t = 0
+        var rawName = name.rawValue
+        let status = rawName.withUTF8 { buffer in
+            ecritum_namespace_create(runtime, stringView(buffer), &namespace, &error)
+        }
+        guard status == ECRITUM_OK else {
+            throw copyError(status: status, error: error)
+        }
+        return namespace
+        #else
+        throw EcritumError.runtimeArtifactMissing
+        #endif
+    }
+
+    func namespaceDestroy(_ handle: inout ecritum_namespace_t) throws {
+        #if ECRITUM_HAS_RUNTIME_ARTIFACT
+        var error: ecritum_error_t = 0
+        let status = ecritum_namespace_destroy(&handle, &error)
+        guard status == ECRITUM_OK else {
+            throw copyError(status: status, error: error)
+        }
+        #else
+        handle = 0
+        #endif
+    }
+
+    func registerFunction(namespace: ecritum_namespace_t, name: EcritumFunctionName, callback: @escaping EcritumHostFunction) throws -> ecritum_function_t {
+        #if ECRITUM_HAS_RUNTIME_ARTIFACT
+        var function: ecritum_function_t = 0
+        var error: ecritum_error_t = 0
+        let box = Unmanaged.passRetained(EcritumHostFunctionBox(callback))
+        var rawName = name.rawValue
+        let status = rawName.withUTF8 { buffer in
+            ecritum_namespace_register_function(
+                namespace,
+                stringView(buffer),
+                EcritumCLifecycleABI.hostFunctionCallback,
+                box.toOpaque(),
+                EcritumCLifecycleABI.destroyHostFunctionBox,
+                &function,
+                &error
+            )
+        }
+        guard status == ECRITUM_OK else {
+            box.release()
+            throw copyError(status: status, error: error)
+        }
+        return function
+        #else
+        throw EcritumError.runtimeArtifactMissing
+        #endif
+    }
+
+    func functionDestroy(_ handle: inout ecritum_function_t) throws {
+        #if ECRITUM_HAS_RUNTIME_ARTIFACT
+        var error: ecritum_error_t = 0
+        let status = ecritum_function_destroy(&handle, &error)
+        guard status == ECRITUM_OK else {
+            throw copyError(status: status, error: error)
+        }
+        #else
+        handle = 0
+        #endif
+    }
+
     #if ECRITUM_HAS_RUNTIME_ARTIFACT
     private func emptyBytes() -> ecritum_bytes_t {
         ecritum_bytes_t(data: nil, len: 0)
+    }
+
+    private func stringView(_ buffer: UnsafeBufferPointer<UInt8>) -> ecritum_string_view_t {
+        ecritum_string_view_t(
+            data: buffer.baseAddress.map { UnsafeRawPointer($0).assumingMemoryBound(to: CChar.self) },
+            len: buffer.count
+        )
     }
 
     private func copyError(status: Int32, error: ecritum_error_t) -> EcritumError {
@@ -185,6 +277,43 @@ private final class EcritumCLifecycleABI: EcritumLifecycleABI {
         return String(decoding: buffer, as: UTF8.self)
     }
     #endif
+}
+
+private final class EcritumHostFunctionBox {
+    let callback: EcritumHostFunction
+
+    init(_ callback: @escaping EcritumHostFunction) {
+        self.callback = callback
+    }
+}
+
+private extension EcritumCLifecycleABI {
+    static let hostFunctionCallback: ecritum_host_fn_t = { call, outResult, outError, userData in
+        if outResult != nil {
+            outResult?.pointee = 0
+        }
+        if outError != nil {
+            outError?.pointee = 0
+        }
+        guard let userData else {
+            return ECRITUM_ERROR_CALLBACK
+        }
+
+        let box = Unmanaged<EcritumHostFunctionBox>.fromOpaque(userData).takeUnretainedValue()
+        do {
+            _ = try box.callback(EcritumCall(handle: call))
+            return ECRITUM_OK
+        } catch {
+            return ECRITUM_ERROR_CALLBACK
+        }
+    }
+
+    static let destroyHostFunctionBox: ecritum_user_data_destroy_fn_t = { userData in
+        guard let userData else {
+            return
+        }
+        Unmanaged<EcritumHostFunctionBox>.fromOpaque(userData).release()
+    }
 }
 
 private extension EcritumErrorDetails {

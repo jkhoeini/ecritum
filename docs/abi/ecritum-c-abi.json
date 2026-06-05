@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "name": "Ecritum C ABI M2 value, error, and lifecycle baseline",
+  "name": "Ecritum C ABI M2 value, error, lifecycle, and host registration baseline",
   "publicHeader": "Sources/CEcritum/include/ecritum.h",
   "javaStatus": "native/src/main/java/ecritum/EcritumStatus.java",
   "statusConstants": [
@@ -108,6 +108,11 @@
       "c": "ECRITUM_ERROR_INTERNAL",
       "java": "INTERNAL",
       "value": 20
+    },
+    {
+      "c": "ECRITUM_ERROR_ALREADY_EXISTS",
+      "java": "ALREADY_EXISTS",
+      "value": 21
     }
   ],
   "functions": [
@@ -135,6 +140,26 @@
       "name": "ecritum_context_destroy",
       "machoSymbol": "_ecritum_context_destroy",
       "declaration": "int ecritum_context_destroy(ecritum_context_t *context, ecritum_error_t *out_error);"
+    },
+    {
+      "name": "ecritum_namespace_create",
+      "machoSymbol": "_ecritum_namespace_create",
+      "declaration": "int ecritum_namespace_create(ecritum_runtime_t runtime, ecritum_string_view_t name, ecritum_namespace_t *out_namespace, ecritum_error_t *out_error);"
+    },
+    {
+      "name": "ecritum_namespace_destroy",
+      "machoSymbol": "_ecritum_namespace_destroy",
+      "declaration": "int ecritum_namespace_destroy(ecritum_namespace_t *namespace_handle, ecritum_error_t *out_error);"
+    },
+    {
+      "name": "ecritum_namespace_register_function",
+      "machoSymbol": "_ecritum_namespace_register_function",
+      "declaration": "int ecritum_namespace_register_function( ecritum_namespace_t namespace_handle, ecritum_string_view_t name, ecritum_host_fn_t callback, void *user_data, ecritum_user_data_destroy_fn_t destroy_user_data, ecritum_function_t *out_function, ecritum_error_t *out_error );"
+    },
+    {
+      "name": "ecritum_function_destroy",
+      "machoSymbol": "_ecritum_function_destroy",
+      "declaration": "int ecritum_function_destroy(ecritum_function_t *function, ecritum_error_t *out_error);"
     },
     {
       "name": "ecritum_error_destroy",

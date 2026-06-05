@@ -49,5 +49,6 @@ final class NativeEntrypointsTest {
         assertEquals(18, EcritumStatus.CALLBACK);
         assertEquals(19, EcritumStatus.TEARDOWN_FAILED);
         assertEquals(20, EcritumStatus.INTERNAL);
+        assertEquals(21, EcritumStatus.ALREADY_EXISTS);
     }
 }
