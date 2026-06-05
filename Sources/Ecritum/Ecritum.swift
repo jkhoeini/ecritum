@@ -20,7 +20,16 @@ public enum Ecritum {
 
             let status = ecritum_version(buffer, Int(ECRITUM_VERSION_BUFFER_SIZE))
             guard status == ECRITUM_OK else {
-                throw EcritumError.runtimeCallFailed(status: Int32(status))
+                let rawStatus = Int32(status)
+                throw EcritumError.from(
+                    status: rawStatus,
+                    details: EcritumErrorDetails(
+                        status: nil,
+                        category: .unknown,
+                        message: "Ecritum version lookup failed",
+                        operation: "version"
+                    )
+                )
             }
 
             return String(cString: buffer)
@@ -30,4 +39,3 @@ public enum Ecritum {
         }
     }
 }
-

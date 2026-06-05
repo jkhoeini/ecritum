@@ -981,18 +981,107 @@ Not verified:
 - README/SwiftHost examples do not compile yet because the M2 Swift API is not implemented; owned by M2 implementation tasks.
 #+end_src
 
-*** TODO M2-002 Implement value and error model
+*** DONE M2-002 Implement value and error model
 
 Lead persona: Clean Code.
 Reviewer personas: Architecture, Tests, Swift DX.
 Depends on: M2-001.
 Write scope: Sources/, native/, Tests/.
 
+Assignment:
+
+- Engineering manager: Codex.
+- Lead persona agent: Clean Code (Turing).
+- Reviewer agents: Architecture (Huygens), Tests/TDD (Pasteur), Swift DX
+  (Planck).
+- Claude plan consult: PASS after tool-less retry; read-only consult with file
+  tools stalled and was terminated by PID.
+
+Implementation plan:
+
+- Keep `EcritumValue`, status mapping, stack frames, error details, and typed
+  errors as pure Swift values.
+- Keep C/Java/manifest status constants synchronized while preserving M1 numeric
+  values (`OK=0`, `INVALID_ARGUMENT=1`, `BUFFER_TOO_SMALL=2`,
+  `RUNTIME_UNAVAILABLE=3`) and appending M2 statuses.
+- Do not add public `ecritum_value_*` or `ecritum_error_*` functions until their
+  owning implementation task defines exact symbols and tests them.
+- Verification plan: red `test-swift-scaffold` and `test-java`, then green
+  `test-swift-scaffold`, `test-java`, `check-abi`, and `test`, followed by
+  Claude diff review and second review after fixes.
+
+Plan feedback:
+
+- Architecture: preserve existing M1 status numbers; avoid unimplemented public
+  ABI functions.
+- Clean Code: keep model pure and isolate status mapping in a small adapter.
+- Tests/TDD: cover all value cases, status parity, unknown status, structured
+  diagnostics, and redaction.
+- Swift DX: expose explicit `EcritumValue`; structured typed `EcritumError`;
+  keep raw handles private.
+
 Definition of done:
 
 - Null, bool, int, double, string, data, array, and object conversions are tested.
 - Error code/message/source/stack data is represented without language leaks.
 - Side effects are isolated to FFI adapters.
+
+Completion notes:
+
+- Implemented `EcritumValue` as a pure Swift enum plus typed optional accessors
+  for all M2 value kinds.
+- Implemented structured Swift status, category, stack frame, error details, and
+  typed `EcritumError` model. Raw C `Int32` status conversion is internal to the
+  module.
+- Expanded C, Java, Swift, and ABI-manifest status constants to the M2 list while
+  preserving M1 numeric values.
+- Did not add unimplemented public `ecritum_value_*` or `ecritum_error_*`
+  symbols.
+- No new accepted debt.
+
+Review records:
+
+- Claude plan consult: PASS after tool-less retry; read-only file-tool consult
+  stalled and was terminated by PID.
+- Claude diff review: PASS with non-blocking cleanup findings; fixed redundant
+  adapter work, double redaction, non-message leak coverage, and minor test gaps.
+- Claude second review: PASS.
+- Final Claude focused review after persona fixes: PASS.
+- Persona signoff: Architecture PASS; Tests/TDD PASS; Swift DX found public raw
+  status adapter blocker, fixed and PASS; Clean Code found externally mutable
+  sanitized fields and missing conversion seam blockers, fixed and PASS.
+
+#+begin_src markdown
+## Verification
+
+Layers tested: Unit, Contract, Integration
+Commands run:
+- `mise exec -- just test-swift-scaffold` -> exit 1 before implementation; missing M2 value/status/error APIs and C status constants.
+- `mise exec -- just test-java` -> exit 1 before implementation; missing M2 Java status constants.
+- `mise exec -- just test-swift-scaffold` -> exit 1 during review fix; unsafe diagnostic fields leaked outside `message`.
+- `mise exec -- just test-swift-scaffold` -> exit 0, 17 Swift tests passed, 2 scaffold runtime tests skipped.
+- `mise exec -- just test-java` -> exit 0, 4 Java tests passed.
+- `mise exec -- just check-abi` -> exit 0.
+- `mise exec -- just test` -> exit 0, 17 Swift tests passed, 4 Java tests passed, SwiftHost and CHost examples passed.
+New tests added:
+- `Tests/EcritumTests/EcritumValueTests.swift`
+- `Tests/EcritumTests/EcritumErrorTests.swift`
+- `native/src/test/java/ecritum/NativeEntrypointsTest.java::statusConstantsCoverM2ValueAndErrorModel`
+Negative paths tested:
+- Wrong-kind value conversions return `nil`.
+- `int(1)` and `double(1)` remain distinct.
+- Unknown raw status preserves the raw code.
+- OK status maps to unknown because it is not an error.
+- Runtime artifact missing keeps structured accessors.
+- Unsafe diagnostic message/source/stack fields are redacted.
+- Whitespace-only diagnostic messages use the fallback.
+Size impact:
+- N/A; no runtime artifact dependency or native image payload changed.
+Sanitizers:
+- not run: pure Swift value/error model and status-table update; lifecycle/threading memory checks are owned by M2-003/M2-006.
+Not verified:
+- C value/error handle conversion functions are not implemented yet; intentionally deferred until their owning ABI task defines and tests public symbols.
+#+end_src
 
 *** TODO M2-003 Implement runtime/context lifecycle
 

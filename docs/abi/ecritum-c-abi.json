@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "name": "Ecritum C ABI M1 baseline",
+  "name": "Ecritum C ABI M2 value and error baseline",
   "publicHeader": "Sources/CEcritum/include/ecritum.h",
   "javaStatus": "native/src/main/java/ecritum/EcritumStatus.java",
   "statusConstants": [
@@ -23,6 +23,91 @@
       "c": "ECRITUM_ERROR_RUNTIME_UNAVAILABLE",
       "java": "RUNTIME_UNAVAILABLE",
       "value": 3
+    },
+    {
+      "c": "ECRITUM_ERROR_INVALID_HANDLE",
+      "java": "INVALID_HANDLE",
+      "value": 4
+    },
+    {
+      "c": "ECRITUM_ERROR_OUT_OF_MEMORY",
+      "java": "OUT_OF_MEMORY",
+      "value": 5
+    },
+    {
+      "c": "ECRITUM_ERROR_INVALID_UTF8",
+      "java": "INVALID_UTF8",
+      "value": 6
+    },
+    {
+      "c": "ECRITUM_ERROR_INPUT_TOO_LARGE",
+      "java": "INPUT_TOO_LARGE",
+      "value": 7
+    },
+    {
+      "c": "ECRITUM_ERROR_INVALID_CONFIG",
+      "java": "INVALID_CONFIG",
+      "value": 8
+    },
+    {
+      "c": "ECRITUM_ERROR_UNSUPPORTED_CONFIG_VERSION",
+      "java": "UNSUPPORTED_CONFIG_VERSION",
+      "value": 9
+    },
+    {
+      "c": "ECRITUM_ERROR_CONTEXTS_ALIVE",
+      "java": "CONTEXTS_ALIVE",
+      "value": 10
+    },
+    {
+      "c": "ECRITUM_ERROR_CLOSED",
+      "java": "CLOSED",
+      "value": 11
+    },
+    {
+      "c": "ECRITUM_ERROR_BUSY",
+      "java": "BUSY",
+      "value": 12
+    },
+    {
+      "c": "ECRITUM_ERROR_REENTRANT_CALL",
+      "java": "REENTRANT_CALL",
+      "value": 13
+    },
+    {
+      "c": "ECRITUM_ERROR_PERMISSION_DENIED",
+      "java": "PERMISSION_DENIED",
+      "value": 14
+    },
+    {
+      "c": "ECRITUM_ERROR_TIMEOUT",
+      "java": "TIMEOUT",
+      "value": 15
+    },
+    {
+      "c": "ECRITUM_ERROR_CANCELLED",
+      "java": "CANCELLED",
+      "value": 16
+    },
+    {
+      "c": "ECRITUM_ERROR_SCRIPT",
+      "java": "SCRIPT",
+      "value": 17
+    },
+    {
+      "c": "ECRITUM_ERROR_CALLBACK",
+      "java": "CALLBACK",
+      "value": 18
+    },
+    {
+      "c": "ECRITUM_ERROR_TEARDOWN_FAILED",
+      "java": "TEARDOWN_FAILED",
+      "value": 19
+    },
+    {
+      "c": "ECRITUM_ERROR_INTERNAL",
+      "java": "INTERNAL",
+      "value": 20
     }
   ],
   "functions": [
