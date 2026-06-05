@@ -721,11 +721,11 @@ Size impact:
 - Current artifact 12,967,170 bytes. Release zip SHA256 `209367dcb81f57a2fe2cba2c48bf412eaa84cdf7c3d139ec37780763345cabd5`.
 #+end_src
 
-*** TODO M1-006 Add minimal Swift and C host examples
+*** DONE M1-006 Add minimal Swift and C host examples
 
 Lead persona: Swift DX.
 Reviewer personas: Tests, Release, Unix.
-Depends on: M1-002, M1-003.
+Depends on: M1-002, M1-003, M1-004.
 Write scope: Examples/, Tests/, justfile.
 
 Definition of done:
@@ -733,6 +733,50 @@ Definition of done:
 - SwiftHost proves the SwiftPM wrapper can call the native symbol.
 - CHost proves the stable C ABI can be consumed directly.
 - Examples are runnable through noninteractive `just` tasks.
+
+Notes:
+
+- Added =Examples/SwiftHost= as an external SwiftPM package that depends on the
+  root =Ecritum= product by path and prints =SwiftHost version=0.1.0-dev=.
+- Added =Examples/CHost/main.c=, which includes the packaged framework
+  =Headers/ecritum.h=, links =EcritumRuntime.framework= directly outside
+  SwiftPM, calls =ecritum_version=, checks an undersized-buffer error path, and
+  prints =CHost version=0.1.0-dev=.
+- Added noninteractive =just example-swift=, =just example-c=, =just examples=,
+  and artifact-aware =test-examples-auto= in =just test=.
+- Claude plan review found CHost slice/header/rpath concerns; implementation
+  uses the actual packaged =ecritum.h=, =uname -m= slice resolution, and
+  =@loader_path= relative rpath. Claude post-review found a C buffer overwrite
+  issue in the negative path; fixed with a separate =small_buffer= and focused
+  Claude re-review passed.
+- Final persona signoff: Swift DX PASS, Tests PASS, Release PASS, Unix PASS.
+
+#+begin_src markdown
+## Verification
+
+Layers tested: Integration, Packaging, Release
+Commands run:
+- `mise exec -- just xcframework` -> exit 0; rebuilt local `dist/local/EcritumRuntime.xcframework` and `check-xcframework` passed.
+- `mise exec -- just example-swift` -> exit 0; stdout exactly `SwiftHost version=0.1.0-dev`.
+- `mise exec -- just example-c` -> exit 0; stdout exactly `CHost version=0.1.0-dev`.
+- `mise exec -- just examples` -> exit 0; both example outputs printed.
+- `rm -rf Examples/SwiftHost/.build && mise exec -- just examples` -> exit 0; clean SwiftHost rebuild passed.
+- `mise exec -- just test` with artifact present -> exit 0; Swift runtime tests, Java tests, SwiftHost, and CHost passed.
+- `mise exec -- just check-xcframework` -> exit 0.
+- `otool -L build/examples/chost/CHost` -> links `@rpath/EcritumRuntime.framework/EcritumRuntime` and `/usr/lib/libSystem.B.dylib`.
+- `otool -l build/examples/chost/CHost` -> `LC_RPATH` is `@loader_path/../../../dist/local/EcritumRuntime.xcframework/macos-arm64`; no GraalVM, JDK, `native/target`, `build/native`, or workspace-root runtime paths found.
+- `mise exec -- just release-check` -> expected exit 1 at strict license gate; both `SwiftHost version=0.1.0-dev` and `CHost version=0.1.0-dev` appeared before the documented unknown shipped-license blockers.
+- Artifact absent: moved `dist/local/EcritumRuntime.xcframework` aside; `mise exec -- just example-swift` and `mise exec -- just example-c` both failed early with `run mise exec -- just xcframework first`; `mise exec -- just test` exited 0 and skipped examples in scaffold mode.
+New tests added:
+- Persistent SwiftHost example.
+- Persistent CHost direct include/link example with undersized-buffer status check.
+Negative paths tested:
+- Missing local XCFramework prerequisite for both examples.
+- CHost undersized version buffer returns `ECRITUM_ERROR_BUFFER_TOO_SMALL`.
+- CHost linked binary rejects build-machine runtime paths.
+Size impact:
+- Example source only; generated binaries remain under ignored `build/` and `.build/`.
+#+end_src
 
 *** TODO M1-007 Define initial performance and artifact budgets
 

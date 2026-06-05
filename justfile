@@ -80,7 +80,42 @@ test-swift-auto:
         scripts/swift-test.sh --mode scaffold; \
     fi
 
-test: plan-check test-swift-auto test-java
+test: plan-check test-swift-auto test-java test-examples-auto
+
+example-swift:
+    @test -d dist/local/EcritumRuntime.xcframework || { echo "missing dist/local/EcritumRuntime.xcframework; run mise exec -- just xcframework first" >&2; exit 1; }
+    @cd Examples/SwiftHost && swift package reset
+    @cd Examples/SwiftHost && ECRITUM_LOCAL_RUNTIME=1 ECRITUM_LOCAL_RUNTIME_STATE=v4:runtime:runtime-present:examples swift run --quiet SwiftHost
+
+example-c:
+    @test -d dist/local/EcritumRuntime.xcframework || { echo "missing dist/local/EcritumRuntime.xcframework; run mise exec -- just xcframework first" >&2; exit 1; }
+    @slice="macos-$(uname -m)"; \
+    framework="dist/local/EcritumRuntime.xcframework/$slice/EcritumRuntime.framework"; \
+    test -f "$framework/Headers/ecritum.h" || { echo "missing packaged ecritum.h in $framework" >&2; exit 1; }; \
+    mkdir -p build/examples/chost; \
+    clang -target "$(uname -m)-apple-macos{{min_macos}}" -mmacosx-version-min={{min_macos}} \
+        -I "$framework/Headers" \
+        -F "dist/local/EcritumRuntime.xcframework/$slice" \
+        -framework EcritumRuntime \
+        -Wl,-rpath,@loader_path/../../../dist/local/EcritumRuntime.xcframework/$slice \
+        Examples/CHost/main.c \
+        -o build/examples/chost/CHost; \
+    build/examples/chost/CHost; \
+    otool -L build/examples/chost/CHost | grep -q '@rpath/EcritumRuntime.framework/EcritumRuntime'; \
+    repo_root="$(pwd -P)"; \
+    if { otool -L build/examples/chost/CHost; otool -l build/examples/chost/CHost; } | grep -E '/GraalVM|/jdk|/native/target|/build/native' || \
+        { otool -L build/examples/chost/CHost; otool -l build/examples/chost/CHost; } | grep -F "$repo_root"; then \
+        echo "CHost links build-machine runtime path" >&2; exit 1; \
+    fi
+
+examples: example-swift example-c
+
+test-examples-auto:
+    @if [ -d dist/local/EcritumRuntime.xcframework ]; then \
+        just examples; \
+    else \
+        echo "Skipping examples: dist/local/EcritumRuntime.xcframework is missing."; \
+    fi
 
 inspect:
     python3 scripts/inspect-artifact.py
