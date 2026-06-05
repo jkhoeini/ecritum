@@ -316,7 +316,7 @@ Notes:
 
 - Created by the initial engineering manager setup task.
 
-** Milestone M1: Scaffolding and First Native Symbol
+** DONE Milestone M1: Scaffolding and First Native Symbol
 
 Goal: prove SwiftPM can call a prebuilt Native Image shared library through the C
 module.
@@ -778,12 +778,12 @@ Size impact:
 - Example source only; generated binaries remain under ignored `build/` and `.build/`.
 #+end_src
 
-*** TODO M1-007 Define initial performance and artifact budgets
+*** DONE M1-007 Define initial performance and artifact budgets
 
 Lead persona: Release.
 Reviewer personas: Tests, GraalVM Runtime, Technical Debt.
 Depends on: M1-004, M1-005.
-Write scope: docs/, PROJECT.org.
+Write scope: docs/, PROJECT.org, justfile, scripts/, DEBT.md.
 
 Definition of done:
 
@@ -791,6 +791,54 @@ Definition of done:
   dependency/license delta.
 - Gates define Core vs Full artifact decision criteria before Python/Ruby work.
 - Gate measurement commands are represented by `just` tasks.
+
+Notes:
+
+- Accepted ADR-018 as the source of truth for performance and artifact budget
+  policy.
+- Added operator-facing =docs/performance-and-artifact-budgets.md= and linked
+  =docs/release-gates.md= to the new budget policy.
+- Added =just size= wrapper/private-runtime warning gates, =bench-cold-start=,
+  =bench-swift-cold-start=, =bench-idle-rss=, =bench-first-eval=,
+  =check-dep-delta=, =perf-baseline=, and =perf=.
+- Added release-check integration for C cold-start, idle-RSS, and dependency
+  delta gates.
+- Added benchmark subprocess timeouts, expected-output assertion, and isolated
+  temporary SwiftPM build paths for the Swift host benchmark.
+- Recorded technical debt for M1 placeholder budgets and empirically unvalidated
+  Core/Full thresholds.
+- Final persona signoff: Release PASS, Tests/TDD PASS, GraalVM Runtime PASS,
+  Technical Debt PASS.
+
+#+begin_src markdown
+## Verification
+
+Layers tested: Contract, Integration, Packaging, Release, Performance
+Commands run:
+- `python3 -m py_compile scripts/measure-runtime.py scripts/measure-command.py scripts/measure-first-eval.py scripts/check-dep-delta.py scripts/size-artifact.py` -> exit 0.
+- `bash -n scripts/release-check.sh` -> exit 0.
+- `mise exec -- just size` -> exit 0; artifact 12,967,170 bytes, wrapper 33,568 bytes, private runtime 12,931,448 bytes, no violations or warnings.
+- `mise exec -- just bench-cold-start` through `mise exec -- just perf-baseline` -> exit 0; C process p50 13.431 ms / p95 21.442 ms, `dlopen+dlsym` p95 4.571 ms, first wrapper call p95 3.197 ms.
+- `mise exec -- just bench-swift-cold-start` through `mise exec -- just perf-baseline` -> exit 0; Swift host binary p50 19.014 ms / p95 39.377 ms across 30 runs with expected stdout asserted.
+- Parallel `mise exec -- just bench-swift-cold-start` runs -> both exited 0 using separate temporary build paths; measured p95 32.989 ms and 33.244 ms.
+- `mise exec -- just bench-idle-rss` through `mise exec -- just perf-baseline` -> exit 0; RSS after first wrapper call p95 11,173,888 bytes.
+- `mise exec -- just bench-first-eval` -> exit 0 and emitted explicit `not_applicable` JSON with p50 500 ms / p95 1,000 ms future budget.
+- `mise exec -- just check-dep-delta` through `mise exec -- just perf-baseline` -> exit 0; no shipped, build, or test dependency delta from M1 baseline.
+- `mise exec -- just release-check` -> expected exit 1 at strict license gate; Swift tests, Maven native tests, SwiftHost, CHost, artifact inspection, size, performance, dependency-delta, packaging, and non-strict SPDX inventory ran before the two known unknown shipped-license blockers.
+New tests added:
+- Fresh-process C runtime benchmark with separate `dlopen`, `dlsym`, first wrapper call, RSS after dlopen, and RSS after first call metrics.
+- Swift host binary benchmark over repeated fresh-process executions with expected-output assertion.
+- First-eval placeholder gate that stays explicit until an eval ABI exists.
+- Dependency/license delta gate against the M1 baseline.
+Negative paths tested:
+- Benchmark subprocesses fail the gate after timeout instead of hanging CI.
+- Swift host binary benchmark fails the gate on stdout mismatch.
+- Parallel Swift benchmark runs use isolated build paths instead of sharing `Examples/SwiftHost/.build`.
+- Release remains blocked by strict shipped-license unknowns.
+- First-eval cannot be misrepresented as measured before the eval ABI exists.
+Size impact:
+- Script and documentation only; artifact size remains 12,967,170 bytes.
+#+end_src
 
 ** Milestone M2: Stable C ABI and Swift Wrapper Core
 
@@ -1264,7 +1312,7 @@ Output of: M2.5-002 and M7-003.
 Output of: M2-001A.
 ** TODO ADR-017 Artifact reproducibility, signing, and checksum policy
 Output of: M1-004, M1-005, and M7-001.
-** TODO ADR-018 Performance and artifact budget policy
+** DONE ADR-018 Performance and artifact budget policy
 Output of: M1-007.
 
 * Test Pyramid

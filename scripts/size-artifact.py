@@ -21,8 +21,10 @@ parser = argparse.ArgumentParser(description="Emit the Ecritum runtime artifact 
 parser.add_argument("--artifact", default="dist/local/EcritumRuntime.xcframework")
 parser.add_argument("--require-artifact", action="store_true")
 parser.add_argument("--max-artifact-bytes", type=int, default=25_000_000)
-parser.add_argument("--max-wrapper-bytes", type=int, default=1_000_000)
+parser.add_argument("--max-wrapper-bytes", type=int, default=262_144)
 parser.add_argument("--max-private-runtime-bytes", type=int, default=20_000_000)
+parser.add_argument("--warn-artifact-bytes", type=int, default=15_000_000)
+parser.add_argument("--baseline-artifact-bytes", type=int, default=12_967_170)
 args = parser.parse_args()
 
 artifact = Path(args.artifact)
@@ -44,6 +46,7 @@ payload = {
         "private_runtime_bytes": file_size(private_runtime),
     },
     "violations": [],
+    "warnings": [],
 }
 
 if args.require_artifact and not artifact.exists():
@@ -61,6 +64,14 @@ if artifact.exists():
             payload["violations"].append(f"{key} missing")
         elif value > budget:
             payload["violations"].append(f"{key} {value} exceeds budget {budget}")
+
+    artifact_size = payload["sizes"]["artifact_bytes"]
+    if artifact_size is not None:
+        if artifact_size > args.warn_artifact_bytes:
+            payload["warnings"].append(f"artifact_bytes {artifact_size} exceeds warning threshold {args.warn_artifact_bytes}")
+        ten_percent_growth = int(args.baseline_artifact_bytes * 1.10)
+        if artifact_size > ten_percent_growth:
+            payload["warnings"].append(f"artifact_bytes {artifact_size} exceeds 10% growth threshold {ten_percent_growth}")
 
 payload["ok"] = not payload["violations"]
 print(json.dumps(payload, indent=2, sort_keys=True))

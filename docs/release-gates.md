@@ -38,9 +38,18 @@ mise exec -- just release-check
 - `just check-xcframework`
 - `just inspect`
 - `just size`
+- `just bench-cold-start`
+- `just bench-idle-rss`
+- `just check-dep-delta`
 - `just package-artifact`
 - `just license-report`
 - `scripts/license-report.py --strict`
+
+`just bench-swift-cold-start` and `just bench-first-eval` are represented by the
+M1 budget policy but are not part of `release-check` yet. Swift host timing is
+kept out of release-check because it is a host-example benchmark rather than a
+release blocker while the C ABI packaging gates cover the artifact runtime path.
+First-eval remains explicit `not_applicable` until an eval ABI exists.
 
 The strict license step exits nonzero while shipped licenses remain unknown.
 That is intentional: unknown shipped licenses block release publication.
@@ -68,11 +77,13 @@ macOS version, checksums, and embedded runtime list.
 `just size` prints JSON and applies M1 regression budgets:
 
 - artifact directory: 25,000,000 bytes
-- public wrapper binary: 1,000,000 bytes
+- artifact warning: above 15,000,000 bytes or above 10% growth from baseline
+- public wrapper binary: 262,144 bytes
 - private Graal runtime: 20,000,000 bytes
 
-M1 budgets are regression tripwires, not product budgets. M1-007 owns final
-numeric size, cold-start, and memory budgets.
+See [performance-and-artifact-budgets.md](performance-and-artifact-budgets.md)
+and ADR-018 for startup, first-eval, idle-RSS, dependency-delta, and Core/Full
+artifact gates.
 
 ## SBOM And License Policy
 

@@ -36,6 +36,38 @@ not done if it introduced debt without an entry.
 - Verification required: ABI/status-code check in `mise exec -- just test` or
   `mise exec -- just check-abi`.
 
+- ID: ECRITUM-DEBT-0004
+- Source task: M1-007
+- Introduced by: Initial performance and artifact budget policy
+- Owner persona: Release, Licensing, and Distribution Engineer
+- Date: 2026-06-05
+- Impact: M1 budget values are based on the version-only Native Image runtime
+  before SCI, GraalJS, Lua, Python, or Ruby are embedded.
+- Reason accepted: Numeric tripwires are needed before language-runtime work can
+  proceed, but final product budgets require runtime-specific measurements.
+- Resolve-by phase: M4.5
+- Exit condition: SCI and GraalJS size/startup/RSS/first-eval data have been
+  recorded and ADR-018 budgets are either reaffirmed or revised.
+- Removal task: M4.5 ABI freeze and packaged app smoke budget review
+- Verification required: `mise exec -- just perf-baseline` and documented
+  language-runtime delta table.
+
+- ID: ECRITUM-DEBT-0005
+- Source task: M1-007
+- Introduced by: Initial Core vs Full artifact split policy
+- Owner persona: GraalVM and Polyglot Runtime Engineer
+- Date: 2026-06-05
+- Impact: Core/Full thresholds for Python and Ruby are empirical hypotheses
+  until GraalPy and TruffleRuby artifacts are measured.
+- Reason accepted: The split criteria must exist before Python/Ruby work starts,
+  but the measurements cannot exist until those runtime spikes are implemented.
+- Resolve-by phase: M6
+- Exit condition: GraalPy and TruffleRuby measurements decide whether each
+  runtime remains Full-only or can satisfy Core gates.
+- Removal task: M6 GraalPy/TruffleRuby measurement and artifact policy review
+- Verification required: `mise exec -- just perf-baseline`, strict license gate,
+  and conformance smoke for each measured runtime.
+
 ## Resolved Debt
 
 - ID: ECRITUM-DEBT-0001

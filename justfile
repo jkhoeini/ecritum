@@ -57,10 +57,10 @@ xcframework:
     just check-xcframework
 
 check-xcframework:
-    scripts/check-xcframework.sh
+    @scripts/check-xcframework.sh
 
 check-abi:
-    scripts/check-abi.sh
+    @scripts/check-abi.sh
 
 build-swift:
     test -f Package.swift
@@ -85,7 +85,8 @@ test: plan-check test-swift-auto test-java test-examples-auto
 example-swift:
     @test -d dist/local/EcritumRuntime.xcframework || { echo "missing dist/local/EcritumRuntime.xcframework; run mise exec -- just xcframework first" >&2; exit 1; }
     @cd Examples/SwiftHost && swift package reset
-    @cd Examples/SwiftHost && ECRITUM_LOCAL_RUNTIME=1 ECRITUM_LOCAL_RUNTIME_STATE=v4:runtime:runtime-present:examples swift run --quiet SwiftHost
+    @cd Examples/SwiftHost && swift build --quiet
+    @cd Examples/SwiftHost && slice="macos-$(uname -m)" && binary=".build/$(uname -m)-apple-macosx/debug/SwiftHost" && DYLD_FRAMEWORK_PATH="../../dist/local/EcritumRuntime.xcframework/$slice" "$binary"
 
 example-c:
     @test -d dist/local/EcritumRuntime.xcframework || { echo "missing dist/local/EcritumRuntime.xcframework; run mise exec -- just xcframework first" >&2; exit 1; }
@@ -118,26 +119,53 @@ test-examples-auto:
     fi
 
 inspect:
-    python3 scripts/inspect-artifact.py
+    @python3 scripts/inspect-artifact.py
 
 package-artifact:
-    python3 scripts/package-artifact.py
+    @python3 scripts/package-artifact.py
 
 checksum:
     test -f dist/release/EcritumRuntime.xcframework.zip
     @swift package compute-checksum dist/release/EcritumRuntime.xcframework.zip
 
 size:
-    python3 scripts/size-artifact.py
+    @python3 scripts/size-artifact.py
+
+bench-cold-start:
+    @python3 scripts/measure-runtime.py --mode startup
+
+bench-swift-cold-start:
+    @cd Examples/SwiftHost && \
+        mkdir -p ../../build && \
+        tmp_build=$(mktemp -d ../../build/swift-host-bench.XXXXXX) && \
+        trap 'rm -rf "$tmp_build"' EXIT && \
+        slice="macos-$(uname -m)" && \
+        binary="$tmp_build/$(uname -m)-apple-macosx/debug/SwiftHost" && \
+        ECRITUM_LOCAL_RUNTIME=1 ECRITUM_LOCAL_RUNTIME_STATE=v4:runtime:runtime-present:examples swift build --quiet --build-path "$tmp_build" && \
+        DYLD_FRAMEWORK_PATH="../../dist/local/EcritumRuntime.xcframework/$slice" "$binary" >/dev/null && \
+        DYLD_FRAMEWORK_PATH="../../dist/local/EcritumRuntime.xcframework/$slice" python3 ../../scripts/measure-command.py --name swift-host --runs 30 --max-p50-ms 1000 --max-p95-ms 2000 --expect-stdout "SwiftHost version=0.1.0-dev" -- "$binary"
+
+bench-idle-rss:
+    @python3 scripts/measure-runtime.py --mode rss
+
+bench-first-eval:
+    @python3 scripts/measure-first-eval.py
+
+check-dep-delta:
+    @python3 scripts/check-dep-delta.py
+
+perf-baseline: size bench-cold-start bench-swift-cold-start bench-idle-rss bench-first-eval check-dep-delta
+
+perf: perf-baseline
 
 license-report:
-    python3 scripts/license-report.py
+    @python3 scripts/license-report.py
 
 license-report-strict:
-    python3 scripts/license-report.py --strict
+    @python3 scripts/license-report.py --strict
 
 release-check:
-    scripts/release-check.sh
+    @scripts/release-check.sh
 
 clean:
     rm -rf .build target build dist native/target
