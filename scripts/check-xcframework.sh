@@ -62,16 +62,31 @@ smoke_dir="$(mktemp -d "${TMPDIR:-/tmp}/ecritum-smoke-XXXXXX")"
 trap 'rm -rf "$smoke_dir"' EXIT
 cat > "$smoke_dir/smoke.c" <<'C'
 #include <dlfcn.h>
+#include <stdint.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 
 typedef int (*ecritum_version_fn)(char *, size_t);
+typedef uint64_t ecritum_runtime_t;
+typedef uint64_t ecritum_context_t;
+typedef uint64_t ecritum_error_t;
+typedef struct {
+    const uint8_t *data;
+    size_t len;
+} ecritum_bytes_t;
+typedef int (*ecritum_runtime_create_fn)(ecritum_bytes_t, ecritum_runtime_t *, ecritum_error_t *);
+typedef int (*ecritum_runtime_destroy_fn)(ecritum_runtime_t *, ecritum_error_t *);
+typedef int (*ecritum_context_create_fn)(ecritum_runtime_t, ecritum_bytes_t, ecritum_context_t *, ecritum_error_t *);
+typedef int (*ecritum_context_destroy_fn)(ecritum_context_t *, ecritum_error_t *);
+typedef int (*ecritum_error_destroy_fn)(ecritum_error_t *);
+typedef int (*ecritum_error_status_fn)(ecritum_error_t, int *);
 
 enum {
     ECRITUM_OK = 0,
     ECRITUM_ERROR_INVALID_ARGUMENT = 1,
     ECRITUM_ERROR_BUFFER_TOO_SMALL = 2,
+    ECRITUM_ERROR_CONTEXTS_ALIVE = 10,
 };
 
 int main(int argc, char **argv) {
@@ -89,6 +104,17 @@ int main(int argc, char **argv) {
     if (version == NULL) {
         fprintf(stderr, "%s\n", dlerror());
         return 4;
+    }
+    ecritum_runtime_create_fn runtime_create = (ecritum_runtime_create_fn)dlsym(handle, "ecritum_runtime_create");
+    ecritum_runtime_destroy_fn runtime_destroy = (ecritum_runtime_destroy_fn)dlsym(handle, "ecritum_runtime_destroy");
+    ecritum_context_create_fn context_create = (ecritum_context_create_fn)dlsym(handle, "ecritum_context_create");
+    ecritum_context_destroy_fn context_destroy = (ecritum_context_destroy_fn)dlsym(handle, "ecritum_context_destroy");
+    ecritum_error_destroy_fn error_destroy = (ecritum_error_destroy_fn)dlsym(handle, "ecritum_error_destroy");
+    ecritum_error_status_fn error_status = (ecritum_error_status_fn)dlsym(handle, "ecritum_error_status");
+    if (runtime_create == NULL || runtime_destroy == NULL || context_create == NULL ||
+        context_destroy == NULL || error_destroy == NULL || error_status == NULL) {
+        fprintf(stderr, "%s\n", dlerror());
+        return 10;
     }
 
     char buffer[64];
@@ -109,6 +135,34 @@ int main(int argc, char **argv) {
     }
     if (version(buffer, 1) != ECRITUM_ERROR_BUFFER_TOO_SMALL) {
         return 9;
+    }
+
+    ecritum_bytes_t empty = {0};
+    ecritum_runtime_t runtime = 0;
+    ecritum_context_t context = 0;
+    ecritum_error_t error = 0;
+    if (runtime_create(empty, &runtime, &error) != ECRITUM_OK || runtime == 0 || error != 0) {
+        return 11;
+    }
+    if (context_create(runtime, empty, &context, &error) != ECRITUM_OK || context == 0 || error != 0) {
+        return 12;
+    }
+    ecritum_runtime_t runtime_before = runtime;
+    if (runtime_destroy(&runtime, &error) != ECRITUM_ERROR_CONTEXTS_ALIVE || runtime != runtime_before || error == 0) {
+        return 13;
+    }
+    int error_code = 0;
+    if (error_status(error, &error_code) != ECRITUM_OK || error_code != ECRITUM_ERROR_CONTEXTS_ALIVE) {
+        return 14;
+    }
+    if (error_destroy(&error) != ECRITUM_OK || error != 0) {
+        return 15;
+    }
+    if (context_destroy(&context, &error) != ECRITUM_OK || context != 0 || error != 0) {
+        return 16;
+    }
+    if (runtime_destroy(&runtime, &error) != ECRITUM_OK || runtime != 0 || error != 0) {
+        return 17;
     }
 
     return 0;

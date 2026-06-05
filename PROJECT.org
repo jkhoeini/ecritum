@@ -1083,18 +1083,123 @@ Not verified:
 - C value/error handle conversion functions are not implemented yet; intentionally deferred until their owning ABI task defines and tests public symbols.
 #+end_src
 
-*** TODO M2-003 Implement runtime/context lifecycle
+*** DONE M2-003 Implement runtime/context lifecycle
 
 Lead persona: Architecture Expert.
 Reviewer personas: GraalVM Runtime, Tests, Security.
 Depends on: M2-001.
-Write scope: Sources/, native/, Tests/.
+Write scope: Sources/, native/, Tests/, scripts/, docs/abi/, justfile, public
+header docs.
+
+Assignment:
+
+- Engineering manager: Codex.
+- Lead persona agent: Architecture Expert (Parfit).
+- Reviewer agents: GraalVM Runtime (Banach), Tests/TDD (Gauss), Security
+  (Schrodinger).
+- Claude plan consult: PASS; advisory clarified that teardown failure must
+  always tombstone registry state and zero caller handle storage.
+
+Implementation plan:
+
+- Implement runtime/context create and destroy only; defer eval, host callbacks,
+  value C handles, policy parsing, cancellation, timeout, async/jobs, and
+  language contexts.
+- Add public ABI handles and views: `ecritum_runtime_t`, `ecritum_context_t`,
+  `ecritum_error_t`, `ecritum_bytes_t`, and `ecritum_string_view_t`.
+- Add lifecycle symbols: `ecritum_runtime_create`,
+  `ecritum_runtime_destroy`, `ecritum_context_create`,
+  `ecritum_context_destroy`, `ecritum_error_destroy`, and minimal error
+  diagnostic accessors for status/category/message/operation.
+- Keep the private generational handle registry in the C wrapper. Public tokens
+  encode kind, slot, and generation; arbitrary, stale, destroyed, and wrong-kind
+  handles return `ECRITUM_ERROR_INVALID_HANDLE` before object access.
+- Runtime handles own one Graal isolate. Public callers never manage Graal
+  threads; wrapper calls attach to the runtime isolate when needed and detach
+  only if the call attached the thread.
+- `runtime_create` creates the isolate, detaches the creation thread before
+  publishing the handle, and publishes only after full success. Non-empty
+  config fails closed until M2-005.
+- `runtime_destroy` rejects live contexts with `ECRITUM_ERROR_CONTEXTS_ALIVE`
+  and leaves the runtime valid. Otherwise it tears down the isolate; teardown
+  failure returns `ECRITUM_ERROR_TEARDOWN_FAILED` and always tombstones the
+  registry entry and zeros the caller handle because isolate state is unknown.
+- Context handles are lifecycle placeholders under the runtime until eval lands.
+  `context_create` validates the parent and increments live context count;
+  `context_destroy` tombstones the context and decrements parent count.
+- Swift adds final `EcritumRuntime` and `EcritumContext` wrappers with private
+  C handles, an internal ABI adapter seam, no `Sendable` claim, idempotent
+  `close() throws`, best-effort `deinit`, parent retention, and typed errors.
+- Add C lifecycle contract and sanitizer/stress tasks with fake Graal/backend
+  hooks so stale handles, wrong-kind handles, live-child destroy, teardown
+  failure, optional error output, and 1,000 create/destroy cycles are
+  deterministic. Include a generation-wrap regression so stale handles do not
+  become valid again after a 16-bit generation saturates.
+
+Plan feedback:
+
+- Architecture: ADR-003/M2-007 can defer async/job semantics; basic
+  deterministic lifecycle is covered by ADR-002 and ADR-016.
+- GraalVM Runtime: do not extend the one-shot `ecritum_version` isolate pattern
+  to runtime handles; use one isolate per runtime and call-local attach/detach.
+- Tests/TDD: M2-003 owns Swift fake-adapter lifecycle tests, C lifecycle
+  contracts, ASan/UBSan stress, and leak smoke; M2-006 owns reusable
+  cross-language conformance beyond basic lifecycle.
+- Security: block completion without registry validation, fault injection,
+  manifest updates, C/Swift/Java contract tests, and leak/sanitizer evidence.
 
 Definition of done:
 
 - Create/destroy paths are deterministic and idempotent where specified.
 - Thread attachment rules are documented.
 - Leak tests or equivalent lifecycle checks run in CI-ready commands.
+
+Completion:
+
+- Implemented public lifecycle ABI declarations in
+  `Sources/CEcritum/include/ecritum.h`.
+- Implemented C wrapper lifecycle with one Graal isolate per runtime,
+  generational runtime/context/error handles, live-context blocking,
+  fail-closed config handling, teardown-failure tombstoning, and single-lock
+  error string view accessors.
+- Implemented Swift `EcritumRuntime` and `EcritumContext` owner wrappers with
+  final classes, private handles, typed errors, parent retention, idempotent
+  close, and best-effort deinit.
+- Added Swift fake-adapter lifecycle tests, C lifecycle contract tests, C++
+  header smoke, ASan/UBSan task, framework lifecycle leak smoke, ABI manifest
+  entries, and XCFramework dlopen lifecycle smoke.
+
+Review results:
+
+- Claude split review found one blocker in error string accessors; fixed by
+  validating and borrowing each view inside one mutex critical section. Claude
+  re-review: PASS.
+- Claude split review of core C lifecycle: PASS.
+- Claude split review of Swift ownership core: PASS.
+- Claude split review of generation-wrap stale-handle fix: PASS.
+- Full-diff and larger Swift Claude reviews timed out; they were replaced with
+  smaller focused reviews and persona review.
+- Architecture persona: PASS.
+- GraalVM Runtime persona: PASS.
+- Tests/TDD persona: PASS.
+- Security persona: PASS after adding the generation-wrap stale-handle
+  regression and fail-closed slot exhaustion behavior.
+
+Verification:
+
+#+begin_src text
+`mise exec -- just test-swift-scaffold` -> exit 0; 27 Swift tests, 3 expected artifact skips.
+`mise exec -- just test-java` -> exit 0; 4 Java tests.
+`mise exec -- just test-c-abi-lifecycle` -> exit 0.
+`mise exec -- just test-c-abi-asan` -> exit 0; ASan/UBSan, macOS leak detection disabled in ASan.
+`mise exec -- just native` -> exit 0; Native Image dylib rebuilt, 12.93 MB.
+`mise exec -- just xcframework` -> exit 0; rebuilt `dist/local/EcritumRuntime.xcframework`.
+`mise exec -- just check-abi` -> exit 0.
+`mise exec -- just check-xcframework` -> exit 0.
+`mise exec -- just test-swift` -> exit 0; 27 Swift tests, 0 skips against artifact.
+`mise exec -- just test-lifecycle-leak-smoke` -> exit 0; `leaks` reported 0 leaks for 0 total leaked bytes.
+`mise exec -- just test` -> exit 0; Swift tests, Java tests, C lifecycle, C ASan/UBSan, SwiftHost, and CHost passed.
+#+end_src
 
 *** TODO M2-004 Implement host function registration
 

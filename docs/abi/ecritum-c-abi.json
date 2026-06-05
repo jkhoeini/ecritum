@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "name": "Ecritum C ABI M2 value and error baseline",
+  "name": "Ecritum C ABI M2 value, error, and lifecycle baseline",
   "publicHeader": "Sources/CEcritum/include/ecritum.h",
   "javaStatus": "native/src/main/java/ecritum/EcritumStatus.java",
   "statusConstants": [
@@ -115,6 +115,51 @@
       "name": "ecritum_version",
       "machoSymbol": "_ecritum_version",
       "declaration": "int ecritum_version(char *buffer, size_t buffer_len);"
+    },
+    {
+      "name": "ecritum_runtime_create",
+      "machoSymbol": "_ecritum_runtime_create",
+      "declaration": "int ecritum_runtime_create(ecritum_bytes_t config_json, ecritum_runtime_t *out_runtime, ecritum_error_t *out_error);"
+    },
+    {
+      "name": "ecritum_runtime_destroy",
+      "machoSymbol": "_ecritum_runtime_destroy",
+      "declaration": "int ecritum_runtime_destroy(ecritum_runtime_t *runtime, ecritum_error_t *out_error);"
+    },
+    {
+      "name": "ecritum_context_create",
+      "machoSymbol": "_ecritum_context_create",
+      "declaration": "int ecritum_context_create(ecritum_runtime_t runtime, ecritum_bytes_t config_json, ecritum_context_t *out_context, ecritum_error_t *out_error);"
+    },
+    {
+      "name": "ecritum_context_destroy",
+      "machoSymbol": "_ecritum_context_destroy",
+      "declaration": "int ecritum_context_destroy(ecritum_context_t *context, ecritum_error_t *out_error);"
+    },
+    {
+      "name": "ecritum_error_destroy",
+      "machoSymbol": "_ecritum_error_destroy",
+      "declaration": "int ecritum_error_destroy(ecritum_error_t *error);"
+    },
+    {
+      "name": "ecritum_error_status",
+      "machoSymbol": "_ecritum_error_status",
+      "declaration": "int ecritum_error_status(ecritum_error_t error, int *out_status);"
+    },
+    {
+      "name": "ecritum_error_category",
+      "machoSymbol": "_ecritum_error_category",
+      "declaration": "int ecritum_error_category(ecritum_error_t error, ecritum_string_view_t *out_category);"
+    },
+    {
+      "name": "ecritum_error_message",
+      "machoSymbol": "_ecritum_error_message",
+      "declaration": "int ecritum_error_message(ecritum_error_t error, ecritum_string_view_t *out_message);"
+    },
+    {
+      "name": "ecritum_error_operation",
+      "machoSymbol": "_ecritum_error_operation",
+      "declaration": "int ecritum_error_operation(ecritum_error_t error, ecritum_string_view_t *out_operation);"
     }
   ],
   "privateSymbols": [

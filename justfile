@@ -80,7 +80,27 @@ test-swift-auto:
         scripts/swift-test.sh --mode scaffold; \
     fi
 
-test: plan-check test-swift-auto test-java test-examples-auto
+test-c-abi-lifecycle:
+    mkdir -p build/c-abi
+    clang -DECRITUM_TESTING -I Sources/CEcritum/include -I build/native/macos-arm64/include/private scripts/ecritum_runtime_wrapper.c Tests/C/lifecycle_contract.c -o build/c-abi/lifecycle_contract
+    build/c-abi/lifecycle_contract
+    clang++ -std=c++17 -I Sources/CEcritum/include Tests/C/header_cpp_smoke.cpp -o build/c-abi/header_cpp_smoke
+    build/c-abi/header_cpp_smoke
+
+test-c-abi-asan:
+    mkdir -p build/c-abi
+    clang -DECRITUM_TESTING -fsanitize=address,undefined -fno-omit-frame-pointer -I Sources/CEcritum/include -I build/native/macos-arm64/include/private scripts/ecritum_runtime_wrapper.c Tests/C/lifecycle_contract.c -o build/c-abi/lifecycle_contract_asan
+    ASAN_OPTIONS=detect_leaks=0 build/c-abi/lifecycle_contract_asan
+
+test-lifecycle-leak-smoke:
+    test -d dist/local/EcritumRuntime.xcframework
+    mkdir -p build/c-abi
+    clang -target "$(uname -m)-apple-macos{{min_macos}}" -mmacosx-version-min={{min_macos}} Tests/C/framework_lifecycle_smoke.c -o build/c-abi/framework_lifecycle_smoke
+    slice="macos-$(uname -m)"; \
+        binary="dist/local/EcritumRuntime.xcframework/$slice/EcritumRuntime.framework/EcritumRuntime"; \
+        leaks --atExit -- build/c-abi/framework_lifecycle_smoke "$binary"
+
+test: plan-check test-swift-auto test-java test-c-abi-lifecycle test-c-abi-asan test-examples-auto
 
 example-swift:
     @test -d dist/local/EcritumRuntime.xcframework || { echo "missing dist/local/EcritumRuntime.xcframework; run mise exec -- just xcframework first" >&2; exit 1; }
