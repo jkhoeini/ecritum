@@ -307,6 +307,183 @@ final class EcritumEvalTests: XCTestCase {
         throw XCTSkip("requires local runtime artifact")
         #endif
     }
+
+    func testArtifactBackedJavaScriptEvalReturnsNativeValuesAndErrors() async throws {
+        #if ECRITUM_HAS_RUNTIME_ARTIFACT
+        let runtime = try EcritumRuntime()
+        let context = try runtime.context()
+
+        let value = try await context.eval(EcritumScript(
+            "({answer: 40 + 2, items: [1, 'two', true], nil: null, flag: true, ratio: 3.5, text: 'hello', blob: new Uint8Array([0, 1, 2, 255])})",
+            language: .javascript,
+            sourceName: "swift-artifact-smoke.js"
+        ))
+
+        XCTAssertEqual(value, .object([
+            "answer": .int(42),
+            "items": .array([.int(1), .string("two"), .bool(true)]),
+            "nil": .null,
+            "flag": .bool(true),
+            "ratio": .double(3.5),
+            "text": .string("hello"),
+            "blob": .data(Data([0, 1, 2, 255])),
+        ]))
+
+        do {
+            _ = try await context.eval(EcritumScript("throw new Error('boom')", language: .javascript, sourceName: "swift-error.js"))
+            XCTFail("expected eval to throw")
+        } catch let error as EcritumError {
+            XCTAssertEqual(error.status, .script)
+            XCTAssertEqual(error.category, .runtime)
+            XCTAssertEqual(error.details?.language, "javascript")
+            XCTAssertEqual(error.details?.sourceName, "swift-error.js")
+        }
+
+        do {
+            _ = try await context.eval(EcritumScript("(async function(){ return 42; })()", language: .javascript, sourceName: "swift-promise.js"))
+            XCTFail("expected promise rejection")
+        } catch let error as EcritumError {
+            XCTAssertEqual(error.status, .script)
+            XCTAssertEqual(error.category, .runtime)
+            XCTAssertEqual(error.details?.sourceName, "swift-promise.js")
+        }
+
+        do {
+            _ = try await context.eval(EcritumScript("await 42", language: .javascript, sourceName: "swift-await.js"))
+            XCTFail("expected top-level await syntax error")
+        } catch let error as EcritumError {
+            XCTAssertEqual(error.status, .script)
+            XCTAssertEqual(error.category, .syntax)
+            XCTAssertEqual(error.details?.sourceName, "swift-await.js")
+        }
+        #else
+        throw XCTSkip("requires local runtime artifact")
+        #endif
+    }
+
+    func testArtifactBackedJavaScriptEvalCallsRegisteredSwiftHostFunctions() async throws {
+        #if ECRITUM_HAS_RUNTIME_ARTIFACT
+        let runtime = try EcritumRuntime()
+        let app = try runtime.namespace(.init("app"))
+        try app.register(.init("answer")) { call in
+            XCTAssertEqual(try call.argumentCount(), 0)
+            return .int(42)
+        }
+        try app.register(.init("blob")) { _ in
+            .data(Data([0, 1, 2, 255]))
+        }
+        try app.register(.init("fail")) { _ in
+            throw EcritumError.callback(EcritumErrorDetails(
+                status: .callback,
+                category: .callback,
+                message: "token=SECRET",
+                operation: "host_callback"
+            ))
+        }
+        let tools = try runtime.namespace(.init("app.tools"))
+        try tools.register(.init("notify")) { call in
+            XCTAssertEqual(try call.argumentCount(), 3)
+            XCTAssertEqual(try call.value(at: 0), .int(41))
+            XCTAssertEqual(try call.value(at: 1), .string("done"))
+            XCTAssertEqual(try call.value(at: 2), .object(["ok": .bool(true)]))
+            return .array([.int(42), .string("done")])
+        }
+        let context = try runtime.context()
+
+        let answer = try await context.eval(EcritumScript(
+            "ecritum.app.answer()",
+            language: .javascript,
+            sourceName: "swift-host-success.js"
+        ))
+        XCTAssertEqual(answer, .int(42))
+
+        let notify = try await context.eval(EcritumScript(
+            "ecritum.app.tools.notify(41, 'done', {ok: true})",
+            language: .javascript,
+            sourceName: "swift-host-notify.js"
+        ))
+        XCTAssertEqual(notify, .array([.int(42), .string("done")]))
+
+        let blob = try await context.eval(EcritumScript(
+            "ecritum.app.blob()",
+            language: .javascript,
+            sourceName: "swift-host-blob.js"
+        ))
+        XCTAssertEqual(blob, .data(Data([0, 1, 2, 255])))
+
+        do {
+            _ = try await context.eval(EcritumScript("ecritum.app.fail()", language: .javascript, sourceName: "swift-host-fail.js"))
+            XCTFail("expected callback failure")
+        } catch let error as EcritumError {
+            XCTAssertEqual(error.status, .callback)
+            XCTAssertEqual(error.category, .callback)
+            XCTAssertEqual(error.details?.operation, "eval")
+            XCTAssertEqual(error.details?.language, "javascript")
+            XCTAssertEqual(error.details?.sourceName, "swift-host-fail.js")
+            XCTAssertFalse(error.details?.message.contains("SECRET") ?? false)
+        }
+        _ = app
+        _ = tools
+        #else
+        throw XCTSkip("requires local runtime artifact")
+        #endif
+    }
+
+    func testArtifactBackedJavaScriptStandardLibraryFacadesAndDefaultDenials() async throws {
+        #if ECRITUM_HAS_RUNTIME_ARTIFACT
+        let runtime = try EcritumRuntime()
+        let context = try runtime.context()
+
+        let json = try await context.eval(EcritumScript(
+            "ecritum.json.writeString({b: 2, a: 1})",
+            language: .javascript,
+            sourceName: "swift-js-facade-json.js"
+        ))
+        XCTAssertEqual(json, .string("{\"a\":1,\"b\":2}"))
+
+        let time = try await context.eval(EcritumScript(
+            "ecritum.time.formatInstant(ecritum.time.parseInstant('2026-06-05T00:00:00Z'))",
+            language: .javascript,
+            sourceName: "swift-js-facade-time.js"
+        ))
+        XCTAssertEqual(time, .string("2026-06-05T00:00:00Z"))
+
+        do {
+            _ = try await context.eval(EcritumScript("ecritum.time.now()", language: .javascript, sourceName: "swift-js-time-denied.js"))
+            XCTFail("expected time permission denial")
+        } catch let error as EcritumError {
+            XCTAssertEqual(error.status, .permissionDenied)
+            XCTAssertEqual(error.category, .permission)
+            XCTAssertEqual(error.details?.sourceName, "swift-js-time-denied.js")
+        }
+
+        do {
+            _ = try await context.eval(EcritumScript("ecritum.http.request({url: 'https://example.com'})", language: .javascript, sourceName: "swift-js-http-denied.js"))
+            XCTFail("expected http permission denial")
+        } catch let error as EcritumError {
+            XCTAssertEqual(error.status, .permissionDenied)
+            XCTAssertEqual(error.category, .permission)
+            XCTAssertEqual(error.details?.sourceName, "swift-js-http-denied.js")
+        }
+
+        let collisionRuntime = try EcritumRuntime()
+        let namespace = try collisionRuntime.namespace(.init("json"))
+        try namespace.register(.init("custom")) { _ in .int(1) }
+        let collisionContext = try collisionRuntime.context()
+        do {
+            _ = try await collisionContext.eval(EcritumScript("1", language: .javascript, sourceName: "swift-js-collision.js"))
+            XCTFail("expected reserved namespace collision")
+        } catch let error as EcritumError {
+            XCTAssertEqual(error.status, .permissionDenied)
+            XCTAssertEqual(error.category, .permission)
+            XCTAssertEqual(error.details?.language, "javascript")
+            XCTAssertEqual(error.details?.sourceName, "swift-js-collision.js")
+        }
+        _ = namespace
+        #else
+        throw XCTSkip("requires local runtime artifact")
+        #endif
+    }
 }
 
 private final class FakeEvalABI: EcritumLifecycleABI, EcritumEvalABI {

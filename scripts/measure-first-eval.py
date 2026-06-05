@@ -53,7 +53,7 @@ int main(void) {
     if (status != ECRITUM_OK) return 11;
 
     uint64_t started = now_ns();
-    status = ecritum_eval_start(context, view("clojure"), bytes("(+ 40 2)"), view("bench-first-eval.clj"), empty_bytes(), &job, &error);
+    status = ecritum_eval_start(context, view(__LANGUAGE__), bytes(__SOURCE__), view(__SOURCE_NAME__), empty_bytes(), &job, &error);
     if (status != ECRITUM_OK) return 12;
     status = ecritum_job_wait(job, 5000000000ULL, &state, &error);
     if (status != ECRITUM_OK) return 13;
@@ -90,9 +90,13 @@ def stats(values):
     }
 
 
-parser = argparse.ArgumentParser(description="Measure first SCI eval through the packaged C ABI.")
+parser = argparse.ArgumentParser(description="Measure first eval through the packaged C ABI.")
 parser.add_argument("--artifact", default="dist/local/EcritumRuntime.xcframework")
 parser.add_argument("--build-dir", default="build/perf")
+parser.add_argument("--name", default="first-eval")
+parser.add_argument("--language", default="clojure")
+parser.add_argument("--source", default="(+ 40 2)")
+parser.add_argument("--source-name", default="bench-first-eval.clj")
 parser.add_argument("--runs", type=int, default=10)
 parser.add_argument("--max-p50-ms", type=float, default=500.0)
 parser.add_argument("--max-p95-ms", type=float, default=1000.0)
@@ -111,7 +115,7 @@ header_dir = framework / "Headers"
 binary = framework / "EcritumRuntime"
 if not binary.exists():
     payload = {
-        "name": "first-eval",
+        "name": args.name,
         "artifact": str(artifact),
         "ok": False,
         "violations": [f"missing artifact binary: {binary}"],
@@ -123,7 +127,13 @@ build_dir = Path(args.build_dir)
 build_dir.mkdir(parents=True, exist_ok=True)
 source = build_dir / "first-eval-bench.c"
 runner = build_dir / "first-eval-bench"
-source.write_text(textwrap.dedent(RUNNER_SOURCE).strip() + "\n")
+runner_source = (
+    textwrap.dedent(RUNNER_SOURCE)
+    .replace("__LANGUAGE__", json.dumps(args.language))
+    .replace("__SOURCE__", json.dumps(args.source))
+    .replace("__SOURCE_NAME__", json.dumps(args.source_name))
+)
+source.write_text(runner_source.strip() + "\n")
 subprocess.run(
     [
         "clang",
@@ -181,7 +191,7 @@ if eval_ms:
         violations.append("first eval p95 exceeds budget")
 
 payload = {
-    "name": "first-eval",
+    "name": args.name,
     "artifact": str(artifact),
     "framework_binary": str(binary),
     "runs_requested": args.runs,

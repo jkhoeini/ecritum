@@ -2800,12 +2800,49 @@ Definition of done:
 - Host calls, values, structured errors, size/startup measurement, security
   abuse cases, and strict JavaScript conformance verification are specified.
 
-*** TODO M4-002 Implement GraalJS smoke path
+*** DONE M4-002 Implement GraalJS smoke path
 
 Lead persona: GraalVM Runtime.
 Reviewer personas: Tests, Security, Clean Code, Release.
 Depends on: M4-001, M2-006, M2.5-002.
 Write scope: native/, Sources/, Tests/.
+
+Assigned sub-agents:
+
+- GraalVM Runtime: Curie the 2nd.
+- Tests/TDD: Sartre the 2nd.
+- Security: Ramanujan the 2nd.
+- Clean Code / functional core: Aquinas the 2nd.
+- Release: Heisenberg the 2nd.
+- Swift DX: Meitner the 2nd.
+
+Planning status:
+
+- 2026-06-05: Engineering manager started M4-002 in a fresh `jj` child change
+  on top of accepted ADR-006.
+- 2026-06-05: Assigned fresh M4-002 persona agents for GraalVM Runtime,
+  Tests/TDD, Security, Clean Code, Release, and Swift DX. Their initial scope is
+  read-only implementation guidance and risk review while the engineering
+  manager starts the red-test and adapter path.
+- 2026-06-05: Implementation must follow ADR-006: GraalJS through Polyglot
+  `Context`, `javascript` as the public language name, `js-community`
+  dependency unless compile/license evidence revises the ADR, no public C ABI
+  widening, no Node/CommonJS/fetch/module claim, no Promise/top-level-await
+  support, and strict conformance/security/size/startup/license gates.
+- 2026-06-05: Implemented `JavaScriptEvaluator` with deny-by-default GraalJS
+  context settings, `ecritum.*` host projection, JavaScript stdlib facades,
+  value conversion, structured errors, Promise/top-level-await rejection, and
+  explicit permission classification for Java/Polyglot/module/classpath
+  attempts.
+- 2026-06-05: Added private
+  `ecritum_graal_eval_javascript_with_stdlib` Native Image entrypoint and C
+  wrapper language dispatch without changing the public C ABI.
+- 2026-06-05: Added Java, C native smoke, Swift artifact, conformance, security
+  abuse, license/dependency, inspect, and benchmark coverage for JavaScript.
+- 2026-06-05: Accepted ADR-007 for artifact classification. The combined local
+  GraalJS smoke artifact is measured but not declared release-ready Core because
+  it exceeds ADR-018's initial size tripwires. ECRITUM-DEBT-0009 tracks the
+  Core/Full resolution; ECRITUM-DEBT-0010 tracks nested host-proxy conversion.
 
 Definition of done:
 
@@ -2813,6 +2850,85 @@ Definition of done:
 - Host callbacks pass.
 - Permission denial behavior matches Clojure where applicable.
 - Size/startup numbers are recorded.
+
+Review status:
+
+- Persona reviews: GraalVM Runtime, Tests/TDD, Security, Clean Code, Release,
+  and Swift DX initial reviews completed. Blocking findings were addressed or
+  recorded as ADR-007/ECRITUM-DEBT-0009/ECRITUM-DEBT-0010 follow-ups.
+- Claude review: invoked directly with `claude -p` and no auth-check step.
+  Trivial CLI smoke returned `OK`, but full-diff, focused-diff, runtime-only,
+  code-slice, compressed-brief, and Sonnet retry review prompts all timed out
+  with no usable review output. Do not count Claude as signoff for M4-002.
+- Engineering-manager decision: accept M4-002 as DONE for the local JavaScript
+  smoke path because Java/native/Swift/conformance/security/release evidence is
+  recorded and review blockers are either fixed or ledgered. ADR-007 and
+  ECRITUM-DEBT-0009 keep the artifact out of release-ready Core until M4.5.
+
+Verification:
+
+Layers tested: Unit, Contract, Integration, Packaging, Release
+Commands run:
+- `mise exec -- just test-java` -> exit 0, 34 tests passed.
+- `mise exec -- just native` -> exit 0, Native Image built
+  `libecritum.dylib`; image size 150.82 MB; JS private entrypoint present.
+- `mise exec -- just test-native-eval-smoke` -> exit 0.
+- `mise exec -- just xcframework` -> exit 0.
+- `mise exec -- just test-swift` -> exit 0, 62 tests passed.
+- `mise exec -- just conformance-javascript-native` -> exit 0, 13 passed,
+  0 pending.
+- `mise exec -- just security-javascript` -> exit 0, 68 passed, 0 pending.
+- `mise exec -- just test-security-static` -> exit 0.
+- `python3 -m unittest Tests/Security/test_security_baseline.py` -> exit 0,
+  23 tests passed.
+- `mise exec -- just check-abi` -> exit 0.
+- `mise exec -- just inspect` -> exit 0; embedded runtime list includes
+  `GraalVM Native Image`, `SCI Clojure`, `GraalJS`, and `Ecritum C wrapper`.
+- `mise exec -- just bench-cold-start` -> exit 0; process p95 74.324 ms,
+  `dlopen+dlsym` p95 11.563 ms, first wrapper call p95 4.214 ms.
+- `mise exec -- just bench-idle-rss` -> exit 0; RSS after call p95
+  15,679,488 bytes.
+- `mise exec -- just bench-first-eval` -> exit 0; Clojure first-eval p50
+  1.516 ms, p95 3.584 ms.
+- `mise exec -- just bench-javascript-first-eval` -> exit 0; JavaScript
+  first-eval p50 9.501 ms, p95 23.351 ms.
+- `mise exec -- just check-dep-delta` -> exit 0.
+- `mise exec -- just license-report` -> exit 0; GraalJS Maven dependencies are
+  inventoried as UPL-1.0 except ICU as ICU.
+- `mise exec -- just license-report-strict` -> expected exit 1 from existing
+  `EcritumRuntime.xcframework` and `GraalVM Native Image embedded runtime code`
+  NOASSERTION blockers; no new GraalJS SPDX blocker.
+- `python3 scripts/size-artifact.py` -> expected exit 1 under ADR-007:
+  artifact 150,960,731 bytes and private runtime 150,818,872 bytes exceed
+  initial Core tripwires.
+New tests added:
+- `native/src/test/java/ecritum/JavaScriptEvaluatorTest.java`
+- JavaScript cases in `Tests/C/native_eval_smoke.c`
+- JavaScript artifact-backed cases in `Tests/EcritumTests/EcritumEvalTests.swift`
+- `Tests/Conformance/fixtures/javascript_native_provider.py`
+- `Tests/Security/fixtures/javascript_abuse_provider.py`
+- Static-check regression for explicit deny `allowHostClassLookup(name -> false)`
+Negative paths tested:
+- Java/Polyglot/classpath/module/fetch/load/read/process/environment/native
+  access denial, Promise/top-level-await rejection, stdlib default denials,
+  host callback failure redaction, reserved namespace collision, filesystem
+  traversal/symlink/outside-root denial.
+Size impact:
+- Before M4-002: SCI artifact debt already exceeded Core budget.
+- After M4-002: artifact 150,960,731 bytes, private runtime 150,818,872 bytes,
+  wrapper 130,000 bytes. ADR-007/ECRITUM-DEBT-0009 records this as a
+  Core/Full decision blocker, not a release-ready Core claim.
+Sanitizers:
+- Not rerun after final JS changes: ASan native eval smoke remains available as
+  `mise exec -- just test-native-eval-smoke-asan`; owner Tests/TDD for final
+  M4.5 hardening.
+Not verified:
+- Full aggregate `mise exec -- just test-m4-002` not run end-to-end because it
+  intentionally includes `size`, which fails under ADR-007 until the Core/Full
+  split is resolved.
+- Claude substantive review signoff is not available: bounded review attempts
+  timed out with no output; persona reviews and local engineering-manager review
+  are the fallback evidence under the Claude Review Protocol.
 
 ** Milestone M4.5: ABI Freeze and Packaged App Smoke
 

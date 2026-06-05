@@ -132,6 +132,20 @@ class SecurityBaselineTests(unittest.TestCase):
         self.assertIn("native_image.reflect_all", rules)
         self.assertIn("native_image.resource_wildcard", rules)
 
+    def test_static_check_allows_explicit_host_lookup_deny_predicate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "Good.java"
+            path.write_text(
+                "class Good { void good() { builder.allowHostClassLookup(name -> false); } }\n",
+                encoding="utf-8",
+            )
+
+            result = run_script(STATIC_CHECK, "--root", directory)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertTrue(payload["ok"])
+
     def test_static_check_scans_maven_config_files(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / ".mvn" / "maven.config"

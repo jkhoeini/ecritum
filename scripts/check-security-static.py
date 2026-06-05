@@ -61,7 +61,7 @@ RULES = [
     ("polyglot.create_process", r"\ballowCreateProcess\s*\(\s*true\s*\)"),
     ("polyglot.create_thread", r"\ballowCreateThread\s*\(\s*true\s*\)"),
     ("polyglot.host_class_loading", r"\ballowHostClassLoading\s*\(\s*true\s*\)"),
-    ("polyglot.host_class_lookup", r"\ballowHostClassLookup\s*\("),
+    ("polyglot.host_class_lookup", r"\ballowHostClassLookup\s*\(\s*(?:[A-Za-z_$][\w$]*\s*->\s*true|\([^)]*\)\s*->\s*true|[A-Za-z_$][\w$]*::[A-Za-z_$][\w$]*)"),
     ("polyglot.polyglot_access_all", r"\bPolyglotAccess\s*\.\s*ALL\b"),
     ("polyglot.environment_inherit", r"\bEnvironmentAccess\s*\.\s*INHERIT\b"),
     ("polyglot.raw_option_passthrough", r"\.(?:option|options)\s*\("),

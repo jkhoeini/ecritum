@@ -224,6 +224,8 @@ typedef struct {
 typedef struct {
     ecritum_job_t job;
     graal_isolate_t *isolate;
+    char *language;
+    size_t language_len;
     uint8_t *source;
     size_t source_len;
     char *source_name;
@@ -3779,6 +3781,7 @@ static void eval_work_destroy(ecritum_eval_work_t *work) {
         return;
     }
     free(work->source);
+    free(work->language);
     free(work->source_name);
     free(work->host_manifest);
     free(work->standard_library_manifest);
@@ -4451,7 +4454,26 @@ static void *eval_worker_main(void *raw_work) {
     uint8_t backend_buffer[ECRITUM_BACKEND_RESULT_MAX_BYTES] = {0};
     long long backend_bytes_written = 0;
 
-    if (backend_status == ECRITUM_OK) {
+    if (backend_status == ECRITUM_OK && work->language != NULL && strcmp(work->language, "javascript") == 0) {
+        backend_status = ecritum_graal_eval_javascript_with_stdlib(
+            thread,
+            (char *)work->source,
+            work->source_len,
+            work->source_name,
+            work->source_name_len,
+            work->host_manifest,
+            work->host_manifest_len,
+            host_call_bridge_from_graal,
+            (size_t)work->runtime,
+            work->standard_library_manifest,
+            work->standard_library_manifest_len,
+            standard_library_bridge_from_graal,
+            (size_t)work->context,
+            (char *)backend_buffer,
+            sizeof(backend_buffer),
+            &backend_bytes_written
+        );
+    } else if (backend_status == ECRITUM_OK && work->language != NULL && strcmp(work->language, "clojure") == 0) {
         backend_status = ecritum_graal_eval_clojure_with_stdlib(
             thread,
             (char *)work->source,
@@ -4470,6 +4492,8 @@ static void *eval_worker_main(void *raw_work) {
             sizeof(backend_buffer),
             &backend_bytes_written
         );
+    } else if (backend_status == ECRITUM_OK) {
+        backend_status = ECRITUM_ERROR_RUNTIME_UNAVAILABLE;
     }
     detach_runtime_thread_if_needed(thread, attached_thread);
 
@@ -4524,7 +4548,7 @@ __attribute__((visibility("default"))) int ecritum_eval_start(
     if (validation != ECRITUM_OK) {
         return fail_with_error(validation, "eval_start", "invalid eval input", out_error);
     }
-    if (!view_equals(language, "clojure")) {
+    if (!view_equals(language, "clojure") && !view_equals(language, "javascript")) {
         return fail_with_error(ECRITUM_ERROR_RUNTIME_UNAVAILABLE, "eval_start", "language is not available in this artifact", out_error);
     }
     if (options_json.len != 0) {
@@ -4536,7 +4560,10 @@ __attribute__((visibility("default"))) int ecritum_eval_start(
     if (work == NULL) {
         return fail_with_error(ECRITUM_ERROR_OUT_OF_MEMORY, "eval_start", "eval work allocation failed", out_error);
     }
-    int copy_status = copy_bytes_as_c_string(source.data, source.len, &work->source);
+    int copy_status = copy_view_as_c_string(language, &work->language);
+    if (copy_status == ECRITUM_OK) {
+        copy_status = copy_bytes_as_c_string(source.data, source.len, &work->source);
+    }
     if (copy_status == ECRITUM_OK) {
         copy_status = copy_view_as_c_string(source_name, &work->source_name);
     }
@@ -4544,6 +4571,7 @@ __attribute__((visibility("default"))) int ecritum_eval_start(
         eval_work_destroy(work);
         return fail_with_error(copy_status, "eval_start", "eval input copy failed", out_error);
     }
+    work->language_len = language.len;
     work->source_len = source.len;
     work->source_name_len = source_name.len;
 
@@ -4581,7 +4609,7 @@ __attribute__((visibility("default"))) int ecritum_eval_start(
     }
     if (runtime_entry->value.runtime.config != NULL
         && runtime_entry->value.runtime.config->languages.count > 0
-        && !string_set_contains(&runtime_entry->value.runtime.config->languages, "clojure")) {
+        && !string_set_contains(&runtime_entry->value.runtime.config->languages, work->language)) {
         if (out_error != NULL) {
             *out_error = create_error_locked(ECRITUM_ERROR_PERMISSION_DENIED, "eval_start", "language is not enabled by runtime configuration");
         }

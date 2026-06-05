@@ -15,6 +15,7 @@
     <junit.version>5.14.1</junit.version>
     <native.maven.plugin.version>1.1.1</native.maven.plugin.version>
     <sci.version>0.12.51</sci.version>
+    <graaljs.version>${graalvm.version}</graaljs.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
 
@@ -36,6 +37,17 @@
       <groupId>org.graalvm.sdk</groupId>
       <artifactId>nativeimage</artifactId>
       <version>${graalvm.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.graalvm.polyglot</groupId>
+      <artifactId>polyglot</artifactId>
+      <version>${graaljs.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.graalvm.polyglot</groupId>
+      <artifactId>js-community</artifactId>
+      <version>${graaljs.version}</version>
+      <type>pom</type>
     </dependency>
     <dependency>
       <groupId>org.babashka</groupId>

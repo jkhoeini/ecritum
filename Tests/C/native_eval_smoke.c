@@ -169,13 +169,13 @@ static void assert_data(ecritum_value_t value, const uint8_t *expected, size_t e
     CHECK(memcmp(actual.data, expected, expected_len) == 0);
 }
 
-static ecritum_value_t eval(ecritum_context_t context, const char *source) {
+static ecritum_value_t eval_language(ecritum_context_t context, const char *language, const char *source, const char *source_name) {
     ecritum_job_t job = 0;
     ecritum_error_t error = 0;
     ecritum_value_t result = 0;
     int state = -1;
 
-    CHECK(ecritum_eval_start(context, view("clojure"), bytes(source), view("native-smoke.clj"), empty_bytes(), &job, &error) == ECRITUM_OK);
+    CHECK(ecritum_eval_start(context, view(language), bytes(source), view(source_name), empty_bytes(), &job, &error) == ECRITUM_OK);
     CHECK(job != 0);
     CHECK(error == 0);
     CHECK(wait_for_terminal_job(job, &state, &error) == ECRITUM_OK);
@@ -200,6 +200,14 @@ static ecritum_value_t eval(ecritum_context_t context, const char *source) {
     CHECK(ecritum_job_destroy(&job, &error) == ECRITUM_OK);
     CHECK(job == 0);
     return result;
+}
+
+static ecritum_value_t eval(ecritum_context_t context, const char *source) {
+    return eval_language(context, "clojure", source, "native-smoke.clj");
+}
+
+static ecritum_value_t eval_js(ecritum_context_t context, const char *source) {
+    return eval_language(context, "javascript", source, "native-smoke.js");
 }
 
 static void expect_failed_eval(ecritum_context_t context, const char *source, const char *source_name, const char *category) {
@@ -227,13 +235,19 @@ static void expect_failed_eval(ecritum_context_t context, const char *source, co
     CHECK(ecritum_job_destroy(&failed_job, &error) == ECRITUM_OK);
 }
 
+static void expect_failed_eval_status_language(ecritum_context_t context, const char *language, const char *source, const char *source_name, int expected_status, const char *category);
+
 static void expect_failed_eval_status(ecritum_context_t context, const char *source, const char *source_name, int expected_status, const char *category) {
+    expect_failed_eval_status_language(context, "clojure", source, source_name, expected_status, category);
+}
+
+static void expect_failed_eval_status_language(ecritum_context_t context, const char *language, const char *source, const char *source_name, int expected_status, const char *category) {
     ecritum_job_t failed_job = 0;
     ecritum_error_t error = 0;
     int state = -1;
     ecritum_value_t failed_value = 99;
 
-    CHECK(ecritum_eval_start(context, view("clojure"), bytes(source), view(source_name), empty_bytes(), &failed_job, &error) == ECRITUM_OK);
+    CHECK(ecritum_eval_start(context, view(language), bytes(source), view(source_name), empty_bytes(), &failed_job, &error) == ECRITUM_OK);
     CHECK(failed_job != 0);
     CHECK(wait_for_terminal_job(failed_job, &state, &error) == ECRITUM_OK);
     CHECK(state == ECRITUM_JOB_FAILED);
@@ -241,7 +255,7 @@ static void expect_failed_eval_status(ecritum_context_t context, const char *sou
     CHECK(failed_value == 0);
     CHECK(error != 0);
     assert_error_field(error, ecritum_error_operation, "eval");
-    assert_error_field(error, ecritum_error_language, "clojure");
+    assert_error_field(error, ecritum_error_language, language);
     assert_error_field(error, ecritum_error_source_name, source_name);
     assert_error_field(error, ecritum_error_category, category);
     ecritum_string_view_t message = {0};
@@ -401,6 +415,34 @@ int main(void) {
     assert_data(host_data, expected_data, sizeof(expected_data));
     CHECK(ecritum_value_destroy(&host_data) == ECRITUM_OK);
 
+    ecritum_value_t js_scalar = eval_js(context, "40 + 2");
+    assert_int(js_scalar, 42);
+    CHECK(ecritum_value_destroy(&js_scalar) == ECRITUM_OK);
+
+    ecritum_value_t js_data = eval_js(context, "new Uint8Array([0, 1, 2, 255])");
+    assert_data(js_data, expected_data, sizeof(expected_data));
+    CHECK(ecritum_value_destroy(&js_data) == ECRITUM_OK);
+
+    ecritum_value_t js_json = eval_js(context, "ecritum.json.writeString({b: 2, a: 1})");
+    assert_string(js_json, "{\"a\":1,\"b\":2}");
+    CHECK(ecritum_value_destroy(&js_json) == ECRITUM_OK);
+
+    ecritum_value_t js_time = eval_js(context, "ecritum.time.formatInstant(ecritum.time.parseInstant('2026-06-05T00:00:00Z'))");
+    assert_string(js_time, "2026-06-05T00:00:00Z");
+    CHECK(ecritum_value_destroy(&js_time) == ECRITUM_OK);
+
+    ecritum_value_t js_host_value = eval_js(context, "ecritum.app.answer()");
+    assert_int(js_host_value, 42);
+    CHECK(ecritum_value_destroy(&js_host_value) == ECRITUM_OK);
+
+    ecritum_value_t js_host_arg_value = eval_js(context, "ecritum.app.add_one(41)");
+    assert_int(js_host_arg_value, 42);
+    CHECK(ecritum_value_destroy(&js_host_arg_value) == ECRITUM_OK);
+
+    expect_failed_eval_status_language(context, "javascript", "ecritum.app.fail()", "callback-source.js", ECRITUM_ERROR_CALLBACK, "callback");
+    expect_failed_eval_status_language(context, "javascript", "Java.type('java.lang.System')", "permission-source.js", ECRITUM_ERROR_PERMISSION_DENIED, "permission");
+    expect_failed_eval_status_language(context, "javascript", "(async function(){ return 42; })()", "promise-source.js", ECRITUM_ERROR_SCRIPT, "runtime");
+
     expect_failed_eval_status(context, "(app/fail)", "callback-source.clj", ECRITUM_ERROR_CALLBACK, "callback");
     expect_eval_start_error(context, view("python"), empty_bytes(), ECRITUM_ERROR_RUNTIME_UNAVAILABLE);
     expect_eval_start_error(context, view("clojure"), bytes("{\"rawSciOption\":true}"), ECRITUM_ERROR_INVALID_ARGUMENT);
@@ -415,6 +457,9 @@ int main(void) {
     );
     CHECK(ecritum_runtime_create(js_only_config, &js_runtime, &error) == ECRITUM_OK);
     CHECK(ecritum_context_create(js_runtime, empty_bytes(), &js_context, &error) == ECRITUM_OK);
+    ecritum_value_t js_only_value = eval_language(js_context, "javascript", "40 + 2", "js-only.js");
+    assert_int(js_only_value, 42);
+    CHECK(ecritum_value_destroy(&js_only_value) == ECRITUM_OK);
     expect_eval_start_error(js_context, view("clojure"), empty_bytes(), ECRITUM_ERROR_PERMISSION_DENIED);
     CHECK(ecritum_context_destroy(&js_context, &error) == ECRITUM_OK);
     CHECK(ecritum_runtime_destroy(&js_runtime, &error) == ECRITUM_OK);

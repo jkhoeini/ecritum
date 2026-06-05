@@ -32,6 +32,7 @@ def spdx_license_expression(license_name):
         "Universal Permissive License, Version 1.0": "UPL-1.0",
         "Eclipse Public License 1.0": "EPL-1.0",
         "Eclipse Public License 2.0": "EPL-2.0",
+        "Unicode/ICU License": "ICU",
     }
     if license_name in (None, "NOASSERTION", "UNKNOWN"):
         return "NOASSERTION"
@@ -76,6 +77,16 @@ if native_pom.exists():
 
 nativeimage_license = pom_license(m2 / "org" / "graalvm" / "sdk" / "nativeimage" / graal_version / f"nativeimage-{graal_version}.pom")
 word_license = pom_license(m2 / "org" / "graalvm" / "sdk" / "word" / graal_version / f"word-{graal_version}.pom")
+polyglot_license = pom_license(m2 / "org" / "graalvm" / "polyglot" / "polyglot" / graal_version / f"polyglot-{graal_version}.pom")
+collections_license = pom_license(m2 / "org" / "graalvm" / "sdk" / "collections" / graal_version / f"collections-{graal_version}.pom")
+js_language_license = pom_license(m2 / "org" / "graalvm" / "js" / "js-language" / graal_version / f"js-language-{graal_version}.pom")
+regex_license = pom_license(m2 / "org" / "graalvm" / "regex" / "regex" / graal_version / f"regex-{graal_version}.pom")
+truffle_api_license = pom_license(m2 / "org" / "graalvm" / "truffle" / "truffle-api" / graal_version / f"truffle-api-{graal_version}.pom")
+icu4j_license = pom_license(m2 / "org" / "graalvm" / "shadowed" / "icu4j" / graal_version / f"icu4j-{graal_version}.pom")
+xz_license = pom_license(m2 / "org" / "graalvm" / "shadowed" / "xz" / graal_version / f"xz-{graal_version}.pom")
+truffle_runtime_license = pom_license(m2 / "org" / "graalvm" / "truffle" / "truffle-runtime" / graal_version / f"truffle-runtime-{graal_version}.pom")
+jniutils_license = pom_license(m2 / "org" / "graalvm" / "sdk" / "jniutils" / graal_version / f"jniutils-{graal_version}.pom")
+truffle_compiler_license = pom_license(m2 / "org" / "graalvm" / "truffle" / "truffle-compiler" / graal_version / f"truffle-compiler-{graal_version}.pom")
 sci_license = pom_license(m2 / "org" / "babashka" / "sci" / "0.12.51" / "sci-0.12.51.pom")
 clojure_license = pom_license(m2 / "org" / "clojure" / "clojure" / "1.10.3" / "clojure-1.10.3.pom")
 spec_alpha_license = pom_license(m2 / "org" / "clojure" / "spec.alpha" / "0.2.194" / "spec.alpha-0.2.194.pom")
@@ -113,6 +124,96 @@ packages = [
         graal_version,
         "build",
         nativeimage_license["name"] if nativeimage_license else None,
+        created,
+        "https://github.com/oracle/graal",
+    ),
+    package(
+        "SPDXRef-Package-GraalVM-Polyglot",
+        "org.graalvm.polyglot:polyglot",
+        graal_version,
+        "shipped",
+        polyglot_license["name"] if polyglot_license else None,
+        created,
+        "https://github.com/oracle/graal",
+    ),
+    package(
+        "SPDXRef-Package-GraalVM-Collections",
+        "org.graalvm.sdk:collections",
+        graal_version,
+        "shipped",
+        collections_license["name"] if collections_license else None,
+        created,
+        "https://github.com/oracle/graal",
+    ),
+    package(
+        "SPDXRef-Package-GraalJS-Language",
+        "org.graalvm.js:js-language",
+        graal_version,
+        "shipped",
+        js_language_license["name"] if js_language_license else None,
+        created,
+        "https://github.com/oracle/graaljs",
+    ),
+    package(
+        "SPDXRef-Package-GraalVM-Regex",
+        "org.graalvm.regex:regex",
+        graal_version,
+        "shipped",
+        regex_license["name"] if regex_license else None,
+        created,
+        "https://github.com/oracle/graal",
+    ),
+    package(
+        "SPDXRef-Package-GraalVM-TruffleAPI",
+        "org.graalvm.truffle:truffle-api",
+        graal_version,
+        "shipped",
+        truffle_api_license["name"] if truffle_api_license else None,
+        created,
+        "https://github.com/oracle/graal",
+    ),
+    package(
+        "SPDXRef-Package-GraalVM-ICU4J",
+        "org.graalvm.shadowed:icu4j",
+        graal_version,
+        "shipped",
+        icu4j_license["name"] if icu4j_license else None,
+        created,
+        "https://github.com/unicode-org/icu",
+    ),
+    package(
+        "SPDXRef-Package-GraalVM-XZ",
+        "org.graalvm.shadowed:xz",
+        graal_version,
+        "shipped",
+        xz_license["name"] if xz_license else None,
+        created,
+        "https://tukaani.org/xz/java.html",
+    ),
+    package(
+        "SPDXRef-Package-GraalVM-TruffleRuntime",
+        "org.graalvm.truffle:truffle-runtime",
+        graal_version,
+        "shipped",
+        truffle_runtime_license["name"] if truffle_runtime_license else None,
+        created,
+        "https://github.com/oracle/graal",
+    ),
+    package(
+        "SPDXRef-Package-GraalVM-JNIUtils",
+        "org.graalvm.sdk:jniutils",
+        graal_version,
+        "shipped",
+        jniutils_license["name"] if jniutils_license else None,
+        created,
+        "https://github.com/oracle/graal",
+    ),
+    package(
+        "SPDXRef-Package-GraalVM-TruffleCompiler",
+        "org.graalvm.truffle:truffle-compiler",
+        graal_version,
+        "shipped",
+        truffle_compiler_license["name"] if truffle_compiler_license else None,
         created,
         "https://github.com/oracle/graal",
     ),

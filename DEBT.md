@@ -19,6 +19,48 @@ not done if it introduced debt without an entry.
 
 ## Active Debt
 
+- ID: ECRITUM-DEBT-0010
+- Source task: M4-002
+- Introduced by: GraalJS smoke path
+- Owner persona: Clean Code and Functional Core Engineer
+- Date: 2026-06-05
+- Impact: JavaScript host callback return values are verified as top-level
+  results, but host-returned proxy arrays/data nested inside a JavaScript object
+  currently normalize as `unsupported JavaScript result type`.
+- Reason accepted: M4-002 is the smoke path for scalar/collection/data eval,
+  host calls, stdlib facades, and deny-by-default security. The public ABI is
+  unchanged, top-level host return values work, and nested host proxy conversion
+  can be fixed by extracting a dedicated JavaScript value codec instead of
+  growing `JavaScriptEvaluator`.
+- Resolve-by phase: M4.5
+- Exit condition: `JavaScriptValueCodec` converts host-returned arrays, objects,
+  and data whether they are returned top-level or nested inside guest-created
+  objects, with Java/native/Swift tests.
+- Removal task: M4.5 JavaScript value-codec cleanup
+- Verification required: `mise exec -- just test-java`,
+  `mise exec -- just test-swift`, and a Clean Code persona review.
+
+- ID: ECRITUM-DEBT-0009
+- Source task: M4-002
+- Introduced by: GraalJS smoke path
+- Owner persona: Release, Licensing, and Distribution Engineer
+- Date: 2026-06-05
+- Impact: Adding GraalJS increases `dist/local/EcritumRuntime.xcframework` to
+  150,960,731 bytes and the private Native Image runtime to 150,818,872 bytes,
+  exceeding ADR-018's initial Core tripwires of 25,000,000 and 20,000,000 bytes.
+- Reason accepted: M4-002 proves the GraalJS embedding, C/Swift dispatch,
+  conformance, security, license inventory, startup, RSS, and first-eval data
+  needed for the artifact classification decision. The resulting artifact is a
+  local smoke artifact, not a release-ready Core artifact.
+- Resolve-by phase: M4.5
+- Exit condition: ADR-018 is revised or a Core/Full split is implemented so
+  `mise exec -- just size` passes for the default release artifact, or GraalJS
+  remains explicitly Full-only.
+- Removal task: M4.5 Core/Full artifact split and budget rebaseline
+- Verification required: `mise exec -- just size`, `mise exec -- just
+  bench-javascript-first-eval`, `mise exec -- just bench-cold-start`,
+  `mise exec -- just bench-idle-rss`, and a documented Core/Full decision.
+
 - ID: ECRITUM-DEBT-0008
 - Source task: M3-003
 - Introduced by: First standard-library facades
