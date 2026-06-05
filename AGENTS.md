@@ -48,6 +48,63 @@ The planned core is a GraalVM Native Image shared library (`.dylib` or `XCFramew
 
 Use `mise trust` once before running project commands on a fresh checkout.
 
+## Team Operating Model
+
+- Treat the assistant as the engineering manager for this project.
+- `TEAM.md` defines the durable team personas. Read it before planning or
+  assigning non-trivial work.
+- `PROJECT.org` is the project-management source of truth. Read it before
+  implementation, update task status as work progresses, and record verification
+  evidence before marking tasks done.
+- `DEBT.md` is the technical-debt ledger. Any accepted shortcut must include
+  owner, date, impact, resolve-by phase, exit condition, removal task, and
+  verification.
+- For each non-trivial task, choose the smallest useful set of personas from
+  `TEAM.md`, create fresh sub-agents for them, and assign each sub-agent a
+  specific `PROJECT.org` task, responsibility, write scope, review duty, and
+  verification plan.
+- Sub-agents must read their assigned task from `PROJECT.org` for context and
+  move it to REVIEW only after implementation, verification, and review evidence
+  exist. Only the engineering manager marks tasks DONE.
+- Keep parallel sub-agent write scopes disjoint. No agent may revert or overwrite
+  another agent's edits unless the engineering manager explicitly assigns that
+  cleanup.
+
+## Planning and Review Workflow
+
+- Research first. Before implementation, read the relevant docs, source, tests,
+  build scripts, and upstream references needed to understand the full picture.
+- Every non-trivial plan must discuss architecture impact, code quality impact,
+  testability, technical debt, security/capability impact, distribution impact,
+  and verification.
+- Keep configuration parsing, permission decisions, value conversion, capability
+  lookup, error classification, and lifecycle state transitions as pure value
+  transformations with table-driven tests where practical.
+- Keep side effects behind named adapters: native runtime, host callback,
+  standard-library capability, clock/random, IO/network/process/env, and Swift
+  executor bridge.
+- Use Claude CLI as an independent reviewer for every meaningful plan and
+  implementation. Run at least one review before implementation and one after
+  implementation. Iterate on the feedback and run one second review after fixes;
+  after that, continue only for blocking findings or record follow-up tasks.
+- In this repo, Claude CLI works without an auth permission check. Skip any
+  Claude auth-check step and call `claude -p` directly.
+- If Claude CLI is unavailable, record the blocker in `PROJECT.org` and use
+  persona sub-agent review as the fallback. Do not silently skip review.
+- If a decision affects public ABI, architecture, security, distribution,
+  runtime support, licensing, or long-term maintenance, write an ADR under
+  `docs/adr/` before implementation.
+- Each plan must include verification commands. Each completed task must record
+  the commands run and their result in `PROJECT.org`.
+- Each language runtime must pass the shared conformance suite before support is
+  claimed.
+- PLAN.org is the technical seed plan. PROJECT.org controls execution. Migrate
+  implementation-critical PLAN.org decisions into ADRs or PROJECT.org tasks
+  before coding against them.
+- Non-trivial means any task that changes more than one file, touches public API
+  or ABI, changes build/test/release/security behavior, adds a dependency,
+  changes runtime support, or creates a user-visible promise.
+
 ## Naming
 
 Ecritum is a coined name inspired by French `ecrit`/`ecriture` and Latin `scriptum`: a written thing, a script, or an inscription. Use the plain ASCII spelling `Ecritum` in package names, symbols, and filenames.

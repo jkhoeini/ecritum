@@ -1,0 +1,1026 @@
+#+title: Ecritum Project
+#+startup: overview
+#+todo: TODO(t) IN-PROGRESS(i) BLOCKED(b) REVIEW(r) DONE(d) CANCELED(c)
+
+* Project Operating Model
+
+PROJECT.org is the source of truth for execution. PLAN.org is the source of truth
+for the technical product plan until its content is migrated into ADRs and
+implementation docs.
+
+** Definition of Done
+
+The project is done when:
+
+- A SwiftPM consumer can add Ecritum and call a bundled scripting runtime without
+  installing GraalVM, a JDK, or language runtimes.
+- The public C ABI uses opaque handles, explicit ownership, explicit errors, and
+  no exceptions across FFI.
+- Swift, C, Java/GraalVM, Native Image, packaging, and clean-machine tests pass.
+- Capability boundaries deny filesystem, network, process, environment,
+  reflection, class loading, and native library loading by default.
+- Permission policy is expressed as versioned objects, not informal flags:
+  filesystem roots, host allowlists, loopback/network policy, command allowlists,
+  env-key allowlists, and resource limits.
+- Every shipped runtime has smoke tests, size measurements, startup measurements,
+  and license inventory.
+- Release artifacts are packaged as an XCFramework or documented equivalent,
+  checksummed for SwiftPM, and validated in a clean macOS consumer app.
+- Public symbols and Swift APIs are documented before stabilization.
+- Accepted technical debt is tracked with owner, expiry condition, and removal
+  task in DEBT.md.
+- Configuration parsing, permission decisions, value conversion, capability
+  lookup, error classification, and lifecycle state transitions are pure value
+  transformations with table-driven tests.
+- Side effects occur only in named adapters: native runtime, host callback,
+  standard-library capability, clock/random, IO/network/process/env, and Swift
+  executor bridge.
+
+Every milestone is done when:
+
+- Tasks are marked DONE with evidence.
+- Required ADRs are accepted before implementation.
+- Claude plan review and post-change review have been run and acted on, or the
+  blocker is recorded.
+- Required persona reviewers have signed off in the milestone notes.
+- Verification commands and results are recorded.
+- Documentation and examples are updated for user-visible behavior.
+- DEBT.md is current.
+- TODO/FIXME/HACK/TEMP/XXX markers introduced by the work are removed or
+  ledgered.
+- ABI symbol changes, license inventory, size, startup, idle RSS, first eval,
+  and clean-consumer impact are checked when relevant.
+
+Every task is done when:
+
+- The assigned sub-agent read this task, PLAN.org, TEAM.md, and AGENTS.md.
+- The sub-agent researched the relevant code/docs/tooling before planning.
+- The plan includes impacted architecture, code quality impact, tests, and
+  verification commands.
+- Claude feedback was requested before implementation and after implementation.
+- ADRs were written first for decisions that affect long-term architecture,
+  public ABI, security, distribution, runtime support, or user promises.
+- Implementation is complete, verified, reviewed, and recorded in this file.
+- No direct filesystem, network, process, environment, clock, random, or host
+  callback side effect bypasses the named adapter layer.
+- Cross-boundary data uses `EcritumValue` or a documented configuration schema.
+
+Required verification footer for completed task notes:
+
+#+begin_src markdown
+## Verification
+
+Layers tested: Unit, Contract, Integration, Packaging, Release, None
+Commands run:
+- `mise exec -- just test` -> exit 0, N tests passed
+New tests added:
+- path/test_name
+Negative paths tested:
+- denied permission/error/null/lifecycle case
+Size impact:
+- N/A | before X MB, after Y MB, delta Z
+Sanitizers:
+- clean | not run: reason
+Not verified:
+- reason and owner/follow-up
+#+end_src
+
+** Sub-Agent Work Protocol
+
+For each task, the engineering manager assigns:
+
+- Task ID and exact PROJECT.org heading.
+- Lead persona and reviewer personas from TEAM.md.
+- Write scope and files or directories owned by the sub-agent.
+- Research checklist.
+- ADR requirements.
+- Implementation constraints.
+- Verification plan.
+- Evidence expected before marking DONE.
+- Relevant open DEBT.md entries owned by the lead or reviewer personas.
+
+Sub-agents must not overwrite other agents' edits. They should coordinate through
+PROJECT.org task notes and keep write scopes disjoint when working in parallel.
+The engineering manager must check DEBT.md for persona-owned debt before
+assignment.
+
+Each sub-agent's final report must include the required verification footer.
+
+** Claude Review Protocol
+
+Claude CLI is used as an independent read-only reviewer.
+
+- Plan consult: before implementation for non-trivial work.
+- Challenge review: after a plan but before implementation when failure modes are
+  meaningful.
+- Diff review: after implementation.
+- Second review: after fixes from the first review.
+
+If Claude CLI is unavailable, record the blocker in the task and use persona
+sub-agent review as the fallback. Do not silently skip review.
+
+Review record format:
+
+- Reviewer:
+- Mode: plan consult, challenge, diff review, or second review.
+- Input: task ID, files, diff, ADR, or plan reviewed.
+- Findings:
+- Changes made:
+- Remaining issues:
+- Engineering-manager decision:
+
+Review loop exit rule:
+
+- Run at least plan consult and diff review for non-trivial implementation.
+- Run one second review after fixes.
+- If the second review raises more issues, the engineering manager either opens
+  follow-up tasks, continues the loop for blocking issues, or records why the
+  issue is accepted.
+- Do not run unbounded review loops without a new blocking finding.
+
+Non-trivial means any task that changes more than one file, touches public API or
+ABI, changes build/test/release/security behavior, adds a dependency, changes
+runtime support, or creates a user-visible promise.
+
+** Task State Rules
+
+- TODO: task is defined but not actively owned.
+- IN-PROGRESS: engineering manager assigned an owner, write scope, research
+  checklist, review plan, and verification plan.
+- BLOCKED: assignee records blocker, owner, attempted fixes, and next decision
+  needed. The engineering manager resolves scope, dependency, or sequencing.
+- REVIEW: assignee completed implementation, verification footer, and review
+  evidence. Assignee may move a task to REVIEW, not DONE.
+- DONE: only the engineering manager marks DONE after reviewing evidence,
+  feedback, docs, tests, debt, and ADR requirements.
+- CANCELED: engineering manager records why the task no longer serves the
+  roadmap.
+
+** Dependency and Scope Rules
+
+- Use exact task IDs in `Depends on:` whenever possible. Use milestone-level
+  dependencies only when all milestone outputs are required.
+- Parallel sub-agents get disjoint write scopes. If two tasks need the same
+  directory, the engineering manager assigns file-level ownership or sequences
+  the tasks.
+- A single sub-agent may cover multiple reviewer personas for low-risk tasks.
+  Spawn separate persona agents when the risks are independent enough to justify
+  parallel review.
+- Research checklists are minimums. Sub-agents must extend them when local
+  context shows missing sources, tests, docs, or upstream references.
+
+** Blocker and Spike Policy
+
+- Spikes must have a time box, success criteria, stop criteria, and artifact
+  expected before implementation starts.
+- When a spike fails, the engineering manager chooses one: harden an alternative,
+  defer the feature, split the artifact, or cancel the task.
+- A blocked task must name the decision needed and the persona accountable for
+  resolving it.
+
+** Escalation Policy
+
+- If two or more reviewer personas challenge an engineering-manager decision
+  with concrete evidence, record the dissent in the task notes.
+- Run a Claude challenge review focused on the disagreement.
+- The engineering manager either changes the decision, records why the risk is
+  accepted, or asks the user for the project/product call.
+- User-visible scope, licensing risk, security risk, and public ABI commitments
+  should be escalated to the user when the evidence remains mixed.
+
+** PLAN.org Migration Rule
+
+PLAN.org remains the technical seed plan. PROJECT.org controls execution.
+When a PLAN.org decision becomes implementation-critical, migrate it into an ADR
+or a PROJECT.org task before coding against it.
+
+** ADR Policy
+
+Create ADRs under =docs/adr/= before implementing decisions that affect:
+
+- Public C ABI shape or ownership.
+- Swift API shape or concurrency model.
+- Native Image architecture or language runtime embedding.
+- Permission, sandbox, resource limit, or threat-model behavior.
+- Distribution format, artifact contents, signing, or SwiftPM binary target.
+- License obligations or dependency inclusion gates.
+- Support claims for Clojure, JavaScript, Lua, Python, Ruby, or JVM bytecode.
+- Java and host interop exposure.
+- Resource limits, cancellation, teardown, and recovery behavior.
+- ABI versioning and compatibility policy.
+- Vulnerability response, SBOM, CVE tracking, and artifact revocation.
+
+ADR template:
+
+- Status.
+- Context.
+- Decision.
+- Consequences.
+- Alternatives considered.
+- Verification plan.
+- Reviewers.
+
+** Security Model Baseline
+
+Ecritum is an in-process Native Image library. It does not provide process-level
+memory isolation from the host app. The security model is cooperative controls
+plus defense-in-depth:
+
+- Graal/Truffle context configuration must deny unrestricted host access,
+  native access, unrestricted IO, process creation, and `allowAllAccess`.
+- Ecritum standard libraries must enforce the same policy object as the C/Swift
+  host API.
+- Host callbacks must enforce lifetime, executor, reentrancy, queue limit, and
+  error conversion rules.
+- Context teardown semantics must be defined for timeout, cancellation, OOM-like
+  failures, recursive stack blowup, host callback failure, and policy violation.
+
+** Scriptability Rules
+
+- Every `just` task does one job. Rollup tasks may call smaller independently
+  runnable tasks.
+- Tools that produce data should support structured output, preferably JSON.
+  Diagnostics go to stderr.
+- No interactive prompts in CI/script mode; use arguments, environment variables,
+  or config files.
+- Scripts expose `--help` with purpose, arguments, environment variables, stdout,
+  stderr, exit codes, and outputs.
+- Reusable scripts accept paths as parameters instead of hard-coding Ecritum
+  checkout paths.
+- Public ABI stability is enforced by a checked-in symbol manifest and
+  `just check-abi`.
+- Build artifacts are inspectable with `just inspect` or `just artifact-info`:
+  symbols, linked dylibs, bundled resources, size, checksum, and runtime list.
+
+* Roadmap
+
+** Milestone M0: Team and Project Control Plane
+
+Goal: create the execution system that future agents use.
+
+Lead: Engineering Manager.
+Required reviewers: Architecture, Tests, Technical Debt, Unix, Security, Claude.
+
+Definition of done:
+
+- TEAM.md defines personas, responsibilities, and assignment matrix.
+- PROJECT.org defines roadmap, milestones, task protocol, DoD, ADR policy, and
+  current task list.
+- DEBT.md exists and defines the debt ledger format.
+- AGENTS.md instructs future agents and sub-agents to use TEAM.md and
+  PROJECT.org.
+- Claude review has been run iteratively or its blocker is recorded.
+- `mise exec -- just test` passes.
+
+*** DONE PM-000 Create durable team and project management docs
+
+Lead persona: Engineering Manager.
+Assigned to: Engineering Manager.
+Reviewer personas: Architecture, Clean Code, Technical Debt, Tests, Unix,
+Security, Swift DX, GraalVM Runtime, Release.
+Write scope: TEAM.md, PROJECT.org, AGENTS.md, DEBT.md.
+
+Research:
+
+- Read README.md.
+- Read PLAN.org.
+- Read AGENTS.md.
+- Read TEAM.md once drafted.
+- Load Claude and Jujutsu instructions.
+
+Plan:
+
+- Draft TEAM.md.
+- Draft PROJECT.org from PLAN.org.
+- Update AGENTS.md with the operating model.
+- Get sub-agent persona feedback.
+- Get Claude feedback, fix issues, and run a second review.
+- Run project checks.
+
+Verification:
+
+- `mise exec -- just test`
+- `jj diff --stat`
+- Claude review output recorded in task notes.
+
+Definition of done:
+
+- Files exist and contain actionable process, not only intent.
+- Future agents can identify personas, task source, task lifecycle, review
+  protocol, ADR triggers, and verification expectations.
+- The technical-debt ledger, functional-core boundaries, measurable gates, and
+  phase-gate checks are explicit.
+- Feedback from reviewers is incorporated or explicitly rejected with rationale.
+
+Notes:
+
+- Created by the initial engineering manager setup task.
+
+** Milestone M1: Scaffolding and First Native Symbol
+
+Goal: prove SwiftPM can call a prebuilt Native Image shared library through the C
+module.
+
+Lead: Architecture Expert.
+Required reviewers: Swift DX, GraalVM Runtime, Tests, Release, Unix.
+
+Definition of done:
+
+- Package.swift, Sources/Ecritum, Sources/CEcritum, native/pom.xml, scripts, and
+  Tests are scaffolded.
+- Native Image exports an =ecritum_version= C symbol.
+- XCFramework is assembled for macOS arm64.
+- Swift test calls =Ecritum.version= through the C module.
+- C host smoke test calls the same symbol directly.
+- Minimal SwiftHost and CHost examples exist or are represented by smoke-test
+  targets.
+- Artifact inspection, SwiftPM checksum generation, signing/notarization plan,
+  reproducibility policy, and clean-machine `dlopen + ecritum_version` smoke are
+  in place before later runtime work.
+- Build and test commands are represented as focused `just` tasks.
+- Clean checkout setup is documented.
+- CI, license, size, startup, and ABI manifest baselines exist.
+- DEBT.md records or rejects all placeholder scaffolding.
+
+*** TODO M1-001 Write ADR for package layout and binary target strategy
+
+Lead persona: Architecture Expert.
+Reviewer personas: Swift DX, Release, Unix, Tests.
+Write scope: docs/adr/.
+
+Definition of done:
+
+- ADR accepts Swift target + C target + binary target layout.
+- ADR explains why consumers do not run Native Image through SwiftPM.
+- ADR defines contributor flow with local `.binaryTarget(path:)`, release flow
+  with `.binaryTarget(url:checksum:)`, and how `swift test` works after
+  `just xcframework`.
+- Verification plan covers local placeholder artifact and release artifact.
+
+*** TODO M1-002 Scaffold SwiftPM and C module
+
+Lead persona: Swift DX.
+Reviewer personas: Architecture, Clean Code, Tests.
+Depends on: M1-001.
+Write scope: Package.swift, Sources/, Tests/.
+
+Definition of done:
+
+- Swift package builds.
+- Public Swift API is minimal and documented.
+- C header is included through CEcritum.
+- Unit test proves the wrapper path.
+
+*** TODO M1-003 Scaffold native Maven project and version export
+
+Lead persona: GraalVM Runtime.
+Reviewer personas: Architecture, Tests, Unix.
+Depends on: M1-001.
+Write scope: native/.
+
+Definition of done:
+
+- Maven build creates the Java artifact.
+- Native Image can produce a shared library exporting =ecritum_version=.
+- Native build failure modes are documented.
+
+*** TODO M1-004 Build XCFramework assembly path
+
+Lead persona: Release.
+Reviewer personas: Unix, Tests, Swift DX.
+Depends on: M1-002, M1-003.
+Write scope: scripts/, justfile, dist/.
+
+Definition of done:
+
+- `just xcframework` assembles the local artifact.
+- Script output is stable and automation-friendly.
+- SwiftPM test consumes the assembled artifact.
+- Artifact inspection reports symbols, linked dylibs, bundled resources, size,
+  checksum, and runtime list.
+
+*** TODO M1-005 Establish CI and release gate baselines
+
+Lead persona: Release.
+Reviewer personas: Tests, Unix, Technical Debt.
+Depends on: M1-002, M1-003.
+Write scope: justfile, scripts/, docs/.
+
+Definition of done:
+
+- Initial CI-ready `just test` path is documented.
+- `just check-abi`, `just inspect`, and `just size` have baseline behavior.
+- License inventory command exists even if no shipped dependencies are present.
+- SBOM format is chosen: SPDX or CycloneDX.
+- Unknown shipped licenses block release gates.
+- Reproducibility policy is documented: byte-identical zip or rebuildable
+  provenance, pinned tool/dependency digests, normalized zip metadata,
+  slice/resource/symbol manifests, and checksum generation.
+- Clean-machine `dlopen + ecritum_version` smoke is represented in the task
+  plan.
+- C host smoke test is represented in the task plan.
+- Java runtime unit tests are represented in the task plan once native sources
+  exist.
+
+*** TODO M1-006 Add minimal Swift and C host examples
+
+Lead persona: Swift DX.
+Reviewer personas: Tests, Release, Unix.
+Depends on: M1-002, M1-003.
+Write scope: Examples/, Tests/, justfile.
+
+Definition of done:
+
+- SwiftHost proves the SwiftPM wrapper can call the native symbol.
+- CHost proves the stable C ABI can be consumed directly.
+- Examples are runnable through noninteractive `just` tasks.
+
+*** TODO M1-007 Define initial performance and artifact budgets
+
+Lead persona: Release.
+Reviewer personas: Tests, GraalVM Runtime, Technical Debt.
+Depends on: M1-004, M1-005.
+Write scope: docs/, PROJECT.org.
+
+Definition of done:
+
+- Numeric gates exist for binary size, cold start, first eval, idle RSS, and
+  dependency/license delta.
+- Gates define Core vs Full artifact decision criteria before Python/Ruby work.
+- Gate measurement commands are represented by `just` tasks.
+
+** Milestone M2: Stable C ABI and Swift Wrapper Core
+
+Goal: implement runtime/context/value/error/host-function foundations for one
+language backend.
+
+Lead: Architecture Expert.
+Required reviewers: Clean Code, Tests, Security, Swift DX, GraalVM Runtime.
+
+Definition of done:
+
+- ADRs cover C ABI ownership, lifecycle, errors, threading, and async/job model.
+- Runtime/context creation and destruction are implemented.
+- Value and error conversion work across C, Swift, and Java.
+- Host function registration has explicit lifetime ownership.
+- A language-independent conformance suite exists for values, errors,
+  permissions, timeouts, lifecycle, and host calls.
+- Versioned permission policy objects replace informal permission flags.
+- Leak and lifecycle tests pass.
+
+*** TODO M2-001 ADR for C ABI ownership, lifecycle, and errors
+
+Lead persona: Architecture Expert.
+Reviewer personas: Clean Code, Tests, Security, Swift DX.
+Write scope: docs/adr/.
+
+Definition of done:
+
+- Opaque handles, allocation/free rules, string ownership, and error ownership are
+  specified before code.
+- No exception crosses FFI.
+- Verification includes C and Swift lifecycle tests.
+
+*** TODO M2-001A ADR for Swift API and permission policy shape
+
+Lead persona: Swift DX.
+Reviewer personas: Architecture, Security, Clean Code, Tests.
+Depends on: M2-001.
+Write scope: docs/adr/, README.md, PLAN.org.
+
+Definition of done:
+
+- ADR resolves README.md and PLAN.org examples into one canonical Swift
+  permission API.
+- ADR rejects informal `OptionSet` permissions for public policy and maps Swift
+  ergonomics onto versioned policy objects.
+- ADR defines `EcritumScript`, namespace registration, `close()`/`deinit`
+  semantics, and whether `EcritumLanguage` is a closed enum or extensible type.
+- README.md and PLAN.org examples are updated or explicitly marked as sketches.
+
+*** TODO M2-002 Implement value and error model
+
+Lead persona: Clean Code.
+Reviewer personas: Architecture, Tests, Swift DX.
+Depends on: M2-001.
+Write scope: Sources/, native/, Tests/.
+
+Definition of done:
+
+- Null, bool, int, double, string, data, array, and object conversions are tested.
+- Error code/message/source/stack data is represented without language leaks.
+- Side effects are isolated to FFI adapters.
+
+*** TODO M2-003 Implement runtime/context lifecycle
+
+Lead persona: Architecture Expert.
+Reviewer personas: GraalVM Runtime, Tests, Security.
+Depends on: M2-001.
+Write scope: Sources/, native/, Tests/.
+
+Definition of done:
+
+- Create/destroy paths are deterministic and idempotent where specified.
+- Thread attachment rules are documented.
+- Leak tests or equivalent lifecycle checks run in CI-ready commands.
+
+*** TODO M2-004 Implement host function registration
+
+Lead persona: Architecture Expert.
+Reviewer personas: Clean Code, Security, Tests, Swift DX.
+Depends on: M2-002, M2-003, M2-007.
+Write scope: Sources/, native/, Tests/.
+
+Definition of done:
+
+- Function names are validated.
+- user_data ownership and cleanup are explicit.
+- Swift callbacks hop to the correct executor when needed.
+- Tests cover callback success, callback error, and callback lifetime.
+
+*** TODO M2-005 Implement policy/config parsing core
+
+Lead persona: Security.
+Reviewer personas: Clean Code, Tests, Architecture, Swift DX.
+Depends on: M2-001, M2-001A, M2-002.
+Write scope: Sources/, native/, Tests/.
+
+Definition of done:
+
+- Policy schema is versioned and documented.
+- Filesystem roots, network rules, process command allowlists, env-key
+  allowlists, and resource limits parse as pure data.
+- Path canonicalization and symlink handling are specified before use.
+- Denied-by-default tests exist before language runtimes rely on the policy.
+
+*** TODO M2-006 Create shared conformance suite
+
+Lead persona: Tests.
+Reviewer personas: Clean Code, Security, Unix.
+Depends on: M2-002, M2-005.
+Write scope: Tests/, scripts/, justfile.
+
+Definition of done:
+
+- Suite implements the authoritative cases listed in the Cross-Language
+  Conformance Suite section.
+- Suite can run against each language provider through the same contract.
+- Output is scriptable and CI-friendly.
+
+*** TODO M2-007 ADR for async, cancellation, and teardown
+
+Lead persona: Architecture Expert.
+Reviewer personas: Security, Tests, Swift DX, GraalVM Runtime.
+Depends on: M2-001.
+Write scope: docs/adr/.
+
+Definition of done:
+
+- ADR defines job handles, timeout behavior, cancellation, teardown after
+  failure, callback reentrancy, executor hopping, and deadlock prevention.
+- Verification plan includes recursion, large allocation, timeout,
+  cancellation, and callback failure tests.
+
+** Milestone M2.5: Sandbox Hardening Gate
+
+Goal: define and test the security boundary before exposing Clojure to users.
+
+Lead: Security.
+Required reviewers: Architecture, Tests, GraalVM Runtime, Clean Code.
+
+Definition of done:
+
+- ADR covers sandbox enforcement architecture and in-process limitations.
+- Forbidden Polyglot settings are rejected by tests or static checks.
+- C ABI functions handle nulls, invalid handles, use-after-destroy,
+  double-destroy, oversized inputs, and concurrent calls safely.
+- Fuzz targets or equivalent parser abuse tests exist for C ABI/value/config
+  parsing.
+- Threat model and vulnerability-response tasks are recorded.
+
+*** TODO M2.5-001 ADR for sandbox enforcement architecture
+
+Lead persona: Security.
+Reviewer personas: Architecture, GraalVM Runtime, Tests.
+Depends on: M2-005, M2-007.
+Write scope: docs/adr/.
+
+Definition of done:
+
+- ADR documents stdlib checks, Polyglot API controls, macOS sandbox assumptions,
+  defense-in-depth layers, and in-process memory isolation limits.
+- ADR rejects `allowAllAccess`, unrestricted host access, native access,
+  unrestricted IO, and process creation by default.
+
+*** TODO M2.5-002 Add security abuse-test baseline
+
+Lead persona: Tests.
+Reviewer personas: Security, Unix, Architecture.
+Depends on: M2.5-001.
+Write scope: Tests/, scripts/, justfile.
+
+Definition of done:
+
+- Negative tests cover filesystem, network, process, env, reflection, class
+  loading, native loading, unrestricted Java lookup, invalid handles, and
+  oversized inputs.
+- Hardened-runtime, SBOM, and CVE tracking requirements are recorded for release.
+
+** Milestone M3: Clojure First Runtime
+
+Goal: ship first-class Clojure scripting through SCI with Babashka-compatible
+behavior where explicitly supported.
+
+Lead: GraalVM Runtime.
+Required reviewers: Architecture, Security, Tests, Clean Code, Swift DX, Release.
+
+Definition of done:
+
+- ADR covers SCI embedding and supported namespace set.
+- Clojure eval returns cross-language values.
+- Scripts can call registered host functions.
+- Permission-gated filesystem/time/json/http wrappers have tests.
+- Native Image build and Swift smoke tests pass.
+- The shared conformance suite passes for Clojure.
+- Babashka compatibility deltas are documented.
+
+*** TODO M3-001 ADR for SCI and Babashka compatibility scope
+
+Lead persona: GraalVM Runtime.
+Reviewer personas: Architecture, Security, Tests, Release.
+Write scope: docs/adr/.
+
+Definition of done:
+
+- Supported namespaces and non-goals are explicit.
+- Arbitrary classpath and Maven loading are rejected for v0.
+- Verification plan includes native-image smoke tests.
+
+*** TODO M3-002 Implement Clojure eval and host calls
+
+Lead persona: GraalVM Runtime.
+Reviewer personas: Architecture, Clean Code, Tests, Security, Release.
+Depends on: M3-001, M2-006, M2.5-002.
+Write scope: native/, Sources/, Tests/.
+
+Definition of done:
+
+- Eval scalar/object/array smoke tests pass from Swift.
+- Script-to-host and host-return-to-script tests pass.
+- Language errors include source names and useful stack data.
+
+*** TODO M3-003 Implement first standard-library facades
+
+Lead persona: Security.
+Reviewer personas: GraalVM Runtime, Clean Code, Tests, Unix.
+Depends on: M3-002.
+Write scope: native/, Tests/, docs/.
+
+Definition of done:
+
+- Filesystem is denied by default and allowed only under configured roots.
+- Time/json/http behavior has deterministic tests.
+- Permission errors are explicit and documented.
+
+** Milestone M4: JavaScript Runtime
+
+Goal: add GraalJS after the Clojure path proves the architecture.
+
+Lead: GraalVM Runtime.
+Required reviewers: Security, Tests, Architecture, Swift DX, Release.
+
+Definition of done:
+
+- ADR defines JavaScript support and Node.js non-goals.
+- GraalJS smoke tests pass from Swift.
+- `ecritum` global and host calls work.
+- Size and startup deltas are recorded.
+- The shared conformance suite passes for JavaScript.
+
+*** TODO M4-001 ADR for JavaScript support scope
+
+Lead persona: GraalVM Runtime.
+Reviewer personas: Architecture, Security, Swift DX, Release.
+Write scope: docs/adr/.
+
+Definition of done:
+
+- Modern ECMAScript target is stated.
+- Node compatibility and native npm modules are non-goals for v0.
+- fetch/filesystem behavior is permission-gated through Ecritum APIs.
+
+*** TODO M4-002 Implement GraalJS smoke path
+
+Lead persona: GraalVM Runtime.
+Reviewer personas: Tests, Security, Clean Code, Release.
+Depends on: M4-001, M2-006, M2.5-002.
+Write scope: native/, Sources/, Tests/.
+
+Definition of done:
+
+- Scalar/object/array eval passes.
+- Host callbacks pass.
+- Permission denial behavior matches Clojure where applicable.
+- Size/startup numbers are recorded.
+
+** Milestone M4.5: ABI Freeze and Packaged App Smoke
+
+Goal: freeze the first public ABI candidate after Clojure and JavaScript prove
+the runtime model.
+
+Lead: Architecture Expert.
+Required reviewers: Swift DX, Release, Tests, Security.
+
+Definition of done:
+
+- ABI versioning and compatibility ADR is accepted.
+- Public C symbol manifest is checked in and reviewed.
+- Public C symbols and Swift APIs are documented.
+- ThreadSanitizer, leak checks, and lifecycle stress tests pass where practical.
+- A packaged macOS app smoke test loads the runtime without external runtimes.
+
+*** TODO M4.5-001 ADR for ABI versioning and freeze policy
+
+Lead persona: Architecture Expert.
+Reviewer personas: Swift DX, Release, Tests.
+Depends on: M3-002, M4-002.
+Write scope: docs/adr/.
+
+Definition of done:
+
+- ADR defines symbol naming, version checks, compatibility policy, deprecation,
+  and breaking-change process.
+- `just check-abi` is the verification path.
+
+*** TODO M4.5-002 Build packaged macOS smoke app
+
+Lead persona: Swift DX.
+Reviewer personas: Release, Tests, Security.
+Depends on: M4.5-001.
+Write scope: Examples/, Tests/, scripts/.
+
+Definition of done:
+
+- Packaged app loads the runtime and runs Clojure plus JavaScript smoke tests.
+- Test environment does not rely on GraalVM, JDK, Node, Clojure, Python, Ruby, or
+  Lua installs.
+
+** Milestone M5: Lua Feasibility and Runtime Decision
+
+Goal: decide whether Lua ships in the default artifact through LuaJ or another
+implementation.
+
+Lead: GraalVM Runtime.
+Required reviewers: Architecture, Tests, Security, Release.
+
+Definition of done:
+
+- ADR compares LuaJ, Rembulan, Cobalt, and separate native Lua options.
+- Native Image feasibility is tested.
+- If accepted, Lua smoke tests pass and size delta is recorded.
+- If rejected or deferred, the public roadmap and docs avoid false support
+  claims.
+- Spike code is hardened with tests or removed.
+
+*** TODO M5-001 Spike LuaJ in Native Image
+
+Lead persona: GraalVM Runtime.
+Reviewer personas: Tests, Security, Release.
+Write scope: native/, Tests/, docs/adr/.
+
+Definition of done:
+
+- LuaJ compiles into the shared library or failure is documented with evidence.
+- Smoke tests cover eval, values, host calls, errors, timeout, and permissions.
+- ADR decides default artifact inclusion or deferral.
+
+** Milestone M6: Python and Ruby Gates
+
+Goal: test whether GraalPy and TruffleRuby are practical for the default
+artifact or should become optional/full artifacts.
+
+Lead: GraalVM Runtime.
+Required reviewers: Release, Tests, Security, Architecture.
+
+Definition of done:
+
+- Separate ADRs cover GraalPy and TruffleRuby inclusion gates.
+- Native Image builds, resource packaging, size, startup, and license data are
+  measured.
+- Default artifact policy is decided before support is claimed.
+- Spike code is hardened with tests or removed.
+
+*** TODO M6-001 Gate GraalPy inclusion
+
+Lead persona: GraalVM Runtime.
+Reviewer personas: Release, Security, Tests.
+Write scope: native/, Tests/, docs/adr/.
+
+Definition of done:
+
+- Python stdlib packaging is proven or rejected.
+- Pure-Python package loading policy is documented.
+- Native wheels are explicitly non-goal for v0.
+
+*** TODO M6-002 Gate TruffleRuby inclusion
+
+Lead persona: GraalVM Runtime.
+Reviewer personas: Release, Security, Tests.
+Write scope: native/, Tests/, docs/adr/.
+
+Definition of done:
+
+- Ruby stdlib packaging is proven or rejected.
+- RubyGems/native extension policy is documented.
+- License and artifact-size impact are recorded.
+
+** Milestone M7: Distribution Hardening
+
+Goal: make release artifacts trustworthy for SwiftPM consumers.
+
+Lead: Release.
+Required reviewers: Swift DX, Tests, Unix, Security, GraalVM Runtime.
+
+Definition of done:
+
+- macOS arm64 and x86_64 slices are built or documented as phased support.
+- XCFramework is assembled, signed when required, zipped, and checksummed.
+- License report and THIRD_PARTY_NOTICES.md are generated.
+- Clean macOS consumer app runs without external runtimes.
+- Size/startup/memory budget report is recorded.
+
+*** TODO M7-001 Build release artifact pipeline
+
+Lead persona: Release.
+Reviewer personas: Unix, Tests, Swift DX.
+Write scope: scripts/, justfile, docs/.
+
+Definition of done:
+
+- Packaging commands are reproducible.
+- Checksums are generated for SwiftPM.
+- Artifact contents are inspectable and documented.
+
+*** TODO M7-002 Clean-machine consumer validation
+
+Lead persona: Tests.
+Reviewer personas: Release, Swift DX, Security.
+Write scope: Examples/, Tests/, scripts/, docs/.
+
+Definition of done:
+
+- Consumer app builds and runs on a clean macOS environment.
+- No GraalVM/JDK/language runtime install is required.
+- Failures produce actionable diagnostics.
+
+*** TODO M7-003 License inventory and notices
+
+Lead persona: Release.
+Reviewer personas: Technical Debt, GraalVM Runtime, Security.
+Write scope: docs/, scripts/, THIRD_PARTY_NOTICES.md.
+
+Definition of done:
+
+- Shipped runtime dependencies are separated from build-only tools.
+- License obligations are documented with exact versions.
+- Release is blocked if licenses are unknown.
+
+* ADR Backlog
+
+** TODO ADR-001 SwiftPM binary target and package layout
+Output of: M1-001.
+** TODO ADR-002 C ABI ownership, lifecycle, strings, and errors
+Output of: M2-001.
+** TODO ADR-003 Runtime/context concurrency and async job model
+Output of: M2-007.
+** TODO ADR-004 Permission model and untrusted script threat model
+Output of: M2.5-001.
+** TODO ADR-005 SCI/Babashka compatibility scope
+Output of: M3-001.
+** TODO ADR-006 JavaScript support scope and Node.js non-goals
+Output of: M4-001.
+** TODO ADR-007 Lua runtime choice and default artifact policy
+Output of: M5-001.
+** TODO ADR-008 GraalPy inclusion gate and artifact policy
+Output of: M6-001.
+** TODO ADR-009 TruffleRuby inclusion gate and artifact policy
+Output of: M6-002.
+** TODO ADR-010 XCFramework release, signing, and checksum policy
+Output of: M7-001.
+** TODO ADR-011 License inventory and redistribution policy
+Output of: M7-003.
+** TODO ADR-012 ABI versioning and compatibility policy
+Output of: M4.5-001.
+** TODO ADR-013 Java and host interop exposure policy
+Output of: M2.5-001.
+** TODO ADR-014 Resource limits, cancellation, teardown, and recovery
+Output of: M2-007.
+** TODO ADR-015 Vulnerability response, SBOM, CVE tracking, and revocation
+Output of: M2.5-002 and M7-003.
+** TODO ADR-016 Swift API and permission policy shape
+Output of: M2-001A.
+** TODO ADR-017 Artifact reproducibility, signing, and checksum policy
+Output of: M1-004, M1-005, and M7-001.
+** TODO ADR-018 Performance and artifact budget policy
+Output of: M1-007.
+
+* Test Pyramid
+
+- Unit: Java runtime units, Swift value/error/permission mapping, C ABI
+  argument/value/error lifecycle tests.
+- Contract: every exported C symbol has signature, ownership, null/error-path,
+  invalid-handle, and destroy/free coverage.
+- Integration: real native library, host callback round trips, eval/value
+  conversion, context lifecycle, timeout/cancellation, and permission-denied
+  paths.
+- Language smoke matrix: each supported language proves scalar/object eval, host
+  call in/out, structured script error, timeout, filesystem denied, and
+  filesystem allowed-root.
+- Packaging: SwiftPM consumer app, clean macOS machine with no GraalVM/JDK or
+  language runtimes, signed app loads framework.
+- Release gates: size, checksum reproducibility, license report, sanitizer jobs,
+  cold start, first eval, and idle memory baseline.
+
+* Cross-Language Conformance Suite
+
+The conformance suite starts in M2 and every language runtime must pass it before
+support is claimed.
+
+Required cases:
+
+- Eval scalar, array, and object values.
+- Script calls host function.
+- Host function returns value to script.
+- Script error converts to structured Ecritum error.
+- Timeout cancels long-running script.
+- Filesystem, network, process, environment, reflection, class loading, native
+  library loading, and unrestricted Java lookup are denied by default.
+- Allowed filesystem root works only inside the configured root.
+- Lifecycle create/destroy paths do not leak at the C or Swift layer.
+- Public C allocations have matching release coverage.
+
+* Phase Gate Checklist
+
+Every milestone exit records:
+
+- `mise exec -- just test`
+- Relevant C-host tests.
+- Relevant Swift tests.
+- Relevant native/runtime tests.
+- ABI symbol diff when public C symbols changed.
+- License inventory delta.
+- Binary size, cold start, first eval, idle RSS, and dependency delta.
+- Clean consumer impact.
+- DEBT.md update.
+- Claude plan consult, diff review, and one second review after fixes when fixes
+  were required.
+- Accepted follow-up tasks for any non-blocking second-review findings.
+
+* Review Log
+
+** TODO Review round for PM-000
+
+- Sub-agent persona feedback: architecture, clean code, technical debt, tests,
+  Unix, and security feedback received and incorporated.
+- Claude review round 1: found missing state transitions, blocker process,
+  review format, review exit criteria, dependency precision, PLAN.org migration
+  rule, persona overuse guidance, and duplicate debt-ledger source.
+- Fixes from round 1: added task state rules, blocker/spike policy, dependency
+  and scope rules, PLAN.org migration rule, Claude review record format,
+  review-loop exit rule, DEBT.md as the single debt ledger, security baseline,
+  scriptability rules, conformance suite, and phase gates.
+- Claude review round 2: found DEBT source-task gap, PM-000 missing assignee,
+  REVIEW criteria mismatch, conformance-suite duplication, ADR backlog missing
+  task links, TEAM.md missing Claude fallback, undefined non-trivial threshold,
+  single-select verification layer, DEBT ownership assignment gap, implicit Java
+  test ownership, and phase-gate wording mismatch.
+- Swift DX review: required canonical Swift API/policy ADR, local-vs-release
+  binary target flow in ADR-001, callback concurrency before host registration,
+  earlier Swift/C examples, and Swift DX review on policy/config.
+- Release review: required M1 artifact inspection, SwiftPM checksum,
+  signing/notarization plan, reproducibility policy, license/SBOM tooling,
+  clean-machine `dlopen + ecritum_version` smoke, and numeric artifact budgets.
+- Fixes after round 2: all listed issues incorporated.
+- Final targeted Claude review: no blocking findings.
+- Project verification: `mise exec -- just test` -> exit 0; source targets are
+  not scaffolded yet.
+
+## Verification
+
+Layers tested: Unit, None
+Commands run:
+- `mise exec -- just test` -> exit 0; current plan-check passed and source
+  targets are not scaffolded yet.
+- `jj diff --stat` -> AGENTS.md, DEBT.md, PROJECT.org, TEAM.md changed.
+New tests added:
+- N/A, documentation/process task only.
+Negative paths tested:
+- Claude review checked contradictions, missing requirements, state transitions,
+  review-loop traps, dependency precision, and release/Security/Swift DX gates.
+Size impact:
+- N/A.
+Sanitizers:
+- not run: no source targets exist yet.
+Not verified:
+- Full implementation, packaging, ABI, and runtime tests do not exist yet; owned
+  by future milestone tasks.
