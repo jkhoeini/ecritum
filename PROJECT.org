@@ -1244,12 +1244,47 @@ Definition of done:
 - Suite can run against each language provider through the same contract.
 - Output is scriptable and CI-friendly.
 
-*** TODO M2-007 ADR for async, cancellation, and teardown
+*** DONE M2-007 ADR for async, cancellation, and teardown
 
 Lead persona: Architecture Expert.
 Reviewer personas: Security, Tests, Swift DX, GraalVM Runtime.
 Depends on: M2-001.
 Write scope: docs/adr/.
+
+Assignment:
+
+- Engineering manager: Codex.
+- Lead persona agent: Architecture Expert (Dewey).
+- Reviewer agents: Security (Fermat), Tests/TDD (Ramanujan), Swift DX
+  (Lagrange), GraalVM Runtime (Archimedes).
+- Claude plan consult: timed out on a bounded no-tools prompt; do not count as
+  review evidence. Proceeding from persona reviews and focused post-draft
+  Claude review.
+
+Accepted plan:
+
+- Split M2-007 into the two PROJECT-tracked ADR outputs:
+  - ADR-003: runtime/context concurrency and async job model.
+  - ADR-014: resource limits, cancellation, teardown, and recovery.
+- Define `ecritum_job_t` as an owned generational handle scoped under a context.
+- Make async eval primary; synchronous eval is sugar over start, wait, result,
+  and destroy.
+- Keep one active job per context in M2; overlapping context work returns
+  `ECRITUM_ERROR_BUSY`.
+- Distinguish execution timeout from wait timeout. Execution timeout is
+  terminal `ECRITUM_ERROR_TIMEOUT`; wait timeout is normal observation and
+  returns `ECRITUM_OK` with a nonterminal job state.
+- Keep cancellation cooperative and best-effort until per-language backend tests
+  prove stronger behavior. Do not claim preemptive thread kill or hard
+  interruption for hostile in-process code.
+- Poison the context after timeout/cancellation unless the backend proves reuse
+  is safe for that language. Runtime safety failures require runtime poisoning
+  or teardown.
+- Forbid same-runtime blocking reentry from callbacks in M2. Callback execution
+  must never run while registry/context/job locks are held.
+- Keep Swift public API as `async throws` and hide C job handles behind the
+  wrapper initially. Runtime/context/job/call wrappers remain non-`Sendable`
+  until synchronization and TSan coverage exist.
 
 Definition of done:
 
@@ -1257,6 +1292,43 @@ Definition of done:
   failure, callback reentrancy, executor hopping, and deadlock prevention.
 - Verification plan includes recursion, large allocation, timeout,
   cancellation, and callback failure tests.
+
+Completion:
+
+- Added `docs/adr/0003-runtime-context-concurrency-and-async-job-model.md`.
+- Added `docs/adr/0014-resource-limits-cancellation-teardown-and-recovery.md`.
+- ADR-003 defines the owned `ecritum_job_t` handle, job states, async eval
+  API, worker-thread execution model, GraalVM attach/detach rules, wait timeout
+  semantics, cancellation state, callback reentrancy, lock order, Swift async
+  mapping, and verification requirements.
+- ADR-014 defines monotonic deadlines, cooperative cancellation, resource-limit
+  narrowing, conservative context poisoning, teardown rules, GraalVM/backend
+  boundaries, callback recovery, Swift recoverability mapping, and verification
+  requirements.
+
+Review results:
+
+- Claude plan consult: timed out and was not counted as evidence.
+- Claude ADR-003 review: found blockers in execution thread model, GraalVM
+  attach/detach rules, overloaded wait timeout status, cancellation transition,
+  and async input ownership. Fixed all blockers.
+- Claude ADR-003 re-review: PASS; minor pending-cancel clarification fixed.
+- Claude ADR-014 full review: timed out. Split reviews for deadline/recovery and
+  teardown/callback halves: PASS. Minor `UINT64_MAX` wait-sentinel ambiguity
+  fixed by reserving it as invalid for M2.
+- Architecture persona: PASS.
+- Security persona: PASS.
+- Tests/TDD persona: PASS.
+- Swift DX persona: PASS.
+- GraalVM Runtime persona: PASS.
+
+Verification:
+
+#+begin_src text
+`mise exec -- just plan-check` -> exit 0.
+ADR-003 covers job handles, timeout behavior, callback reentrancy, executor hopping, and deadlock prevention.
+ADR-014 covers cancellation, teardown after failure, resource limits, poisoned recovery, recursion/large allocation/timeout/cancellation/callback failure verification.
+#+end_src
 
 ** Milestone M2.5: Sandbox Hardening Gate
 
@@ -1568,7 +1640,7 @@ Definition of done:
 Output of: M1-001.
 ** DONE ADR-002 C ABI ownership, lifecycle, strings, and errors
 Output of: M2-001.
-** TODO ADR-003 Runtime/context concurrency and async job model
+** DONE ADR-003 Runtime/context concurrency and async job model
 Output of: M2-007.
 ** TODO ADR-004 Permission model and untrusted script threat model
 Output of: M2.5-001.
@@ -1590,7 +1662,7 @@ Output of: M7-003.
 Output of: M4.5-001.
 ** TODO ADR-013 Java and host interop exposure policy
 Output of: M2.5-001.
-** TODO ADR-014 Resource limits, cancellation, teardown, and recovery
+** DONE ADR-014 Resource limits, cancellation, teardown, and recovery
 Output of: M2-007.
 ** TODO ADR-015 Vulnerability response, SBOM, CVE tracking, and revocation
 Output of: M2.5-002 and M7-003.
