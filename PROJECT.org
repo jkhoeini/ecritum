@@ -3356,7 +3356,7 @@ Definition of done:
 - Default artifact policy is decided before support is claimed.
 - Spike code is hardened with tests or removed.
 
-*** TODO M6-001 Gate GraalPy inclusion
+*** DONE M6-001 Gate GraalPy inclusion
 
 Lead persona: GraalVM Runtime.
 Reviewer personas: Release, Security, Tests.
@@ -3367,6 +3367,94 @@ Definition of done:
 - Python stdlib packaging is proven or rejected.
 - Pure-Python package loading policy is documented.
 - Native wheels are explicitly non-goal for v0.
+
+Execution plan:
+
+- Engineering Manager started M6-001 in jj child change
+  =docs: gate GraalPy inclusion= on top of completed M5-001.
+- Lead persona: GraalVM and Polyglot Runtime Engineer.
+- Reviewer personas: Release/Licensing, Security/Sandboxing,
+  TDD/Testability, and Architecture.
+- ADR requirement: write ADR-008 before any GraalPy support claim or runtime
+  adapter implementation.
+- Research checklist:
+  - Read PLAN.org Python sections and current ADRs that constrain language
+    inclusion, artifact budgets, Java/host interop, permissions, and resource
+    limits.
+  - Read current official GraalPy Native Image and embedding documentation.
+  - Inspect current Maven coordinates and dependency/resource packaging shape.
+  - Compare against existing Clojure, JavaScript, and Lua adapter patterns.
+- Verification plan:
+  - If implementation/spike code is added, run Java tests, Native Image build,
+    XCFramework build, ABI check, conformance/security checks, size, startup,
+    idle RSS, first-eval, license inventory, and dependency delta gates.
+  - If the gate is decided by ADR without adapter code, verify with
+    =mise exec -- just plan-check= and task-specific source/doc consistency
+    checks, and record unimplemented proof gaps explicitly.
+- Claude review plan: run plan consult on the ADR/gate decision, apply
+  feedback, run a post-change diff review, and record accepted residual risks.
+
+Review:
+
+- GraalVM Runtime review: PASS. Recommended rejecting GraalPy from default
+  Core/v0 and deferring Python to a Full-artifact spike. Confirmed current C
+  dispatch keeps `python` runtime-unavailable and that current GraalPy Maven
+  coordinates are `org.graalvm.polyglot:python` plus optional
+  `org.graalvm.python:python-embedding` resource tooling.
+- Security review: PASS. Required deny-by-default context settings, denial of
+  Java/Polyglot/ctypes/cffi/native-extension/process/socket/env/fs/POSIX escape
+  hatches, and resource-limit tests before any support claim. Native extensions
+  remain a v0 non-goal because they require native access, IO, and thread
+  permissions incompatible with Ecritum's untrusted-scripting boundary.
+- Release review: PASS with additions. ADR-008 now requires multi-license SPDX
+  handling for GraalPy dependencies, reproducible package/checksum evidence,
+  data-driven or verified Python runtime/resource inspection, and explicit
+  macOS slice policy because GraalVM 25.0.2 no longer supports macOS x64.
+- Tests review: PASS. M6-001 should stay an ADR/research gate. Future support
+  claim requires Python evaluator, C smoke, Swift artifact, conformance,
+  security, static, size/perf/license/dependency gates.
+- Claude plan consult: two scoped `claude -p` attempts timed out with no output
+  and were recorded as unavailable for M6-001; no Claude findings were used.
+
+Implementation result:
+
+- Accepted ADR-008. GraalPy is not included in Ecritum Core and Ecritum must not
+  claim Python support for v0 from M6-001.
+- Python remains a Full-artifact candidate pending a later spike that proves
+  Native Image shared-library packaging, XCFramework resource layout,
+  conformance/security behavior, size/startup/RSS/first-eval impact, license
+  inventory, dependency delta, reproducible packaging, clean-consumer behavior,
+  and macOS slice policy.
+- README and release gates now describe Python as gated/Full-candidate rather
+  than supported.
+- ECRITUM-DEBT-0005 now records the Python side of the Python/Ruby artifact
+  policy; Ruby remains open for M6-002.
+
+#+begin_src markdown
+## Verification
+
+Layers tested: Contract, Release
+Commands run:
+- `mise exec -- just plan-check` -> exit 0.
+- `rg -n "Python.*supported|supports Python|Python support|python\"\\)|python'\\)|language.*python" README.md PROJECT.org docs Sources Tests native scripts justfile DEBT.md` -> exit 0; no public support claim found. Expected references are the Swift `.python` language token, the C native smoke assertion that `python` returns `ECRITUM_ERROR_RUNTIME_UNAVAILABLE`, and ADR/project gate wording.
+- `mise exec -- mvn -s .mvn/settings.xml -q dependency:get -Dartifact=org.graalvm.polyglot:python:25.0.2:pom -Dtransitive=true` -> exit 0.
+- `du -sh ~/.m2/repository/org/graalvm/python ~/.m2/repository/org/graalvm/polyglot/python ~/.m2/repository/org/graalvm/truffle ~/.m2/repository/org/graalvm/shadowed ~/.m2/repository/org/bouncycastle` -> exit 0; about 127M, 12K, 19M, 18M, and 9.8M respectively.
+- `wc -c ~/.m2/repository/org/graalvm/python/python-language/25.0.2/python-language-25.0.2.jar ~/.m2/repository/org/graalvm/python/python-resources/25.0.2/python-resources-25.0.2.jar` -> exit 0; 102,297,738 bytes and 14,976,693 bytes.
+- `mise exec -- just test-native-eval-smoke` -> exit 0; includes the expected `python` runtime-unavailable native smoke case.
+- `mise exec -- just license-report` -> exit 0; current inventory unchanged by M6-001.
+- `mise exec -- just check-dep-delta` -> exit 0; no Python dependency was added to the repo.
+- `mise exec -- just size` -> expected exit 1 under ADR-018: artifact 152,317,307 bytes and private runtime 152,175,352 bytes exceed Core budgets; this is the existing combined SCI/GraalJS/Lua artifact state that ADR-008 uses as policy context.
+New tests added:
+- N/A, M6-001 is an ADR/research gate and intentionally adds no Python adapter.
+Negative paths tested:
+- `python` remains runtime-unavailable through `test-native-eval-smoke`.
+Size impact:
+- No artifact change from M6-001. GraalPy dependency probe showed 102,297,738-byte `python-language` and 14,976,693-byte `python-resources` JARs before Native Image closure effects.
+Sanitizers:
+- not run: no source adapter code changed.
+Not verified:
+- GraalPy Native Image build, stdlib XCFramework resource layout, Python conformance/security, Python first-eval, Full-artifact packaging, and clean-consumer behavior are intentionally deferred to a later Full-artifact spike by ADR-008.
+#+end_src
 
 *** TODO M6-002 Gate TruffleRuby inclusion
 
@@ -3447,7 +3535,7 @@ Output of: M3-001.
 Output of: M4-001.
 ** DONE ADR-0023 Lua support through LuaJ spike
 Output of: M5-001.
-** TODO ADR-008 GraalPy inclusion gate and artifact policy
+** DONE ADR-008 GraalPy inclusion gate and artifact policy
 Output of: M6-001.
 ** TODO ADR-009 TruffleRuby inclusion gate and artifact policy
 Output of: M6-002.

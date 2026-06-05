@@ -180,6 +180,15 @@ runtime. M5-001 verification proved `CoroutineLib` is omitted and
 ADR-018/Core-Full classification is resolved with Lua size/startup/RSS/
 first-eval data and a memory-limiting plan exists for untrusted Lua workloads.
 
+M6-001 gates Python through GraalPy. ADR-008 rejects GraalPy inclusion in the
+default Core artifact for v0 and keeps Python as a Full-artifact candidate until
+a later spike proves Native Image shared-library packaging, standard-library
+resource layout, conformance/security behavior, size/startup/RSS/first-eval
+impact, license inventory, and dependency delta. Native wheels, C extensions,
+runtime `pip`, direct Java imports, raw Polyglot bindings, `ctypes`, `cffi`,
+subprocess, raw sockets, environment access, and direct filesystem access remain
+non-goals unless a later ADR explicitly accepts a narrow facade.
+
 ## Reproducibility
 
 M1 uses rebuildable provenance plus deterministic archive metadata:

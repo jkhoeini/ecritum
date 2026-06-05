@@ -174,6 +174,12 @@ not done if it introduced debt without an entry.
   until GraalPy and TruffleRuby artifacts are measured.
 - Reason accepted: The split criteria must exist before Python/Ruby work starts,
   but the measurements cannot exist until those runtime spikes are implemented.
+- Progress:
+  - M6-001/ADR-008 gates GraalPy as a Full-artifact candidate and rejects Python
+    inclusion in the default Core artifact for v0 based on official resource
+    packaging guidance, local Maven dependency-size evidence, and unresolved
+    sandbox requirements.
+  - Ruby remains open for M6-002.
 - Resolve-by phase: M6
 - Exit condition: GraalPy and TruffleRuby measurements decide whether each
   runtime remains Full-only or can satisfy Core gates.

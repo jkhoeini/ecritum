@@ -57,7 +57,8 @@ The first target is not "run every language on the JVM." The first target is a p
 - Clojure: first-class through SCI with Babashka-compatible namespaces.
 - JavaScript: through GraalJS.
 - Lua: through LuaJ or another pure-Java Lua implementation that compiles into Native Image.
-- Python: through GraalPy after size and packaging tests.
+- Python: GraalPy remains a Full-artifact candidate after size, resource
+  packaging, and sandbox tests.
 - Ruby: through TruffleRuby after size, licensing, and packaging tests.
 - JVM bytecode/JARs: future research, not an MVP promise.
 
