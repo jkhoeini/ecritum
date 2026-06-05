@@ -3104,18 +3104,109 @@ Not verified:
   external release-candidate blockers under ADR-012.
 #+end_src
 
-*** TODO M4.5-002 Build packaged macOS smoke app
+*** DONE M4.5-002 Build packaged macOS smoke app
 
 Lead persona: Swift DX.
 Reviewer personas: Release, Tests, Security.
 Depends on: M4.5-001A.
-Write scope: Examples/, Tests/, scripts/.
+Write scope: Examples/, Tests/, scripts/, justfile.
 
 Definition of done:
 
 - Packaged app loads the runtime and runs Clojure plus JavaScript smoke tests.
 - Test environment does not rely on GraalVM, JDK, Node, Clojure, Python, Ruby, or
   Lua installs.
+
+Implementation plan:
+
+- Swift DX leads a minimal Swift executable under `Examples/MacSmokeApp` using
+  the public Swift API.
+- Release/Unix packaging is a reusable script that builds the example,
+  assembles `EcritumSmoke.app`, copies the matching XCFramework slice into
+  `Contents/Frameworks`, adds the app-bundle rpath, and checks Mach-O install
+  names.
+- Tests/Security verification runs the app through a sanitized environment with
+  no `DYLD_*` overrides and rejects workspace-local, GraalVM, JDK, native build,
+  or language-runtime install paths in the app's link metadata.
+
+Reviewer assignments:
+
+- Swift DX lead: packaged app example source and Swift API ergonomics.
+- Release/Unix review: bundle layout, rpath, install names, reusable `just`
+  target.
+- Tests/Security review: Clojure/JavaScript smoke coverage, sanitized
+  environment, external runtime path rejection.
+
+Notes:
+
+- Added `Examples/MacSmokeApp`, a SwiftPM consumer app that imports `Ecritum`,
+  requires the runtime artifact, registers a Swift host callback, and evaluates
+  Clojure plus JavaScript scripts through the Swift API.
+- Added `scripts/test-packaged-app-smoke.sh`, which builds the example,
+  assembles `EcritumSmoke.app`, copies the matching
+  `EcritumRuntime.framework` slice into `Contents/Frameworks`, adds the
+  app-bundle rpath, signs and verifies the bundle when `codesign` is available,
+  relocates the bundle outside the repository, runs it through `env -i` with an
+  empty `PATH`, and checks Mach-O install names for bundled runtime paths only.
+- Added a negative packaging check: after relocation, removing the bundled
+  `EcritumRuntime.framework` must make the app launch fail.
+- Added `just packaged-app-smoke` / `just test-packaged-app-smoke`, included
+  the packaged app smoke in `just examples`, and added it to
+  `scripts/release-check.sh`.
+
+Review:
+
+- Swift DX review: recommended Swift API smoke through an app bundle and host
+  callback coverage; implemented.
+- Release/Unix review: recommended relocation outside the repo, app-bundle
+  rpath checks, no `DYLD_*` dependency, broken-bundle negative check, and a
+  `test-packaged-app-smoke` target; implemented except sandbox-exec, which
+  remains outside this smoke's scope.
+- Tests/Security review: recommended Clojure and JavaScript execution plus
+  external runtime path rejection; implemented, with deeper abuse probes covered
+  by existing conformance/security gates.
+- Claude plan review: attempted directly with Claude CLI, but the CLI review
+  session had filesystem tools disabled and returned no actionable file-level
+  feedback.
+- Claude implementation review: found one blocking source-layout concern
+  (`@main` in `main.swift`); fixed by renaming the entry point to
+  `EcritumSmokeApp.swift`.
+- Claude second implementation review: PASS.
+
+#+begin_src markdown
+## Verification
+
+Layers tested: Integration, Packaging, Release, Swift, Conformance, Security
+Commands run:
+- `mise exec -- just test-packaged-app-smoke` -> exit 0
+- `bash -n scripts/test-packaged-app-smoke.sh scripts/release-check.sh` -> exit 0
+- `mise exec -- just check-xcframework` -> exit 0
+- `mise exec -- just check-abi` -> exit 0
+- `mise exec -- just examples` -> exit 0
+- `mise exec -- just test-swift` -> exit 0, 62 tests passed
+- `mise exec -- just conformance-clojure-native` -> exit 0
+- `mise exec -- just conformance-javascript-native` -> exit 0
+- `mise exec -- just security-javascript` -> exit 0
+- `mise exec -- just plan-check` -> exit 0
+New tests added:
+- `Examples/MacSmokeApp`
+- `scripts/test-packaged-app-smoke.sh`
+- `just packaged-app-smoke`
+- `just test-packaged-app-smoke`
+Negative paths tested:
+- App launch fails after removing bundled `EcritumRuntime.framework`.
+- Link metadata rejects workspace-local, `build/native`, `native/target`,
+  GraalVM, and JDK paths.
+- Runtime execution uses no `DYLD_*` override and an empty `PATH`.
+Size impact:
+- N/A; smoke app is test/example code only.
+Sanitizers:
+- not run: packaging smoke task; existing C ABI sanitizer gates remain separate.
+Not verified:
+- `sandbox-exec` denial around the app smoke.
+- Notarization/final nested dylib placement policy; current check only ad-hoc
+  signs and verifies the local test bundle.
+#+end_src
 
 ** Milestone M5: Lua Feasibility and Runtime Decision
 

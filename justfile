@@ -258,7 +258,12 @@ example-c:
         echo "CHost links build-machine runtime path" >&2; exit 1; \
     fi
 
-examples: example-swift example-c
+packaged-app-smoke:
+    @scripts/test-packaged-app-smoke.sh
+
+test-packaged-app-smoke: packaged-app-smoke
+
+examples: example-swift example-c packaged-app-smoke
 
 test-examples-auto:
     @if [ -d dist/local/EcritumRuntime.xcframework ]; then \

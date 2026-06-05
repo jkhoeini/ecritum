@@ -24,6 +24,7 @@ mkdir -p build/release
 just test
 just check-abi
 just check-xcframework
+just test-packaged-app-smoke
 just inspect > build/release/inspect.json
 just bench-cold-start > build/release/cold-start.json
 just bench-first-eval > build/release/first-eval.json
