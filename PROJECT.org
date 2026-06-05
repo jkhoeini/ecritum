@@ -342,11 +342,32 @@ Definition of done:
 - CI, license, size, startup, and ABI manifest baselines exist.
 - DEBT.md records or rejects all placeholder scaffolding.
 
-*** TODO M1-001 Write ADR for package layout and binary target strategy
+*** DONE M1-001 Write ADR for package layout and binary target strategy
 
 Lead persona: Architecture Expert.
+Assigned to: Architecture Expert Engineer; Engineering Manager owns integration.
 Reviewer personas: Swift DX, Release, Unix, Tests.
 Write scope: docs/adr/.
+
+Research:
+
+- Read README.md package and distribution claims.
+- Read PLAN.org package layout, SwiftPM distribution, and implementation
+  sequence.
+- Read AGENTS.md, TEAM.md, PROJECT.org, and DEBT.md.
+- Consult Claude directly with `claude -p` and no auth-check step.
+
+Plan:
+
+- Define accepted package layout: Swift wrapper target, C target, native runtime
+  binary target, native Maven project, scripts, examples, tests, and release
+  artifacts.
+- Define contributor flow using a local binary target path after
+  `just xcframework`.
+- Define release flow using `.binaryTarget(url:checksum:)`.
+- Define what `swift test` means before and after native artifacts exist.
+- Record alternatives and why they are rejected.
+- Capture verification plan for local placeholder artifact and release artifact.
 
 Definition of done:
 
@@ -356,6 +377,47 @@ Definition of done:
   with `.binaryTarget(url:checksum:)`, and how `swift test` works after
   `just xcframework`.
 - Verification plan covers local placeholder artifact and release artifact.
+
+Review:
+
+- Architecture, Swift DX, Release, Unix, and Tests persona feedback collected.
+- Claude plan consult and final diff review recorded.
+- Claude plan consult found blocking gaps around pre-artifact `swift test`,
+  local-vs-release manifest switching, `native/pom.xml` versus root `pom.xml`,
+  and native output paths; ADR resolves them.
+- Persona reviewers added command contracts, artifact tree, clean-machine smoke,
+  checksum, CHost, release invariant, target graph, and public-header boundary
+  requirements; ADR incorporates them.
+- Claude diff review found two mechanical blockers: premature Accepted status
+  and fictional deferred ADR numbers; both were fixed.
+- Second Claude review reported no blocking findings.
+
+Verification:
+
+- `mise exec -- just test`
+- `jj diff --stat`
+
+## Verification
+
+Layers tested: Unit, None
+Commands run:
+- `mise exec -- just test` -> exit 0; current plan-check passed and source
+  targets are not scaffolded yet.
+- `jj diff --stat` -> PROJECT.org and
+  docs/adr/0001-package-layout-and-binary-targets.md changed.
+New tests added:
+- N/A, ADR task only.
+Negative paths tested:
+- Claude reviews checked pre-artifact SwiftPM behavior, manifest switching,
+  path contradictions, output paths, release-scope overclaims, and deferred ADR
+  references.
+Size impact:
+- N/A.
+Sanitizers:
+- not run: no source targets exist yet.
+Not verified:
+- Package.swift, native build, XCFramework assembly, Swift tests, C smoke, and
+  clean-machine checks are owned by later M1 tasks.
 
 *** TODO M1-002 Scaffold SwiftPM and C module
 
