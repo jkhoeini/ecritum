@@ -2041,7 +2041,7 @@ Definition of done:
 - The shared conformance suite passes for Clojure.
 - Babashka compatibility deltas are documented.
 
-*** TODO M3-001 ADR for SCI and Babashka compatibility scope
+*** DONE M3-001 ADR for SCI and Babashka compatibility scope
 
 Lead persona: GraalVM Runtime.
 Reviewer personas: Architecture, Security, Tests, Release.
@@ -2052,6 +2052,106 @@ Definition of done:
 - Supported namespaces and non-goals are explicit.
 - Arbitrary classpath and Maven loading are rejected for v0.
 - Verification plan includes native-image smoke tests.
+
+Assignment:
+
+- Engineering manager: Codex.
+- Lead persona agent: GraalVM Runtime.
+- Reviewer agents: Architecture, Security, Tests/TDD, Release.
+- Claude plan consult: read-only consult timed out after 240 seconds with no
+  output; do not count it as review evidence. Persona reviewers used Claude
+  where practical and recorded their results.
+
+Accepted plan:
+
+- Write ADR-005 as the gate for M3-002, not as an implementation.
+- Embed SCI directly. Do not shell out to `bb` and do not expose a Babashka task
+  runner, pods, dynamic dependency loading, or arbitrary project loading.
+- Scope Clojure support as Babashka-like only for explicitly listed namespaces
+  and behavior. Do not claim full Babashka compatibility.
+- Keep the public ABI language-neutral and tied to ADR-003 async eval/job
+  handles plus generic Ecritum value/call accessors. No Clojure-specific,
+  JVM-specific, or C++ public surface.
+- Deny raw Java interop, class lookup, `new`, static calls, reflection,
+  classpath/JAR/Maven/add-deps mutation, `load-file`, unrestricted
+  `clojure.java.io`, raw `babashka.fs`, raw `babashka.process`, and caller-
+  supplied SCI options.
+- Project host functions as Clojure vars only through explicit registered
+  Ecritum namespaces, converting arguments/results through `EcritumValue` and
+  preserving ADR-003/014 callback rules.
+- Require exact dependency pins, shipped/build/test license inventory, EPL
+  obligations, Native Image metadata audit, size/startup/RSS/first-eval gates,
+  `license-report`/`check-dep-delta`, and clean-machine proof with no GraalVM,
+  JDK, Clojure, `bb`, or classpath dependency installed.
+- Verification must include Native Image Clojure eval smoke, Swift
+  XCFramework smoke, strict Clojure conformance provider, namespace matrix,
+  Clojure escape-hatch denial tests, source/error diagnostics, timeout/cancel
+  behavior, `test-security-*`, `just size`, `bench-*`, license gates, and no
+  Clojure support claim until strict conformance has zero required pending
+  cases.
+
+Pre-implementation review:
+
+- GraalVM Runtime: PASS plan with mandatory exact dependency pins, embedded SCI,
+  curated namespaces, host projection, security-denial, Native Image, strict
+  conformance, perf, and release gates. Claude timed out in the persona review.
+- Architecture: BLOCKER until ADR-005 requires ADR-003 async eval/job ABI,
+  generic value/call accessors, exact host-function projection, no
+  Clojure-specific or JVM/C++ public surface, and strict conformance.
+- Security: BLOCKER until ADR-005 explicitly denies SCI Java interop,
+  classpath/Maven/add-deps/loading, pods, raw process/fs/network/env, caller-
+  supplied SCI opts, and untrusted-code claims for CE in-process artifacts.
+- Tests/TDD: BLOCKER until ADR-005 requires Native Image eval smoke, Swift
+  smoke, strict Clojure conformance, escape-hatch denials, namespace matrix,
+  source/error diagnostics, timeout/cancel tests, and ADR-018 perf gates.
+- Release: BLOCKER until ADR-005 requires exact pins, shipped vs build/test
+  SPDX/license inventory, EPL obligations, resource packaging rules,
+  clean-machine proof, and `license-report`/`check-dep-delta` updates.
+
+Implementation:
+
+- Added `docs/adr/0005-sci-babashka-compatibility-scope.md`.
+- Accepted embedded SCI as the M3 Clojure evaluator and explicitly rejected
+  shelling out to `bb`, full Babashka compatibility, dynamic dependencies,
+  pods, arbitrary project loading, and arbitrary JVM Clojure.
+- Kept Clojure on the language-neutral ADR-003 eval/job path with generic
+  Ecritum values, calls, and structured errors.
+- Defined the supported namespace set, deferred/wrapped namespaces, denied SCI
+  and Java escape hatches, host-function projection, diagnostics, timeout/
+  cancellation recovery, dependency/license gates, Native Image metadata policy,
+  and verification plan.
+- Marked ADR-005 accepted in the ADR backlog.
+
+Verification:
+
+- `mise exec -- just plan-check` -> exit 0.
+- Manual review: ADR-005 contains the required supported namespace list,
+  non-goals, classpath/Maven/add-deps denial, Native Image smoke requirements,
+  strict Clojure conformance requirement, Clojure security-denial tests,
+  clean-machine proof, `license-report`, `check-dep-delta`, and ADR-018
+  performance gates.
+
+Post-change review completed:
+
+- GraalVM Runtime review: PASS. ADR-005 is actionable for M3-002 with embedded
+  SCI, no `bb`, dependency/license/Native Image gates, namespace scope, host
+  projection, denial surface, and verification.
+- Architecture review: PASS. ADR-005 fixes the plan blockers by requiring the
+  ADR-003 async eval/job ABI, generic value/call accessors, exact host-function
+  projection, no language-specific/JVM/C++ public surface, and strict
+  conformance.
+- Security review: PASS. ADR-005 fixes the plan blockers by denying SCI Java
+  interop, caller-supplied SCI opts, classpath/Maven/add-deps/loading, pods,
+  raw process/fs/network/env, and CE in-process untrusted-code claims.
+- Tests/TDD review: PASS. ADR-005 requires Native Image and Swift smoke,
+  strict Clojure conformance, namespace matrix, diagnostics, timeout/cancel,
+  escape-hatch denials, and ADR-018 performance gates.
+- Release review: PASS. ADR-005 requires exact pins, SPDX inventory, EPL review,
+  dependency delta gates, Native Image metadata/resource packaging,
+  clean-machine proof, and size/startup/RSS/first-eval gates.
+- Claude plan consult: timed out and was not counted. Claude diff review:
+  PASS; no blockers, with non-blocking note that ADR-005 lists Claude CLI as a
+  reviewer while PROJECT.org records the plan timeout.
 
 *** TODO M3-002 Implement Clojure eval and host calls
 
@@ -2292,7 +2392,7 @@ Output of: M2-001.
 Output of: M2-007.
 ** DONE ADR-004 Permission model and untrusted script threat model
 Output of: M2.5-001.
-** TODO ADR-005 SCI/Babashka compatibility scope
+** DONE ADR-005 SCI/Babashka compatibility scope
 Output of: M3-001.
 ** TODO ADR-006 JavaScript support scope and Node.js non-goals
 Output of: M4-001.
