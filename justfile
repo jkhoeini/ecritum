@@ -58,19 +58,22 @@ check-native:
     nm -gU {{native_stable_dir}}/libecritum.dylib | grep -q ' _graal_create_isolate$'
     nm -gU {{native_stable_dir}}/libecritum.dylib | grep -q ' _graal_tear_down_isolate$'
 
-xcframework:
+xcframework output="dist/local/EcritumRuntime.xcframework":
     test -d build/native
-    scripts/build-xcframework.sh
-    just check-xcframework
+    scripts/build-xcframework.sh --output "{{output}}"
+    just check-xcframework "{{output}}"
 
-check-xcframework:
-    @scripts/check-xcframework.sh
+check-xcframework artifact="dist/local/EcritumRuntime.xcframework":
+    @scripts/check-xcframework.sh --artifact "{{artifact}}"
 
-check-abi:
-    @scripts/check-abi.sh
+check-abi artifact="dist/local/EcritumRuntime.xcframework":
+    @scripts/check-abi.sh --artifact "{{artifact}}"
 
 test-abi-checker:
     python3 -m unittest Tests/ABI/test_check_abi.py
+
+test-release-tools:
+    python3 -m unittest Tests/Release/test_package_artifact.py
 
 build-swift:
     test -f Package.swift
@@ -232,7 +235,7 @@ test-lifecycle-leak-smoke:
         binary="dist/local/EcritumRuntime.xcframework/$slice/EcritumRuntime.framework/EcritumRuntime"; \
         leaks --atExit -- build/c-abi/framework_lifecycle_smoke "$binary"
 
-test: plan-check conformance security test-swift-auto test-java test-c-abi-lifecycle test-c-abi-asan test-c-abi-host-registration test-c-abi-host-registration-asan test-c-abi-eval test-c-abi-eval-asan test-native-eval-smoke test-native-eval-smoke-asan test-xcframework-eval-smoke test-c-abi-policy-config test-c-abi-policy-config-asan check-abi license-report check-dep-delta test-examples-auto
+test: plan-check conformance security test-swift-auto test-java test-c-abi-lifecycle test-c-abi-asan test-c-abi-host-registration test-c-abi-host-registration-asan test-c-abi-eval test-c-abi-eval-asan test-native-eval-smoke test-native-eval-smoke-asan test-xcframework-eval-smoke test-c-abi-policy-config test-c-abi-policy-config-asan check-abi test-release-tools license-report check-dep-delta test-examples-auto
 
 test-m3-002b: native test-native-eval-smoke test-native-eval-smoke-asan xcframework test-xcframework-eval-smoke check-abi license-report check-dep-delta
 
@@ -291,18 +294,21 @@ test-examples-auto:
         echo "Skipping examples: dist/local/EcritumRuntime.xcframework is missing."; \
     fi
 
-inspect:
-    @python3 scripts/inspect-artifact.py
+inspect artifact="dist/local/EcritumRuntime.xcframework":
+    @python3 scripts/inspect-artifact.py --artifact "{{artifact}}"
 
-package-artifact:
-    @python3 scripts/package-artifact.py
+package-artifact artifact="dist/local/EcritumRuntime.xcframework" output="dist/release/EcritumRuntime.xcframework.zip":
+    @python3 scripts/package-artifact.py --artifact "{{artifact}}" --output "{{output}}"
 
-checksum:
-    test -f dist/release/EcritumRuntime.xcframework.zip
-    @swift package compute-checksum dist/release/EcritumRuntime.xcframework.zip
+package-artifact-verify artifact="dist/local/EcritumRuntime.xcframework":
+    @python3 scripts/check-package-reproducible.py --artifact "{{artifact}}"
 
-size:
-    @python3 scripts/size-artifact.py
+checksum output="dist/release/EcritumRuntime.xcframework.zip":
+    test -f "{{output}}"
+    @swift package compute-checksum "{{output}}"
+
+size artifact="dist/local/EcritumRuntime.xcframework":
+    @python3 scripts/size-artifact.py --artifact "{{artifact}}"
 
 bench-cold-start:
     @python3 scripts/measure-runtime.py --mode startup

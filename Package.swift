@@ -10,8 +10,18 @@ let localRuntimeMode = ProcessInfo.processInfo.environment["ECRITUM_LOCAL_RUNTIM
 let localRuntimeState = ProcessInfo.processInfo.environment["ECRITUM_LOCAL_RUNTIME_STATE"]
 let hasLocalRuntimeFile = FileManager.default.fileExists(atPath: localRuntimeFullPath)
 let forceScaffoldRuntime = localRuntimeMode == "0"
+let releaseRuntimeRequired = ProcessInfo.processInfo.environment["ECRITUM_RELEASE_RUNTIME_REQUIRED"] == "1"
+let releaseRuntimeURL = ProcessInfo.processInfo.environment["ECRITUM_RUNTIME_URL"]
+let releaseRuntimeChecksum = ProcessInfo.processInfo.environment["ECRITUM_RUNTIME_CHECKSUM"]
+let hasPartialReleaseRuntime = (releaseRuntimeURL == nil) != (releaseRuntimeChecksum == nil)
+if hasPartialReleaseRuntime {
+    fatalError("ECRITUM_RUNTIME_URL and ECRITUM_RUNTIME_CHECKSUM must be set together")
+}
+
 let hasLocalRuntime: Bool
-if localRuntimeMode == "1" {
+if releaseRuntimeRequired {
+    hasLocalRuntime = false
+} else if localRuntimeMode == "1" {
     hasLocalRuntime = localRuntimeState?.hasPrefix("v4:runtime:runtime-present:") == true
         && hasLocalRuntimeFile
 } else if forceScaffoldRuntime {
@@ -20,9 +30,10 @@ if localRuntimeMode == "1" {
     hasLocalRuntime = hasLocalRuntimeFile
 }
 
-let releaseRuntimeURL = ProcessInfo.processInfo.environment["ECRITUM_RUNTIME_URL"]
-let releaseRuntimeChecksum = ProcessInfo.processInfo.environment["ECRITUM_RUNTIME_CHECKSUM"]
 let hasReleaseRuntime = !forceScaffoldRuntime && releaseRuntimeURL != nil && releaseRuntimeChecksum != nil
+if releaseRuntimeRequired && !hasReleaseRuntime {
+    fatalError("ECRITUM_RELEASE_RUNTIME_REQUIRED requires ECRITUM_RUNTIME_URL and ECRITUM_RUNTIME_CHECKSUM")
+}
 
 var runtimeDependency: [Target.Dependency] = []
 var swiftSettings: [SwiftSetting] = []

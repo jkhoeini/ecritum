@@ -27,16 +27,18 @@ def sha256(path):
 
 def directory_sha256(path):
     digest = hashlib.sha256()
+    files = []
     for root, _, filenames in os.walk(path):
         for filename in sorted(filenames):
             file_path = Path(root) / filename
-            relpath = file_path.relative_to(path)
-            digest.update(str(relpath).encode())
-            digest.update(b"\0")
-            with open(file_path, "rb") as handle:
-                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                    digest.update(chunk)
-            digest.update(b"\0")
+            files.append((file_path.relative_to(path), file_path))
+    for relpath, file_path in sorted(files, key=lambda item: str(item[0])):
+        digest.update(str(relpath).encode())
+        digest.update(b"\0")
+        with open(file_path, "rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        digest.update(b"\0")
     return digest.hexdigest()
 
 
@@ -54,6 +56,34 @@ def archs(path):
     return line[0].split() if line else []
 
 
+def nm_lines(path):
+    return [line.strip() for line in run(["nm", "-gU", str(path)])] if path.exists() else []
+
+
+def symbol_names(lines):
+    names = set()
+    for line in lines:
+        parts = line.split()
+        if parts and parts[-1].startswith("_"):
+            names.add(parts[-1])
+    return names
+
+
+def embedded_runtimes(private_symbols, has_wrapper):
+    runtimes = []
+    if private_symbols:
+        runtimes.append("GraalVM Native Image")
+    if "_ecritum_graal_eval_clojure" in private_symbols or "_ecritum_graal_eval_clojure_with_stdlib" in private_symbols:
+        runtimes.append("SCI Clojure")
+    if "_ecritum_graal_eval_javascript_with_stdlib" in private_symbols:
+        runtimes.append("GraalJS")
+    if "_ecritum_graal_eval_lua_with_stdlib" in private_symbols:
+        runtimes.append("LuaJ JME")
+    if has_wrapper:
+        runtimes.append("Ecritum C wrapper")
+    return runtimes
+
+
 parser = argparse.ArgumentParser(description="Inspect the local EcritumRuntime XCFramework.")
 parser.add_argument("--artifact", default="dist/local/EcritumRuntime.xcframework")
 args = parser.parse_args()
@@ -68,11 +98,14 @@ if not binary.exists():
 
 headers = sorted(str(path.relative_to(framework)) for path in (framework / "Headers").glob("**/*") if path.is_file())
 resources = sorted(str(path.relative_to(framework)) for path in (framework / "Resources").glob("**/*") if path.is_file())
+public_symbols = nm_lines(binary)
+private_symbols = symbol_names(nm_lines(private_lib))
 
 payload = {
     "artifact": str(artifact),
     "artifact_sha256": directory_sha256(artifact),
     "framework": str(framework),
+    "framework_codesign": run_status(["codesign", "--verify", "--verbose=2", str(framework)]),
     "binary": str(binary),
     "binary_architectures": archs(binary),
     "binary_macos_min": macos_min_version(binary),
@@ -87,10 +120,10 @@ payload = {
     "private_runtime_codesign": run_status(["codesign", "--verify", "--verbose=2", str(private_lib)]) if private_lib.exists() else None,
     "headers": headers,
     "resources": resources,
-    "public_symbols": [line.strip() for line in run(["nm", "-gU", str(binary)])],
+    "public_symbols": public_symbols,
     "install_name": run(["otool", "-D", str(binary)])[1:],
     "linked_dylibs": run(["otool", "-L", str(binary)])[1:],
-    "embedded_runtime_list": ["GraalVM Native Image", "SCI Clojure", "GraalJS", "LuaJ JME", "Ecritum C wrapper"],
+    "embedded_runtime_list": embedded_runtimes(private_symbols, binary.exists()),
 }
 
 print(json.dumps(payload, indent=2, sort_keys=True))

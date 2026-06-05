@@ -4,33 +4,58 @@ set -euo pipefail
 usage() {
   cat <<'USAGE'
 Usage: release-check.sh
+       release-check.sh [--output-dir PATH] [--artifact PATH] [--release-zip PATH]
 
-Run the M1 release gates. This command exits nonzero when any release blocker is
+Run the release gates. This command exits nonzero when any release blocker is
 present, including unknown shipped licenses.
 USAGE
 }
 
-if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-  usage
-  exit 0
-fi
-if [ "$#" -ne 0 ]; then
-  echo "unknown argument: $1" >&2
-  usage >&2
-  exit 2
-fi
+output_dir="build/release"
+artifact="dist/local/EcritumRuntime.xcframework"
+release_zip="dist/release/EcritumRuntime.xcframework.zip"
+just_bin="${JUST:-just}"
 
-mkdir -p build/release
-just test
-just check-abi
-just check-xcframework
-just test-packaged-app-smoke
-just inspect > build/release/inspect.json
-just bench-cold-start > build/release/cold-start.json
-just bench-first-eval > build/release/first-eval.json
-just bench-idle-rss > build/release/idle-rss.json
-just check-dep-delta > build/release/dependency-delta.json
-just package-artifact > build/release/package.json
-just license-report > build/release/licenses.spdx.json
-python3 scripts/size-artifact.py --require-artifact > build/release/size.json
-python3 scripts/license-report.py --strict > build/release/licenses-strict.spdx.json
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --output-dir) output_dir="$2"; shift 2 ;;
+    --artifact) artifact="$2"; shift 2 ;;
+    --release-zip) release_zip="$2"; shift 2 ;;
+    --help|-h) usage; exit 0 ;;
+    *) echo "unknown argument: $1" >&2; usage >&2; exit 2 ;;
+  esac
+done
+
+mkdir -p "$output_dir"
+package_manifest="$release_zip.json"
+package_checksum="$release_zip.checksum"
+"$just_bin" test
+"$just_bin" check-abi "$artifact"
+"$just_bin" check-xcframework "$artifact"
+"$just_bin" test-packaged-app-smoke
+"$just_bin" inspect "$artifact" > "$output_dir/inspect.json"
+"$just_bin" bench-cold-start > "$output_dir/cold-start.json"
+"$just_bin" bench-first-eval > "$output_dir/first-eval.json"
+"$just_bin" bench-idle-rss > "$output_dir/idle-rss.json"
+"$just_bin" check-dep-delta > "$output_dir/dependency-delta.json"
+"$just_bin" package-artifact "$artifact" "$release_zip" > "$output_dir/package.json"
+cmp "$output_dir/package.json" "$package_manifest"
+"$just_bin" package-artifact-verify "$artifact" > "$output_dir/package-reproducibility.json"
+"$just_bin" checksum "$release_zip" > "$output_dir/swiftpm-checksum.txt"
+release_checksum="$(tr -d '[:space:]' < "$output_dir/swiftpm-checksum.txt")"
+if [[ ! "$release_checksum" =~ ^[0-9a-f]{64}$ ]]; then
+  echo "invalid SwiftPM checksum in $output_dir/swiftpm-checksum.txt" >&2
+  exit 1
+fi
+if [ "$release_checksum" != "$(tr -d '[:space:]' < "$package_checksum")" ]; then
+  echo "SwiftPM checksum does not match package checksum sidecar" >&2
+  exit 1
+fi
+# Test-only release URL evidence. M7-002 owns hosted SwiftPM resolution.
+ECRITUM_RELEASE_RUNTIME_REQUIRED=1 \
+  ECRITUM_RUNTIME_URL="https://example.invalid/EcritumRuntime.xcframework.zip" \
+  ECRITUM_RUNTIME_CHECKSUM="$release_checksum" \
+  swift package describe --type json > "$output_dir/release-manifest.json"
+"$just_bin" license-report > "$output_dir/licenses.spdx.json"
+python3 scripts/size-artifact.py --artifact "$artifact" --require-artifact > "$output_dir/size.json"
+python3 scripts/license-report.py --strict > "$output_dir/licenses-strict.spdx.json"

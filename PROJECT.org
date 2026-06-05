@@ -3597,7 +3597,7 @@ Definition of done:
 - Clean macOS consumer app runs without external runtimes.
 - Size/startup/memory budget report is recorded.
 
-*** TODO M7-001 Build release artifact pipeline
+*** DONE M7-001 Build release artifact pipeline
 
 Lead persona: Release.
 Reviewer personas: Unix, Tests, Swift DX.
@@ -3608,6 +3608,142 @@ Definition of done:
 - Packaging commands are reproducible.
 - Checksums are generated for SwiftPM.
 - Artifact contents are inspectable and documented.
+
+Execution plan:
+
+- Engineering Manager started M7-001 in jj child change
+  =release: harden artifact pipeline= on top of completed M6-002.
+- Lead persona: Release, Licensing, and Distribution Engineer.
+- Reviewer personas: Unix, TDD/Testability, Swift DX, Security, GraalVM
+  Runtime, and Architecture.
+- ADR requirements: ADR-010 for XCFramework release/signing/checksum policy and
+  ADR-017 for artifact reproducibility/signing/checksum policy must be accepted
+  before changing release promises.
+- Research checklist:
+  - Read ADR-001, ADR-012, ADR-018, docs/release-gates.md, Package.swift,
+    justfile, scripts/build-xcframework.sh, scripts/package-artifact.py,
+    scripts/inspect-artifact.py, scripts/check-xcframework.sh, and current
+    release-check flow.
+  - Identify which release-pipeline capabilities already exist and which M7
+    gaps remain.
+  - Verify current package/checksum reproducibility before changing scripts.
+- Verification plan:
+  - `mise exec -- just plan-check`
+  - `mise exec -- just xcframework`
+  - `mise exec -- just check-xcframework`
+  - `mise exec -- just inspect`
+  - `mise exec -- just package-artifact` twice with checksum comparison
+  - `mise exec -- just checksum`
+  - `mise exec -- just release-check` or record expected failures with exact
+    blockers
+  - focused unit/script checks for any modified release tooling
+- Claude review plan: run scoped plan consult after the release gaps are
+  identified, apply feedback, then run a scoped diff review after changes.
+- 2026-06-06 Release persona note: Claude read-only consult exited without
+  usable output and a bounded tool-less retry timed out at 60 seconds. Do not
+  count this as Claude signoff; rerun a scoped Claude review after ADR/script
+  changes or record a fresh blocker.
+
+Implementation summary:
+
+- Accepted ADR-010 for XCFramework release, signing, and checksum policy.
+- Accepted ADR-017 for deterministic package manifests, sidecar checksums, and
+  reproducibility evidence.
+- Added local ad-hoc signing to =build-xcframework.sh= by signing the nested
+  private dylib first and the framework bundle second.
+- Added signature verification to =check-xcframework.sh= and framework
+  code-sign status to =inspect-artifact.py=.
+- Replaced the static inspect runtime list with symbol-derived runtime
+  inspection.
+- Extended =package-artifact.py= to persist a JSON package manifest and checksum
+  sidecar, including input artifact hash, per-file hashes, slices, and SwiftPM
+  checksum.
+- Added =check-package-reproducible.py= and =just package-artifact-verify= to
+  package the same input twice and compare bytes, SHA-256, SwiftPM checksum,
+  sidecar checksums, entry order, timestamps, compression, and metadata skips.
+- Added release-mode manifest checks in =Package.swift= so partial
+  URL/checksum configuration fails fast and =ECRITUM_RELEASE_RUNTIME_REQUIRED=1=
+  forces =.binaryTarget(url:checksum:)= even when =dist/local= exists.
+- Parameterized release-related =just= recipes for artifact/output reuse.
+- Hardened =release-check.sh= with =--output-dir=, =--artifact=,
+  =--release-zip=, =JUST= override, persisted package/repro/checksum/release
+  manifest evidence, checksum shape validation, and sidecar comparison.
+- Recorded =ECRITUM-DEBT-0012= for public Developer ID/notarization and hosted
+  SwiftPM consumer enforcement, which belongs to later M7 release tasks.
+
+Review evidence:
+
+- Release persona found stale zip, missing release-mode manifest proof, size,
+  signing, slice policy, and inspectability gaps. Implemented release-mode
+  manifest verification, fresh package sidecars, signing verification, explicit
+  arm64 phased policy, symbol-derived runtime inspection, and release docs.
+- Unix persona found fixed-path automation and missing reproducibility proof.
+  Added task parameters, =--output-dir=, =JUST= override, =--release-zip=, and
+  reproducibility checker.
+- Tests persona required deterministic zip metadata tests, SwiftPM checksum
+  comparison, package reproducibility evidence, inspect/schema evidence, and
+  expected size failure. Added focused release-tool tests and recorded outputs.
+- Swift DX persona found local path masking URL/checksum mode and weak partial
+  release-env diagnostics. Added release-required manifest mode and tests.
+- Claude plan consult identified deterministic directory-hash ordering,
+  persistent package output, automated repro proof, static runtime inventory,
+  ADR scope overlap, and public signing trigger gaps. Fixed the script issues,
+  split ADR scopes explicitly, and recorded public signing/notarization debt.
+- Claude diff review then requested manifest-path tests, reproducibility-checker
+  test coverage, single-stat file records, explicit release zip/checksum wiring,
+  checksum validation, and sidecar comparison. Applied those fixes and reran
+  focused verification.
+- Claude second diff review after those fixes produced no output after a
+  bounded wait and was terminated; no further Claude findings were available.
+
+Verification evidence:
+
+- =python3 -m py_compile scripts/package-artifact.py scripts/check-package-reproducible.py scripts/inspect-artifact.py= -> exit 0.
+- =bash -n scripts/build-xcframework.sh scripts/check-xcframework.sh scripts/release-check.sh= -> exit 0.
+- =mise exec -- just --list= -> exit 0; release recipes expose artifact/output
+  parameters.
+- =mise exec -- just plan-check= -> exit 0.
+- =mise exec -- just test-release-tools= -> exit 0; 6 tests cover deterministic
+  package output, missing artifact failure, reproducibility checker, partial
+  URL/checksum failure, release-required missing metadata failure, and
+  release-required remote binary-target selection.
+- Release-mode =swift package describe --type json= with
+  =ECRITUM_RELEASE_RUNTIME_REQUIRED=1=, URL, and checksum -> exit 0;
+  =EcritumRuntime= resolved as binary target path
+  =remote/archive/EcritumRuntime.xcframework.zip=.
+- =mise exec -- just xcframework= -> exit 0; rebuilt signed local artifact and
+  =check-xcframework= passed signature verification for private dylib,
+  framework bundle, and wrapper binary.
+- =mise exec -- just inspect= -> exit 0; signatures valid, arm64 slice detected,
+  runtime list derived as GraalVM Native Image, SCI Clojure, GraalJS, LuaJ JME,
+  and Ecritum C wrapper.
+- =mise exec -- just package-artifact= -> exit 0; wrote
+  =dist/release/EcritumRuntime.xcframework.zip=,
+  =dist/release/EcritumRuntime.xcframework.zip.json=, and
+  =dist/release/EcritumRuntime.xcframework.zip.checksum=.
+- =mise exec -- just package-artifact-verify= -> exit 0; package SHA-256 and
+  SwiftPM checksum both
+  =78a4c6a715789168b47a8860e3f12a9759050b83959d67b3f2c32eedffe8f47c=.
+- =mise exec -- just checksum= -> exit 0 and printed
+  =78a4c6a715789168b47a8860e3f12a9759050b83959d67b3f2c32eedffe8f47c=.
+- =mise exec -- just release-check= -> expected exit 1 after conformance,
+  security, Swift, Java, C ABI, package smoke, check-xcframework,
+  benchmarks, dependency delta, packaging, reproducibility, checksum,
+  release-manifest, and license report evidence; =build/release/size.json=
+  blocks on ADR-018 size:
+  =artifact_bytes 151470866 exceeds budget 25000000= and
+  =private_runtime_bytes 151308752 exceeds budget 20000000=.
+
+Remaining M7 blockers, not M7-001 blockers:
+
+- Hosted or clean-consumer SwiftPM =.binaryTarget(url:checksum:)= resolution is
+  owned by M7-002.
+- License notices and strict shipped-license resolution are owned by M7-003 and
+  ADR-011.
+- Public Developer ID signing, notarization, stapling policy, and hosted
+  release gate enforcement are tracked by =ECRITUM-DEBT-0012=.
+- The current combined local artifact remains above Core size budgets until the
+  Core/Full artifact split or budget policy is resolved.
 
 *** TODO M7-002 Clean-machine consumer validation
 
@@ -3653,7 +3789,7 @@ Output of: M5-001.
 Output of: M6-001.
 ** DONE ADR-009 TruffleRuby inclusion gate and artifact policy
 Output of: M6-002.
-** TODO ADR-010 XCFramework release, signing, and checksum policy
+** DONE ADR-010 XCFramework release, signing, and checksum policy
 Output of: M7-001.
 ** TODO ADR-011 License inventory and redistribution policy
 Output of: M7-003.
@@ -3667,7 +3803,7 @@ Output of: M2-007.
 Output of: M2.5-002 and M7-003.
 ** DONE ADR-016 Swift API and permission policy shape
 Output of: M2-001A.
-** TODO ADR-017 Artifact reproducibility, signing, and checksum policy
+** DONE ADR-017 Artifact reproducibility, signing, and checksum policy
 Output of: M1-004, M1-005, and M7-001.
 ** DONE ADR-019 Host function registration lifecycle
 Output of: M2-004.

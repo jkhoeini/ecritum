@@ -57,6 +57,9 @@ if printf '%s\n' "$install_name_payload" | grep -F "$repo_root"; then
 fi
 otool -l "$binary" | grep -A4 'LC_BUILD_VERSION' | grep -q 'minos 14.0'
 otool -l "$private_lib" | grep -A4 'LC_BUILD_VERSION' | grep -q 'minos 14.0'
+codesign --verify --verbose=2 "$private_lib"
+codesign --verify --verbose=2 "$framework"
+codesign --verify --verbose=2 "$binary"
 
 smoke_dir="$(mktemp -d "${TMPDIR:-/tmp}/ecritum-smoke-XXXXXX")"
 trap 'rm -rf "$smoke_dir"' EXIT

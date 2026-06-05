@@ -19,6 +19,32 @@ not done if it introduced debt without an entry.
 
 ## Active Debt
 
+- ID: ECRITUM-DEBT-0012
+- Source task: M7-001
+- Introduced by: Release artifact pipeline hardening
+- Owner persona: Release, Licensing, and Distribution Engineer
+- Date: 2026-06-06
+- Impact: Local XCFramework builds are ad-hoc signed and verified, but public
+  Developer ID signing, hardened-runtime enforcement, notarization, stapling or
+  stapling exception, and hosted SwiftPM artifact verification are not yet
+  enforced by a public release gate.
+- Reason accepted: M7-001 hardens deterministic packaging, local signing,
+  checksum evidence, and release-manifest URL/checksum selection without
+  requiring Apple Developer credentials or public artifact hosting in developer
+  workspaces. ADR-010 requires the stricter public gate before publication.
+- Resolve-by phase: M7
+- Exit condition: Public release automation verifies a Developer ID signed and
+  notarized artifact, records notarization evidence, validates the final
+  uploaded URL/checksum through SwiftPM, and fails if `.binaryTarget(path:)`
+  resolves during public release preparation.
+- Removal task: M7 public release signing/notarization and hosted SwiftPM
+  consumer gate.
+- Verification required: Developer ID `codesign --verify --deep --strict`
+  equivalent for every shipped slice and nested dylib, `xcrun notarytool`
+  submission evidence, stapler validation or documented non-app archive
+  exception, hosted `.binaryTarget(url:checksum:)` consumer smoke, and
+  `mise exec -- just release-check`.
+
 - ID: ECRITUM-DEBT-0011
 - Source task: M5-001
 - Introduced by: LuaJ Native Image spike release gate

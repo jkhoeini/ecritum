@@ -1,8 +1,8 @@
 # Ecritum Release Gates
 
-This document is the M1 release-gate baseline. It defines the commands a CI job
-can run today and the stricter release checks that block publication until
-license and distribution work is complete.
+This document defines the commands a CI job can run today and the stricter
+release checks that block publication until size, license, signing,
+notarization, and clean-consumer distribution work is complete.
 
 ## CI Smoke
 
@@ -23,7 +23,7 @@ unit tests.
 
 ## Release Gate Commands
 
-The M1 release gate is:
+The release gate is:
 
 ```sh
 mise exec -- just native
@@ -37,13 +37,17 @@ mise exec -- just release-check
 - `just check-abi`
 - `just check-xcframework`
 - `just inspect`
-- `just size`
 - `just bench-cold-start`
 - `just bench-first-eval`
 - `just bench-idle-rss`
 - `just check-dep-delta`
 - `just package-artifact`
+- `just package-artifact-verify`
+- `just checksum`
+- release-mode `swift package describe --type json` with
+  `ECRITUM_RELEASE_RUNTIME_REQUIRED=1`
 - `just license-report`
+- `scripts/size-artifact.py --require-artifact`
 - `scripts/license-report.py --strict`
 
 `just bench-swift-cold-start` is represented by the M1 budget policy but is not
@@ -52,8 +56,11 @@ because it is a host-example benchmark rather than a release blocker while the C
 ABI packaging gates cover the artifact runtime path. First-eval is part of
 `release-check` once the eval ABI exists.
 
-The strict license step exits nonzero while shipped licenses remain unknown.
-That is intentional: unknown shipped licenses block release publication.
+The current combined SCI/GraalJS/Lua local artifact also exceeds ADR-018 Core
+size budgets. `release-check` is therefore expected to exit nonzero at the size
+gate until the Core/Full artifact split or size policy is resolved. After size
+passes, the strict license step remains a publication blocker while shipped
+licenses are unknown.
 
 The M2.5 security baseline adds these CI gates:
 
@@ -202,23 +209,33 @@ unless a later ADR explicitly accepts a narrow facade.
 
 ## Reproducibility
 
-M1 uses rebuildable provenance plus deterministic archive metadata:
+M7 uses rebuildable provenance plus deterministic archive metadata:
 
 - tool versions are pinned in `.mise.toml`
 - Maven dependency versions are pinned in `native/pom.xml`
 - `just native` copies Native Image outputs into `build/native/macos-arm64`
 - `just xcframework` assembles `dist/local/EcritumRuntime.xcframework`
+- local artifacts are ad-hoc signed by signing the nested private dylib first
+  and then the framework bundle
 - `just package-artifact` writes
   `dist/release/EcritumRuntime.xcframework.zip`
+- `just package-artifact` also writes
+  `dist/release/EcritumRuntime.xcframework.zip.json` and
+  `dist/release/EcritumRuntime.xcframework.zip.checksum`
 - archive entries are sorted
 - archive timestamps are normalized to `1980-01-01T00:00:00Z`
 - macOS metadata files such as `.DS_Store`, `._*`, and `__MACOSX` are excluded
+- `just package-artifact-verify` packages the same input twice and compares
+  bytes, SHA-256, SwiftPM checksum, sidecar checksums, entry order, timestamps,
+  compression type, and metadata skips
 - `just checksum` prints the SwiftPM checksum for the release zip
 - `just inspect` records slice, symbol, resource, install-name, and checksum
   metadata
 
-Byte-identical public releases, signing, notarization, dependency digest locks,
-and vulnerability response policy are later release-hardening work.
+Public release signing requires a Developer ID identity, hardened runtime,
+notarization with `notarytool`, and retained notarization evidence. Hosted
+SwiftPM URL resolution remains M7-002. Dependency digest locks, SBOM/CVE
+policy, and vulnerability response policy are owned by ADR-011 and ADR-015.
 
 ## Smoke Test Representation
 

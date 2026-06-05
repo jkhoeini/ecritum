@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'USAGE'
-Usage: build-xcframework.sh [--native-dir PATH] [--public-headers PATH] [--output PATH] [--work-dir PATH] [--min-macos VERSION]
+Usage: build-xcframework.sh [--native-dir PATH] [--public-headers PATH] [--output PATH] [--work-dir PATH] [--min-macos VERSION] [--sign-identity ID] [--skip-sign]
 
 Build dist/local/EcritumRuntime.xcframework from the M1 native output.
 Diagnostics go to stderr. The output path is printed to stdout.
@@ -15,6 +15,8 @@ public_headers="Sources/CEcritum/include"
 output="dist/local/EcritumRuntime.xcframework"
 work_dir="build/xcframework"
 min_macos="14.0"
+sign_identity="${ECRITUM_CODESIGN_IDENTITY:--}"
+skip_sign="0"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -23,6 +25,8 @@ while [ "$#" -gt 0 ]; do
     --output) output="$2"; shift 2 ;;
     --work-dir) work_dir="$2"; shift 2 ;;
     --min-macos) min_macos="$2"; shift 2 ;;
+    --sign-identity) sign_identity="$2"; shift 2 ;;
+    --skip-sign) skip_sign="1"; shift ;;
     --help|-h) usage; exit 0 ;;
     *) echo "unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -101,6 +105,15 @@ cat > "$framework_dir/Info.plist" <<PLIST
 </dict>
 </plist>
 PLIST
+
+if [ "$skip_sign" != "1" ]; then
+  codesign_args=(--force --sign "$sign_identity")
+  if [ "$sign_identity" != "-" ]; then
+    codesign_args+=(--options runtime --timestamp)
+  fi
+  codesign "${codesign_args[@]}" "$resources_dir/libecritum_graal.dylib" >&2
+  codesign "${codesign_args[@]}" "$framework_dir" >&2
+fi
 
 xcodebuild -create-xcframework -framework "$framework_dir" -output "$output" >&2
 printf '%s\n' "$output"
