@@ -189,6 +189,17 @@ runtime `pip`, direct Java imports, raw Polyglot bindings, `ctypes`, `cffi`,
 subprocess, raw sockets, environment access, and direct filesystem access remain
 non-goals unless a later ADR explicitly accepts a narrow facade.
 
+M6-002 gates Ruby through TruffleRuby. ADR-009 rejects TruffleRuby inclusion in
+the default Core artifact for v0 and keeps Ruby as a Full-artifact candidate
+until a later spike proves matching GraalVM/Maven coordinates or an accepted
+version-skew policy, Native Image shared-library packaging, runtime-resource
+layout, conformance/security behavior, size/startup/RSS/first-eval impact,
+license inventory, dependency delta, reproducible packaging, clean-consumer
+behavior, and macOS slice policy. RubyGems/Bundler installation, native gems, C
+extensions, NFI/FFI, direct Java imports, raw Polyglot bindings, subprocess, raw
+sockets, environment access, and direct filesystem access remain non-goals
+unless a later ADR explicitly accepts a narrow facade.
+
 ## Reproducibility
 
 M1 uses rebuildable provenance plus deterministic archive metadata:

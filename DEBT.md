@@ -165,29 +165,27 @@ not done if it introduced debt without an entry.
 - Verification required: `mise exec -- just perf-baseline` and documented
   language-runtime delta table.
 
+## Resolved Debt
+
 - ID: ECRITUM-DEBT-0005
 - Source task: M1-007
 - Introduced by: Initial Core vs Full artifact split policy
 - Owner persona: GraalVM and Polyglot Runtime Engineer
 - Date: 2026-06-05
-- Impact: Core/Full thresholds for Python and Ruby are empirical hypotheses
-  until GraalPy and TruffleRuby artifacts are measured.
-- Reason accepted: The split criteria must exist before Python/Ruby work starts,
-  but the measurements cannot exist until those runtime spikes are implemented.
-- Progress:
-  - M6-001/ADR-008 gates GraalPy as a Full-artifact candidate and rejects Python
-    inclusion in the default Core artifact for v0 based on official resource
-    packaging guidance, local Maven dependency-size evidence, and unresolved
-    sandbox requirements.
-  - Ruby remains open for M6-002.
-- Resolve-by phase: M6
-- Exit condition: GraalPy and TruffleRuby measurements decide whether each
-  runtime remains Full-only or can satisfy Core gates.
-- Removal task: M6 GraalPy/TruffleRuby measurement and artifact policy review
-- Verification required: `mise exec -- just perf-baseline`, strict license gate,
-  and conformance smoke for each measured runtime.
-
-## Resolved Debt
+- Resolved in: M6-001 and M6-002
+- Resolution: ADR-008 gates GraalPy as a Full-artifact candidate and rejects
+  Python inclusion in the default Core artifact for v0 based on official
+  resource packaging guidance, local Maven dependency-size evidence, and
+  unresolved sandbox requirements. ADR-009 gates TruffleRuby as a Full-artifact
+  candidate and rejects Ruby inclusion in the default Core artifact for v0 based
+  on unavailable GraalVM-25.0.2 Ruby Maven coordinates, local Ruby/LLVM
+  dependency-size evidence, bundled-resource inventory risks, and unresolved
+  sandbox requirements. Future Python/Ruby implementation proof gaps now live in
+  ADR-008 and ADR-009 rather than active debt.
+- Verification: M6-001 and M6-002 verification in PROJECT.org records Maven
+  dependency probes, local cache and JAR byte-size measurements, support-claim
+  scans, unchanged dependency/license gates, and expected ADR-018 size failure
+  for the current non-Python/non-Ruby artifact.
 
 - ID: ECRITUM-DEBT-0002
 - Source task: M1-002/M1-003

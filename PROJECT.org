@@ -3208,7 +3208,7 @@ Not verified:
   signs and verifies the local test bundle.
 #+end_src
 
-** Milestone M5: Lua Feasibility and Runtime Decision
+** DONE Milestone M5: Lua Feasibility and Runtime Decision
 
 Goal: decide whether Lua ships in the default artifact through LuaJ or another
 implementation.
@@ -3224,6 +3224,13 @@ Definition of done:
 - If rejected or deferred, the public roadmap and docs avoid false support
   claims.
 - Spike code is hardened with tests or removed.
+
+Milestone result:
+
+- M5-001 is DONE. LuaJ compiled into the Native Image shared library, Lua smoke
+  and abuse tests pass, size/perf/license impact is recorded, and ADR-0023
+  keeps Lua experimental until Core/Full classification and memory controls are
+  resolved.
 
 *** DONE M5-001 Spike LuaJ in Native Image
 
@@ -3340,7 +3347,7 @@ Review:
   hid `debug`/`package`, and interrupted `while true do end` with an internal
   DebugLib instruction hook.
 
-** Milestone M6: Python and Ruby Gates
+** DONE Milestone M6: Python and Ruby Gates
 
 Goal: test whether GraalPy and TruffleRuby are practical for the default
 artifact or should become optional/full artifacts.
@@ -3355,6 +3362,14 @@ Definition of done:
   measured.
 - Default artifact policy is decided before support is claimed.
 - Spike code is hardened with tests or removed.
+
+Milestone result:
+
+- M6-001 and M6-002 are DONE. ADR-008 and ADR-009 reject GraalPy and
+  TruffleRuby from the default Core artifact for v0 and keep both as
+  Full-artifact candidates. Python/Ruby Native Image adapter builds were not
+  run because the gate decisions rejected default inclusion before
+  implementation; future Full-artifact spikes own those proofs.
 
 *** DONE M6-001 Gate GraalPy inclusion
 
@@ -3427,8 +3442,8 @@ Implementation result:
   and macOS slice policy.
 - README and release gates now describe Python as gated/Full-candidate rather
   than supported.
-- ECRITUM-DEBT-0005 now records the Python side of the Python/Ruby artifact
-  policy; Ruby remains open for M6-002.
+- ECRITUM-DEBT-0005 was updated with the Python side of the Python/Ruby
+  artifact policy; M6-002 owns the Ruby side.
 
 #+begin_src markdown
 ## Verification
@@ -3456,7 +3471,7 @@ Not verified:
 - GraalPy Native Image build, stdlib XCFramework resource layout, Python conformance/security, Python first-eval, Full-artifact packaging, and clean-consumer behavior are intentionally deferred to a later Full-artifact spike by ADR-008.
 #+end_src
 
-*** TODO M6-002 Gate TruffleRuby inclusion
+*** DONE M6-002 Gate TruffleRuby inclusion
 
 Lead persona: GraalVM Runtime.
 Reviewer personas: Release, Security, Tests.
@@ -3467,6 +3482,105 @@ Definition of done:
 - Ruby stdlib packaging is proven or rejected.
 - RubyGems/native extension policy is documented.
 - License and artifact-size impact are recorded.
+
+Execution plan:
+
+- Engineering Manager started M6-002 in jj child change
+  =docs: gate TruffleRuby inclusion= on top of completed M6-001.
+- Lead persona: GraalVM and Polyglot Runtime Engineer.
+- Reviewer personas: Release/Licensing, Security/Sandboxing,
+  TDD/Testability, and Architecture.
+- ADR requirement: write ADR-009 before any TruffleRuby support claim or runtime
+  adapter implementation.
+- Research checklist:
+  - Read PLAN.org Ruby sections and current ADRs that constrain language
+    inclusion, artifact budgets, Java/host interop, permissions, and resource
+    limits.
+  - Read current official TruffleRuby Native Image, embedding, and Maven
+    documentation.
+  - Inspect current Maven coordinates and dependency/resource packaging shape.
+  - Compare against existing Clojure, JavaScript, Lua, and GraalPy gate
+    decisions.
+- Verification plan:
+  - If implementation/spike code is added, run Java tests, Native Image build,
+    XCFramework build, ABI check, conformance/security checks, size, startup,
+    idle RSS, first-eval, license inventory, dependency delta, reproducible
+    package, and clean-consumer gates.
+  - If the gate is decided by ADR without adapter code, verify with
+    =mise exec -- just plan-check= and task-specific source/doc consistency
+    checks, and record unimplemented proof gaps explicitly.
+- Claude review plan: run scoped plan consult on the ADR/gate decision, apply
+  feedback when available, run a post-change review or record the blocker, and
+  record accepted residual risks.
+
+Review:
+
+- GraalVM Runtime review: PASS. Recommended rejecting TruffleRuby from default
+  Core/v0 now and keeping Ruby as a future Full-only spike, not a permanent
+  rejection. Confirmed `org.graalvm.polyglot:ruby:25.0.2` is absent while the
+  repo pins GraalVM 25.0.2, and only the 25.0.0 Ruby Maven line resolved.
+- Release review: PASS with additions. ADR-009 now requires no version skew
+  unless explicitly accepted, resource pruning/inventory for bundled gems and
+  native/C-extension material, Core/Full dependency baselines, multi-license
+  tooling, runtime/resource inspection, reproducible package checksums, and
+  clean-consumer smoke before any Ruby claim.
+- Security review: PASS with additions. ADR-009 now requires a deny-all
+  `Context.Builder` baseline and Ruby-specific probes for Java, Polyglot, inner
+  contexts, Fiddle/FFI/NFI, C extensions/native gems, RubyGems/Bundler,
+  `$LOAD_PATH`/`require`/`load`, raw IO/network/process/env, threads/Ractors,
+  signal handlers, timeout/cancellation, and post-timeout context reuse.
+- Tests review: PASS. M6-002 should stay an ADR/research gate. Future support
+  claim requires Ruby evaluator, C smoke, Swift artifact, conformance, security,
+  static, size/perf/license/dependency, reproducibility, and clean-consumer
+  gates.
+- Claude plan consult: scoped `claude -p` attempt timed out with no output in
+  the main manager session and was recorded as unavailable; persona agents also
+  attempted Claude where useful and reported no blocker changing the decision.
+
+Implementation result:
+
+- Accepted ADR-009. TruffleRuby is not included in Ecritum Core and Ecritum must
+  not claim Ruby support for v0 from M6-002.
+- Ruby remains a Full-artifact candidate pending a later spike that proves
+  matching GraalVM/Maven coordinates or an accepted version-skew policy, Native
+  Image shared-library packaging, XCFramework resource layout,
+  conformance/security behavior, size/startup/RSS/first-eval impact, license
+  inventory, dependency delta, reproducible packaging, clean-consumer behavior,
+  and macOS slice policy.
+- README and release gates now describe Ruby as gated/Full-candidate rather
+  than supported.
+- ECRITUM-DEBT-0005 is resolved because ADR-008 and ADR-009 now own the
+  remaining Python/Ruby Full-artifact proof gaps.
+
+#+begin_src markdown
+## Verification
+
+Layers tested: Contract, Release
+Commands run:
+- `mise exec -- just plan-check` -> exit 0.
+- `rg -n "Ruby.*supported|supports Ruby|Ruby support|ruby\"\\)|ruby'\\)|language.*ruby" README.md PROJECT.org docs Sources Tests native scripts justfile DEBT.md` -> exit 0; no public support claim found. Expected references are the Swift `.ruby` language token and ADR/project gate wording.
+- `curl -I -fsSL https://repo1.maven.org/maven2/org/graalvm/polyglot/ruby/25.0.2/ruby-25.0.2.pom` -> expected 404, recorded as `expected-missing`.
+- `curl -I -fsSL https://repo1.maven.org/maven2/org/graalvm/ruby/ruby-language/25.0.2/ruby-language-25.0.2.pom` -> expected 404, recorded as `expected-missing`.
+- `mise exec -- mvn -s .mvn/settings.xml -q dependency:get -Dartifact=org.graalvm.polyglot:ruby:25.0.0:pom -Dtransitive=true` -> exit 0.
+- `du -sh ~/.m2/repository/org/graalvm/ruby ~/.m2/repository/org/graalvm/llvm ~/.m2/repository/org/graalvm/truffle ~/.m2/repository/org/graalvm/shadowed` -> exit 0; about 53M, 76M, 37M, and 41M respectively.
+- `wc -c ~/.m2/repository/org/graalvm/ruby/ruby-language/25.0.0/ruby-language-25.0.0.jar ~/.m2/repository/org/graalvm/ruby/ruby-resources/25.0.0/ruby-resources-25.0.0.jar ~/.m2/repository/org/graalvm/llvm/llvm-language-native-resources/25.0.0/llvm-language-native-resources-25.0.0.jar ~/.m2/repository/org/graalvm/llvm/llvm-language/25.0.0/llvm-language-25.0.0.jar` -> exit 0; 29,063,809, 25,288,061, 56,512,783, and 21,549,564 bytes.
+- `jar tf ~/.m2/repository/org/graalvm/ruby/ruby-resources/25.0.0/ruby-resources-25.0.0.jar | wc -l` -> exit 0; 2,643 resource entries.
+- `mise exec -- just test-native-eval-smoke` -> exit 0.
+- `mise exec -- just inspect` -> exit 0; embedded runtime list remains GraalVM Native Image, SCI Clojure, GraalJS, LuaJ JME, and Ecritum C wrapper.
+- `mise exec -- just license-report` -> exit 0; current inventory unchanged by M6-002.
+- `mise exec -- just check-dep-delta` -> exit 0; no Ruby dependency was added to the repo.
+- `mise exec -- just size` -> expected exit 1 under ADR-018: artifact 152,317,307 bytes and private runtime 152,175,352 bytes exceed Core budgets; this is the existing combined SCI/GraalJS/Lua artifact state that ADR-009 uses as policy context.
+New tests added:
+- N/A, M6-002 is an ADR/research gate and intentionally adds no Ruby adapter.
+Negative paths tested:
+- Ruby support remains unimplemented; no Ruby runtime dependency or entrypoint was added.
+Size impact:
+- No artifact change from M6-002. TruffleRuby dependency probe showed missing GraalVM-25.0.2 Ruby Maven artifacts and a 132,414,217-byte total across the largest 25.0.0 Ruby/LLVM resource JARs before Native Image closure effects.
+Sanitizers:
+- not run: no source adapter code changed.
+Not verified:
+- TruffleRuby Native Image build, stdlib/resource XCFramework layout, Ruby conformance/security, Ruby first-eval, Full-artifact packaging, and clean-consumer behavior are intentionally deferred to a later Full-artifact spike by ADR-009.
+#+end_src
 
 ** Milestone M7: Distribution Hardening
 
@@ -3537,7 +3651,7 @@ Output of: M4-001.
 Output of: M5-001.
 ** DONE ADR-008 GraalPy inclusion gate and artifact policy
 Output of: M6-001.
-** TODO ADR-009 TruffleRuby inclusion gate and artifact policy
+** DONE ADR-009 TruffleRuby inclusion gate and artifact policy
 Output of: M6-002.
 ** TODO ADR-010 XCFramework release, signing, and checksum policy
 Output of: M7-001.

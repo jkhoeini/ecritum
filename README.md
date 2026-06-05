@@ -59,7 +59,8 @@ The first target is not "run every language on the JVM." The first target is a p
 - Lua: through LuaJ or another pure-Java Lua implementation that compiles into Native Image.
 - Python: GraalPy remains a Full-artifact candidate after size, resource
   packaging, and sandbox tests.
-- Ruby: through TruffleRuby after size, licensing, and packaging tests.
+- Ruby: TruffleRuby remains a Full-artifact candidate after version,
+  size, licensing, resource packaging, and sandbox tests.
 - JVM bytecode/JARs: future research, not an MVP promise.
 
 ## Standard Library Plan
