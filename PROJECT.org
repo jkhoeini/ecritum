@@ -1779,12 +1779,55 @@ Definition of done:
   parsing.
 - Threat model and vulnerability-response tasks are recorded.
 
-*** TODO M2.5-001 ADR for sandbox enforcement architecture
+*** DONE M2.5-001 ADR for sandbox enforcement architecture
 
 Lead persona: Security.
 Reviewer personas: Architecture, GraalVM Runtime, Tests.
 Depends on: M2-005, M2-007.
-Write scope: docs/adr/.
+Write scope: docs/adr/, PROJECT.org.
+
+Assignment:
+
+- Engineering manager: Codex.
+- Lead persona agent: Security (Fermat).
+- Reviewer agents: Architecture (Dewey), GraalVM Runtime (Archimedes),
+  Tests/TDD (Ramanujan).
+- Claude plan consult: PASS. Recommended drafting both ADR-004 and ADR-013
+  because both are listed as M2.5-001 backlog outputs and should be referenced
+  independently by later language ADRs.
+
+Accepted plan:
+
+- Draft ADR-004 first for the permission model, untrusted-script threat model,
+  sandbox enforcement architecture, macOS sandbox relationship, in-process
+  memory-isolation limits, Polyglot denial defaults, standard-library
+  capability boundaries, and verification gates.
+- Draft ADR-013 second for Java/JDK/host interop exposure policy: Java lookup,
+  `HostAccess`, reflection, class loading, native loading, classpath/JAR/Maven
+  behavior, curated JDK facades, and per-language host interop non-goals.
+- Explicitly block any untrusted-user scripting support claim on GraalVM
+  Community Edition unless external isolation or an accepted non-CE
+  sandbox/licensing/distribution decision lands.
+- Keep the ADRs ABI-conservative. Do not add public C symbols, raw Polyglot
+  option passthroughs, language support claims, or filesystem canonicalization
+  implementation in this task.
+- Make M2.5-002 executable gates concrete: `test-security-static`,
+  `test-security-abuse`, parser/fuzz-equivalent tests, strict conformance, and
+  existing C/Swift/ASan checks.
+
+Pre-implementation review:
+
+- Security: PASS. Requires two ADRs, deny-all defaults, macOS App Sandbox as
+  defense in depth only, and no untrusted-script claim unless sandbox/resource
+  abuse gates pass.
+- Architecture: BLOCKER if ADR-013 remains implicit. Requires ADR-004 and
+  ADR-013 to be co-accepted and separately referenceable.
+- GraalVM Runtime: BLOCKER until ADR-004 makes the GraalVM Community Edition
+  trust claim explicit. Requires denial of dangerous Polyglot builder options,
+  language escape-hatch coverage, and Native Image limitations.
+- Tests/TDD: BLOCKER until ADRs name executable gates, not only intent. Requires
+  static checks, abuse tests, parser/fuzz abuse, strict conformance gate, and
+  named CI commands for M2.5-002.
 
 Definition of done:
 
@@ -1792,6 +1835,71 @@ Definition of done:
   defense-in-depth layers, and in-process memory isolation limits.
 - ADR rejects `allowAllAccess`, unrestricted host access, native access,
   unrestricted IO, and process creation by default.
+- ADR-013 documents Java/host interop exposure policy before Java lookup,
+  reflection, class loading, native loading, or curated JDK facades can ship.
+
+Post-change review completed:
+
+- Security review: PASS. ADR-004 covers the GraalVM CE no-untrusted-code claim,
+  default-deny posture, forbidden Polyglot settings, standard-library
+  capability boundaries, macOS/in-process limits, and concrete gates. ADR-013
+  blocks Java/host interop escape hatches by default.
+- Architecture review: BLOCKER then PASS. Initial review found ADR-013 implied
+  an undefined runtime/context host-callback policy bit. Fixed by gating host
+  exposure through explicit registration plus language projection, with no new
+  config key or C ABI.
+- GraalVM Runtime review: PASS. ADR-004/ADR-013 cover the CE sandbox non-claim,
+  Polyglot/Engine denial defaults, language escape hatches, and Native Image
+  limits. Follow-up nit fixed by moving the HostAccess reference to JDK 25 docs.
+- Tests/TDD review: BLOCKER then PASS. Initial review required executable
+  gates instead of intent. ADR-004 now names `test-security-static`,
+  `test-security-abuse`, parser/fuzz-equivalent tests, strict conformance, and
+  existing C/Swift/ASan gates.
+- Clean Code review: PASS. Boundaries are clear, policy decisions are pure,
+  side effects stay behind adapters, and M2.5-002 gates are actionable.
+- Claude diff review: found two blockers: incorrect
+  `allowInnerContextOptions(true)` API wording and a threat-model wording risk
+  that could be read as a CE untrusted-code support claim. Both were fixed.
+- Claude second review: PASS. Confirmed all prior issues were resolved and no
+  new blockers were introduced.
+
+Red/green evidence:
+
+- Red: ADR backlog had ADR-004 and ADR-013 as TODO outputs of M2.5-001.
+- Red: Tests/TDD review blocked vague gates until executable recipes and strict
+  conformance support-claim behavior were named.
+- Red: Architecture review blocked an implied host-callback policy bit not
+  present in ADR-016/020 schema.
+- Red: Claude review blocked incorrect `allowInnerContextOptions(true)` wording
+  and ambiguous CE threat-model wording.
+- Green: ADR-004 and ADR-013 now exist, are accepted, and cover the task DoD,
+  ADR backlog outputs, GraalVM CE non-claim, forbidden Polyglot defaults, Java
+  interop denial, and M2.5-002 gates.
+
+## Verification
+
+Layers tested: Documentation, Plan Gate, Conformance Gate
+Commands run:
+- `test -f docs/adr/0004-permission-model-and-untrusted-script-threat-model.md
+  && test -f docs/adr/0013-java-and-host-interop-exposure-policy.md` -> exit 0.
+- `mise exec -- just plan-check` -> exit 0.
+- `rg -n "GraalVM Community Edition|test-security-static|test-security-abuse|
+  test-security-fuzz|strict conformance|allowAllAccess|HostAccess.ALL|
+  IOAccess.ALL|Java.type|Class.forName|System.load" docs/adr/0004-...
+  docs/adr/0013-...` -> exit 0; required gate and denial terms are present.
+- `python3 scripts/run-conformance.py --manifest
+  Tests/Conformance/manifest.json --strict --provider python3
+  Tests/Conformance/fixtures/provider.py --mode scaffold; test $? -eq 1`
+  -> exit 0; strict conformance correctly remains non-conformant while
+  security/eval capabilities are pending.
+- `mise exec -- just conformance` -> exit 0, 22 tests.
+New docs added:
+- `docs/adr/0004-permission-model-and-untrusted-script-threat-model.md`
+- `docs/adr/0013-java-and-host-interop-exposure-policy.md`
+Not implemented:
+- `test-security-static`, `test-security-abuse`, parser/fuzz-equivalent tests,
+  hardened-runtime, SBOM, CVE tracking, and vulnerability-response process.
+  These are deliberately assigned to M2.5-002 and ADR-015 follow-up gates.
 
 *** TODO M2.5-002 Add security abuse-test baseline
 
@@ -2074,7 +2182,7 @@ Output of: M1-001.
 Output of: M2-001.
 ** DONE ADR-003 Runtime/context concurrency and async job model
 Output of: M2-007.
-** TODO ADR-004 Permission model and untrusted script threat model
+** DONE ADR-004 Permission model and untrusted script threat model
 Output of: M2.5-001.
 ** TODO ADR-005 SCI/Babashka compatibility scope
 Output of: M3-001.
@@ -2092,7 +2200,7 @@ Output of: M7-001.
 Output of: M7-003.
 ** TODO ADR-012 ABI versioning and compatibility policy
 Output of: M4.5-001.
-** TODO ADR-013 Java and host interop exposure policy
+** DONE ADR-013 Java and host interop exposure policy
 Output of: M2.5-001.
 ** DONE ADR-014 Resource limits, cancellation, teardown, and recovery
 Output of: M2-007.
