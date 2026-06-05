@@ -3020,7 +3020,7 @@ Not verified:
   M4.5-001A/M4.5-002.
 #+end_src
 
-*** TODO M4.5-001A Harden ABI manifest and check-abi for freeze
+*** DONE M4.5-001A Harden ABI manifest and check-abi for freeze
 
 Lead persona: Tests/TDD.
 Reviewer personas: Architecture, Swift DX, Release, Security.
@@ -3043,6 +3043,66 @@ Definition of done:
   accepted deferral that blocks external release candidates.
 - Verification includes negative checker fixtures, C/C++ header smoke, packaged
   `check-abi`, Swift status mapping tests, and reviewer signoff.
+
+Notes:
+
+- Expanded `docs/abi/ecritum-c-abi.json` from a function/status list into the
+  M4.5 freeze ledger: C/Java/Swift status mappings, Swift job states, buffer
+  constants, value kinds, job states, public handle typedefs, public structs,
+  callback signatures, all public functions, exact private symbols, private
+  symbol regexes, packaged header path, and pre-release Mach-O version metadata.
+- Hardened `scripts/check-abi.sh` so it validates manifest/header/Java/Swift
+  parity, rejects unmanifested public header functions, checks public typedefs,
+  structs, callbacks, constants, and functions, scans every packaged
+  `EcritumRuntime.framework` slice, checks packaged header equality, rejects
+  extra `_ecritum_*` exports and private leak patterns, and validates the
+  framework `LC_ID_DYLIB` current/compatibility version metadata.
+- Added `Tests/ABI/test_check_abi.py` with fake `nm`/`otool` fixtures covering
+  valid slices plus negative cases for extra public export, private symbol
+  pattern leak, packaged header drift, C constant renumbering, Swift status
+  drift, and callback signature drift.
+- Accepted deferral: no ABI query symbol and no typed old-artifact mismatch
+  implementation in this task. ADR-012 keeps both as external release-candidate
+  blockers before optional public C symbols or external RC claims.
+
+Review:
+
+- Architecture review: PASS checklist; required manifest/checker coverage was
+  implemented.
+- Swift DX / Release review: PASS checklist; all-slice packaged header equality,
+  Mach-O pre-release metadata, Swift status parity, and external-RC old-artifact
+  deferral were addressed.
+- Security review: PASS checklist; extra `_ecritum_*` export rejection and
+  private regex leak checks were implemented with negative fixtures.
+- Claude final compact implementation review: PASS; no blockers, accepted the
+  ABI query and old-artifact compatibility paths as correctly deferred.
+
+#+begin_src markdown
+## Verification
+
+Layers tested: Unit, Contract, Integration, Packaging, Release
+Commands run:
+- `mise exec -- just check-abi` -> exit 0
+- `mise exec -- just test-abi-checker` -> exit 0, 7 tests passed
+- `python3 -m py_compile Tests/ABI/test_check_abi.py` -> exit 0
+- `mise exec -- just check-xcframework` -> exit 0
+- `mise exec -- just test-c-abi-lifecycle` -> exit 0, including C++ header smoke
+- `mise exec -- just test-swift` -> exit 0, 62 tests passed
+- `mise exec -- just plan-check` -> exit 0
+New tests added:
+- `Tests/ABI/test_check_abi.py`
+Negative paths tested:
+- Extra public export, private symbol pattern leak, packaged header drift,
+  renumbered C status constant, Swift status drift, callback signature drift.
+Size impact:
+- N/A
+Sanitizers:
+- not run: checker/docs/test harness task; existing C lifecycle ASan remains
+  covered by broader lifecycle gates.
+Not verified:
+- ABI query symbol and typed old-artifact mismatch handling; both remain
+  external release-candidate blockers under ADR-012.
+#+end_src
 
 *** TODO M4.5-002 Build packaged macOS smoke app
 

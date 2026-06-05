@@ -1,337 +1,139 @@
 {
   "version": 1,
-  "name": "Ecritum C ABI M2 value, error, lifecycle, and host registration baseline",
+  "name": "Ecritum C ABI M4.5 freeze ledger",
   "publicHeader": "Sources/CEcritum/include/ecritum.h",
   "javaStatus": "native/src/main/java/ecritum/EcritumStatus.java",
+  "swiftStatus": "Sources/Ecritum/EcritumError.swift",
+  "swiftJobState": "Sources/Ecritum/EcritumLifecycle.swift",
+  "artifactHeader": "Headers/ecritum.h",
+  "machO": {
+    "policy": "pre_release",
+    "currentVersion": "0.1.0",
+    "compatibilityVersion": "0.1.0"
+  },
   "statusConstants": [
-    {
-      "c": "ECRITUM_OK",
-      "java": "OK",
-      "value": 0
-    },
-    {
-      "c": "ECRITUM_ERROR_INVALID_ARGUMENT",
-      "java": "INVALID_ARGUMENT",
-      "value": 1
-    },
-    {
-      "c": "ECRITUM_ERROR_BUFFER_TOO_SMALL",
-      "java": "BUFFER_TOO_SMALL",
-      "value": 2
-    },
-    {
-      "c": "ECRITUM_ERROR_RUNTIME_UNAVAILABLE",
-      "java": "RUNTIME_UNAVAILABLE",
-      "value": 3
-    },
-    {
-      "c": "ECRITUM_ERROR_INVALID_HANDLE",
-      "java": "INVALID_HANDLE",
-      "value": 4
-    },
-    {
-      "c": "ECRITUM_ERROR_OUT_OF_MEMORY",
-      "java": "OUT_OF_MEMORY",
-      "value": 5
-    },
-    {
-      "c": "ECRITUM_ERROR_INVALID_UTF8",
-      "java": "INVALID_UTF8",
-      "value": 6
-    },
-    {
-      "c": "ECRITUM_ERROR_INPUT_TOO_LARGE",
-      "java": "INPUT_TOO_LARGE",
-      "value": 7
-    },
-    {
-      "c": "ECRITUM_ERROR_INVALID_CONFIG",
-      "java": "INVALID_CONFIG",
-      "value": 8
-    },
-    {
-      "c": "ECRITUM_ERROR_UNSUPPORTED_CONFIG_VERSION",
-      "java": "UNSUPPORTED_CONFIG_VERSION",
-      "value": 9
-    },
-    {
-      "c": "ECRITUM_ERROR_CONTEXTS_ALIVE",
-      "java": "CONTEXTS_ALIVE",
-      "value": 10
-    },
-    {
-      "c": "ECRITUM_ERROR_CLOSED",
-      "java": "CLOSED",
-      "value": 11
-    },
-    {
-      "c": "ECRITUM_ERROR_BUSY",
-      "java": "BUSY",
-      "value": 12
-    },
-    {
-      "c": "ECRITUM_ERROR_REENTRANT_CALL",
-      "java": "REENTRANT_CALL",
-      "value": 13
-    },
-    {
-      "c": "ECRITUM_ERROR_PERMISSION_DENIED",
-      "java": "PERMISSION_DENIED",
-      "value": 14
-    },
-    {
-      "c": "ECRITUM_ERROR_TIMEOUT",
-      "java": "TIMEOUT",
-      "value": 15
-    },
-    {
-      "c": "ECRITUM_ERROR_CANCELLED",
-      "java": "CANCELLED",
-      "value": 16
-    },
-    {
-      "c": "ECRITUM_ERROR_SCRIPT",
-      "java": "SCRIPT",
-      "value": 17
-    },
-    {
-      "c": "ECRITUM_ERROR_CALLBACK",
-      "java": "CALLBACK",
-      "value": 18
-    },
-    {
-      "c": "ECRITUM_ERROR_TEARDOWN_FAILED",
-      "java": "TEARDOWN_FAILED",
-      "value": 19
-    },
-    {
-      "c": "ECRITUM_ERROR_INTERNAL",
-      "java": "INTERNAL",
-      "value": 20
-    },
-    {
-      "c": "ECRITUM_ERROR_ALREADY_EXISTS",
-      "java": "ALREADY_EXISTS",
-      "value": 21
-    }
+    {"c": "ECRITUM_OK", "java": "OK", "swift": "ok", "value": 0},
+    {"c": "ECRITUM_ERROR_INVALID_ARGUMENT", "java": "INVALID_ARGUMENT", "swift": "invalidArgument", "value": 1},
+    {"c": "ECRITUM_ERROR_BUFFER_TOO_SMALL", "java": "BUFFER_TOO_SMALL", "swift": "bufferTooSmall", "value": 2},
+    {"c": "ECRITUM_ERROR_RUNTIME_UNAVAILABLE", "java": "RUNTIME_UNAVAILABLE", "swift": "runtimeUnavailable", "value": 3},
+    {"c": "ECRITUM_ERROR_INVALID_HANDLE", "java": "INVALID_HANDLE", "swift": "invalidHandle", "value": 4},
+    {"c": "ECRITUM_ERROR_OUT_OF_MEMORY", "java": "OUT_OF_MEMORY", "swift": "outOfMemory", "value": 5},
+    {"c": "ECRITUM_ERROR_INVALID_UTF8", "java": "INVALID_UTF8", "swift": "invalidUTF8", "value": 6},
+    {"c": "ECRITUM_ERROR_INPUT_TOO_LARGE", "java": "INPUT_TOO_LARGE", "swift": "inputTooLarge", "value": 7},
+    {"c": "ECRITUM_ERROR_INVALID_CONFIG", "java": "INVALID_CONFIG", "swift": "invalidConfig", "value": 8},
+    {"c": "ECRITUM_ERROR_UNSUPPORTED_CONFIG_VERSION", "java": "UNSUPPORTED_CONFIG_VERSION", "swift": "unsupportedConfigVersion", "value": 9},
+    {"c": "ECRITUM_ERROR_CONTEXTS_ALIVE", "java": "CONTEXTS_ALIVE", "swift": "contextsAlive", "value": 10},
+    {"c": "ECRITUM_ERROR_CLOSED", "java": "CLOSED", "swift": "closed", "value": 11},
+    {"c": "ECRITUM_ERROR_BUSY", "java": "BUSY", "swift": "busy", "value": 12},
+    {"c": "ECRITUM_ERROR_REENTRANT_CALL", "java": "REENTRANT_CALL", "swift": "reentrantCall", "value": 13},
+    {"c": "ECRITUM_ERROR_PERMISSION_DENIED", "java": "PERMISSION_DENIED", "swift": "permissionDenied", "value": 14},
+    {"c": "ECRITUM_ERROR_TIMEOUT", "java": "TIMEOUT", "swift": "timeout", "value": 15},
+    {"c": "ECRITUM_ERROR_CANCELLED", "java": "CANCELLED", "swift": "cancelled", "value": 16},
+    {"c": "ECRITUM_ERROR_SCRIPT", "java": "SCRIPT", "swift": "script", "value": 17},
+    {"c": "ECRITUM_ERROR_CALLBACK", "java": "CALLBACK", "swift": "callback", "value": 18},
+    {"c": "ECRITUM_ERROR_TEARDOWN_FAILED", "java": "TEARDOWN_FAILED", "swift": "teardownFailed", "value": 19},
+    {"c": "ECRITUM_ERROR_INTERNAL", "java": "INTERNAL", "swift": "internalFailure", "value": 20},
+    {"c": "ECRITUM_ERROR_ALREADY_EXISTS", "java": "ALREADY_EXISTS", "swift": "alreadyExists", "value": 21}
+  ],
+  "bufferConstants": [
+    {"name": "ECRITUM_VERSION_BUFFER_SIZE", "value": 64}
+  ],
+  "typedefs": [
+    {"name": "ecritum_runtime_t", "underlying": "uint64_t"},
+    {"name": "ecritum_context_t", "underlying": "uint64_t"},
+    {"name": "ecritum_namespace_t", "underlying": "uint64_t"},
+    {"name": "ecritum_function_t", "underlying": "uint64_t"},
+    {"name": "ecritum_value_t", "underlying": "uint64_t"},
+    {"name": "ecritum_call_t", "underlying": "uint64_t"},
+    {"name": "ecritum_job_t", "underlying": "uint64_t"},
+    {"name": "ecritum_error_t", "underlying": "uint64_t"}
+  ],
+  "structs": [
+    {"name": "ecritum_bytes_t", "declaration": "typedef struct { const uint8_t *data; size_t len; } ecritum_bytes_t;"},
+    {"name": "ecritum_string_view_t", "declaration": "typedef struct { const char *data; size_t len; } ecritum_string_view_t;"},
+    {"name": "ecritum_object_entry_t", "declaration": "typedef struct { ecritum_string_view_t key; ecritum_value_t value; } ecritum_object_entry_t;"}
+  ],
+  "callbacks": [
+    {"name": "ecritum_host_fn_t", "declaration": "typedef int (*ecritum_host_fn_t)( ecritum_call_t call, ecritum_value_t *out_result, ecritum_error_t *out_error, void *user_data );"},
+    {"name": "ecritum_user_data_destroy_fn_t", "declaration": "typedef void (*ecritum_user_data_destroy_fn_t)(void *user_data);"}
+  ],
+  "valueKindConstants": [
+    {"c": "ECRITUM_VALUE_KIND_NULL", "value": 0},
+    {"c": "ECRITUM_VALUE_KIND_BOOL", "value": 1},
+    {"c": "ECRITUM_VALUE_KIND_INT", "value": 2},
+    {"c": "ECRITUM_VALUE_KIND_DOUBLE", "value": 3},
+    {"c": "ECRITUM_VALUE_KIND_STRING", "value": 4},
+    {"c": "ECRITUM_VALUE_KIND_DATA", "value": 5},
+    {"c": "ECRITUM_VALUE_KIND_ARRAY", "value": 6},
+    {"c": "ECRITUM_VALUE_KIND_OBJECT", "value": 7}
+  ],
+  "jobStateConstants": [
+    {"c": "ECRITUM_JOB_PENDING", "swift": "pending", "value": 0},
+    {"c": "ECRITUM_JOB_RUNNING", "swift": "running", "value": 1},
+    {"c": "ECRITUM_JOB_SUCCEEDED", "swift": "succeeded", "value": 2},
+    {"c": "ECRITUM_JOB_FAILED", "swift": "failed", "value": 3},
+    {"c": "ECRITUM_JOB_CANCEL_REQUESTED", "swift": "cancelRequested", "value": 4},
+    {"c": "ECRITUM_JOB_CANCELLED", "swift": "cancelled", "value": 5},
+    {"c": "ECRITUM_JOB_TIMED_OUT", "swift": "timedOut", "value": 6},
+    {"c": "ECRITUM_JOB_POISONED", "swift": "poisoned", "value": 7}
   ],
   "functions": [
-    {
-      "name": "ecritum_version",
-      "machoSymbol": "_ecritum_version",
-      "declaration": "int ecritum_version(char *buffer, size_t buffer_len);"
-    },
-    {
-      "name": "ecritum_runtime_create",
-      "machoSymbol": "_ecritum_runtime_create",
-      "declaration": "int ecritum_runtime_create(ecritum_bytes_t config_json, ecritum_runtime_t *out_runtime, ecritum_error_t *out_error);"
-    },
-    {
-      "name": "ecritum_runtime_destroy",
-      "machoSymbol": "_ecritum_runtime_destroy",
-      "declaration": "int ecritum_runtime_destroy(ecritum_runtime_t *runtime, ecritum_error_t *out_error);"
-    },
-    {
-      "name": "ecritum_context_create",
-      "machoSymbol": "_ecritum_context_create",
-      "declaration": "int ecritum_context_create(ecritum_runtime_t runtime, ecritum_bytes_t config_json, ecritum_context_t *out_context, ecritum_error_t *out_error);"
-    },
-    {
-      "name": "ecritum_context_destroy",
-      "machoSymbol": "_ecritum_context_destroy",
-      "declaration": "int ecritum_context_destroy(ecritum_context_t *context, ecritum_error_t *out_error);"
-    },
-    {
-      "name": "ecritum_namespace_create",
-      "machoSymbol": "_ecritum_namespace_create",
-      "declaration": "int ecritum_namespace_create(ecritum_runtime_t runtime, ecritum_string_view_t name, ecritum_namespace_t *out_namespace, ecritum_error_t *out_error);"
-    },
-    {
-      "name": "ecritum_namespace_destroy",
-      "machoSymbol": "_ecritum_namespace_destroy",
-      "declaration": "int ecritum_namespace_destroy(ecritum_namespace_t *namespace_handle, ecritum_error_t *out_error);"
-    },
-    {
-      "name": "ecritum_namespace_register_function",
-      "machoSymbol": "_ecritum_namespace_register_function",
-      "declaration": "int ecritum_namespace_register_function( ecritum_namespace_t namespace_handle, ecritum_string_view_t name, ecritum_host_fn_t callback, void *user_data, ecritum_user_data_destroy_fn_t destroy_user_data, ecritum_function_t *out_function, ecritum_error_t *out_error );"
-    },
-    {
-      "name": "ecritum_function_destroy",
-      "machoSymbol": "_ecritum_function_destroy",
-      "declaration": "int ecritum_function_destroy(ecritum_function_t *function, ecritum_error_t *out_error);"
-    },
-    {
-      "name": "ecritum_value_make_null",
-      "machoSymbol": "_ecritum_value_make_null",
-      "declaration": "int ecritum_value_make_null(ecritum_value_t *out_value, ecritum_error_t *out_error);"
-    },
-    {
-      "name": "ecritum_value_make_bool",
-      "machoSymbol": "_ecritum_value_make_bool",
-      "declaration": "int ecritum_value_make_bool(int value, ecritum_value_t *out_value, ecritum_error_t *out_error);"
-    },
-    {
-      "name": "ecritum_value_make_int",
-      "machoSymbol": "_ecritum_value_make_int",
-      "declaration": "int ecritum_value_make_int(int64_t value, ecritum_value_t *out_value, ecritum_error_t *out_error);"
-    },
-    {
-      "name": "ecritum_value_make_double",
-      "machoSymbol": "_ecritum_value_make_double",
-      "declaration": "int ecritum_value_make_double(double value, ecritum_value_t *out_value, ecritum_error_t *out_error);"
-    },
-    {
-      "name": "ecritum_value_make_string",
-      "machoSymbol": "_ecritum_value_make_string",
-      "declaration": "int ecritum_value_make_string(ecritum_string_view_t value, ecritum_value_t *out_value, ecritum_error_t *out_error);"
-    },
-    {
-      "name": "ecritum_value_make_data",
-      "machoSymbol": "_ecritum_value_make_data",
-      "declaration": "int ecritum_value_make_data(ecritum_bytes_t value, ecritum_value_t *out_value, ecritum_error_t *out_error);"
-    },
-    {
-      "name": "ecritum_value_make_array",
-      "machoSymbol": "_ecritum_value_make_array",
-      "declaration": "int ecritum_value_make_array(const ecritum_value_t *items, size_t count, ecritum_value_t *out_value, ecritum_error_t *out_error);"
-    },
-    {
-      "name": "ecritum_value_make_object",
-      "machoSymbol": "_ecritum_value_make_object",
-      "declaration": "int ecritum_value_make_object(const ecritum_object_entry_t *entries, size_t count, ecritum_value_t *out_value, ecritum_error_t *out_error);"
-    },
-    {
-      "name": "ecritum_value_destroy",
-      "machoSymbol": "_ecritum_value_destroy",
-      "declaration": "int ecritum_value_destroy(ecritum_value_t *value);"
-    },
-    {
-      "name": "ecritum_value_kind",
-      "machoSymbol": "_ecritum_value_kind",
-      "declaration": "int ecritum_value_kind(ecritum_value_t value, int *out_kind);"
-    },
-    {
-      "name": "ecritum_value_get_bool",
-      "machoSymbol": "_ecritum_value_get_bool",
-      "declaration": "int ecritum_value_get_bool(ecritum_value_t value, int *out_value);"
-    },
-    {
-      "name": "ecritum_value_get_int",
-      "machoSymbol": "_ecritum_value_get_int",
-      "declaration": "int ecritum_value_get_int(ecritum_value_t value, int64_t *out_value);"
-    },
-    {
-      "name": "ecritum_value_get_double",
-      "machoSymbol": "_ecritum_value_get_double",
-      "declaration": "int ecritum_value_get_double(ecritum_value_t value, double *out_value);"
-    },
-    {
-      "name": "ecritum_value_get_string",
-      "machoSymbol": "_ecritum_value_get_string",
-      "declaration": "int ecritum_value_get_string(ecritum_value_t value, ecritum_string_view_t *out_value);"
-    },
-    {
-      "name": "ecritum_value_get_data",
-      "machoSymbol": "_ecritum_value_get_data",
-      "declaration": "int ecritum_value_get_data(ecritum_value_t value, ecritum_bytes_t *out_value);"
-    },
-    {
-      "name": "ecritum_value_count",
-      "machoSymbol": "_ecritum_value_count",
-      "declaration": "int ecritum_value_count(ecritum_value_t value, size_t *out_count);"
-    },
-    {
-      "name": "ecritum_value_array_get",
-      "machoSymbol": "_ecritum_value_array_get",
-      "declaration": "int ecritum_value_array_get(ecritum_value_t value, size_t index, ecritum_value_t *out_item, ecritum_error_t *out_error);"
-    },
-    {
-      "name": "ecritum_value_object_entry",
-      "machoSymbol": "_ecritum_value_object_entry",
-      "declaration": "int ecritum_value_object_entry(ecritum_value_t value, size_t index, ecritum_string_view_t *out_key, ecritum_value_t *out_value, ecritum_error_t *out_error);"
-    },
-    {
-      "name": "ecritum_call_argument_count",
-      "machoSymbol": "_ecritum_call_argument_count",
-      "declaration": "int ecritum_call_argument_count(ecritum_call_t call, size_t *out_count, ecritum_error_t *out_error);"
-    },
-    {
-      "name": "ecritum_call_argument",
-      "machoSymbol": "_ecritum_call_argument",
-      "declaration": "int ecritum_call_argument(ecritum_call_t call, size_t index, ecritum_value_t *out_argument, ecritum_error_t *out_error);"
-    },
-    {
-      "name": "ecritum_eval_start",
-      "machoSymbol": "_ecritum_eval_start",
-      "declaration": "int ecritum_eval_start( ecritum_context_t context, ecritum_string_view_t language, ecritum_bytes_t source, ecritum_string_view_t source_name, ecritum_bytes_t options_json, ecritum_job_t *out_job, ecritum_error_t *out_error );"
-    },
-    {
-      "name": "ecritum_job_poll",
-      "machoSymbol": "_ecritum_job_poll",
-      "declaration": "int ecritum_job_poll(ecritum_job_t job, int *out_state, ecritum_error_t *out_error);"
-    },
-    {
-      "name": "ecritum_job_wait",
-      "machoSymbol": "_ecritum_job_wait",
-      "declaration": "int ecritum_job_wait(ecritum_job_t job, uint64_t wait_timeout_nanos, int *out_state, ecritum_error_t *out_error);"
-    },
-    {
-      "name": "ecritum_job_cancel",
-      "machoSymbol": "_ecritum_job_cancel",
-      "declaration": "int ecritum_job_cancel(ecritum_job_t job, ecritum_error_t *out_error);"
-    },
-    {
-      "name": "ecritum_job_result",
-      "machoSymbol": "_ecritum_job_result",
-      "declaration": "int ecritum_job_result(ecritum_job_t job, ecritum_value_t *out_result, ecritum_error_t *out_error);"
-    },
-    {
-      "name": "ecritum_job_destroy",
-      "machoSymbol": "_ecritum_job_destroy",
-      "declaration": "int ecritum_job_destroy(ecritum_job_t *job, ecritum_error_t *out_error);"
-    },
-    {
-      "name": "ecritum_error_destroy",
-      "machoSymbol": "_ecritum_error_destroy",
-      "declaration": "int ecritum_error_destroy(ecritum_error_t *error);"
-    },
-    {
-      "name": "ecritum_error_status",
-      "machoSymbol": "_ecritum_error_status",
-      "declaration": "int ecritum_error_status(ecritum_error_t error, int *out_status);"
-    },
-    {
-      "name": "ecritum_error_category",
-      "machoSymbol": "_ecritum_error_category",
-      "declaration": "int ecritum_error_category(ecritum_error_t error, ecritum_string_view_t *out_category);"
-    },
-    {
-      "name": "ecritum_error_message",
-      "machoSymbol": "_ecritum_error_message",
-      "declaration": "int ecritum_error_message(ecritum_error_t error, ecritum_string_view_t *out_message);"
-    },
-    {
-      "name": "ecritum_error_operation",
-      "machoSymbol": "_ecritum_error_operation",
-      "declaration": "int ecritum_error_operation(ecritum_error_t error, ecritum_string_view_t *out_operation);"
-    },
-    {
-      "name": "ecritum_error_language",
-      "machoSymbol": "_ecritum_error_language",
-      "declaration": "int ecritum_error_language(ecritum_error_t error, ecritum_string_view_t *out_language);"
-    },
-    {
-      "name": "ecritum_error_source_name",
-      "machoSymbol": "_ecritum_error_source_name",
-      "declaration": "int ecritum_error_source_name(ecritum_error_t error, ecritum_string_view_t *out_source_name);"
-    }
+    {"name": "ecritum_version", "machoSymbol": "_ecritum_version", "declaration": "int ecritum_version(char *buffer, size_t buffer_len);"},
+    {"name": "ecritum_runtime_create", "machoSymbol": "_ecritum_runtime_create", "declaration": "int ecritum_runtime_create(ecritum_bytes_t config_json, ecritum_runtime_t *out_runtime, ecritum_error_t *out_error);"},
+    {"name": "ecritum_runtime_destroy", "machoSymbol": "_ecritum_runtime_destroy", "declaration": "int ecritum_runtime_destroy(ecritum_runtime_t *runtime, ecritum_error_t *out_error);"},
+    {"name": "ecritum_context_create", "machoSymbol": "_ecritum_context_create", "declaration": "int ecritum_context_create(ecritum_runtime_t runtime, ecritum_bytes_t config_json, ecritum_context_t *out_context, ecritum_error_t *out_error);"},
+    {"name": "ecritum_context_destroy", "machoSymbol": "_ecritum_context_destroy", "declaration": "int ecritum_context_destroy(ecritum_context_t *context, ecritum_error_t *out_error);"},
+    {"name": "ecritum_namespace_create", "machoSymbol": "_ecritum_namespace_create", "declaration": "int ecritum_namespace_create(ecritum_runtime_t runtime, ecritum_string_view_t name, ecritum_namespace_t *out_namespace, ecritum_error_t *out_error);"},
+    {"name": "ecritum_namespace_destroy", "machoSymbol": "_ecritum_namespace_destroy", "declaration": "int ecritum_namespace_destroy(ecritum_namespace_t *namespace_handle, ecritum_error_t *out_error);"},
+    {"name": "ecritum_namespace_register_function", "machoSymbol": "_ecritum_namespace_register_function", "declaration": "int ecritum_namespace_register_function( ecritum_namespace_t namespace_handle, ecritum_string_view_t name, ecritum_host_fn_t callback, void *user_data, ecritum_user_data_destroy_fn_t destroy_user_data, ecritum_function_t *out_function, ecritum_error_t *out_error );"},
+    {"name": "ecritum_function_destroy", "machoSymbol": "_ecritum_function_destroy", "declaration": "int ecritum_function_destroy(ecritum_function_t *function, ecritum_error_t *out_error);"},
+    {"name": "ecritum_value_make_null", "machoSymbol": "_ecritum_value_make_null", "declaration": "int ecritum_value_make_null(ecritum_value_t *out_value, ecritum_error_t *out_error);"},
+    {"name": "ecritum_value_make_bool", "machoSymbol": "_ecritum_value_make_bool", "declaration": "int ecritum_value_make_bool(int value, ecritum_value_t *out_value, ecritum_error_t *out_error);"},
+    {"name": "ecritum_value_make_int", "machoSymbol": "_ecritum_value_make_int", "declaration": "int ecritum_value_make_int(int64_t value, ecritum_value_t *out_value, ecritum_error_t *out_error);"},
+    {"name": "ecritum_value_make_double", "machoSymbol": "_ecritum_value_make_double", "declaration": "int ecritum_value_make_double(double value, ecritum_value_t *out_value, ecritum_error_t *out_error);"},
+    {"name": "ecritum_value_make_string", "machoSymbol": "_ecritum_value_make_string", "declaration": "int ecritum_value_make_string(ecritum_string_view_t value, ecritum_value_t *out_value, ecritum_error_t *out_error);"},
+    {"name": "ecritum_value_make_data", "machoSymbol": "_ecritum_value_make_data", "declaration": "int ecritum_value_make_data(ecritum_bytes_t value, ecritum_value_t *out_value, ecritum_error_t *out_error);"},
+    {"name": "ecritum_value_make_array", "machoSymbol": "_ecritum_value_make_array", "declaration": "int ecritum_value_make_array(const ecritum_value_t *items, size_t count, ecritum_value_t *out_value, ecritum_error_t *out_error);"},
+    {"name": "ecritum_value_make_object", "machoSymbol": "_ecritum_value_make_object", "declaration": "int ecritum_value_make_object(const ecritum_object_entry_t *entries, size_t count, ecritum_value_t *out_value, ecritum_error_t *out_error);"},
+    {"name": "ecritum_value_destroy", "machoSymbol": "_ecritum_value_destroy", "declaration": "int ecritum_value_destroy(ecritum_value_t *value);"},
+    {"name": "ecritum_value_kind", "machoSymbol": "_ecritum_value_kind", "declaration": "int ecritum_value_kind(ecritum_value_t value, int *out_kind);"},
+    {"name": "ecritum_value_get_bool", "machoSymbol": "_ecritum_value_get_bool", "declaration": "int ecritum_value_get_bool(ecritum_value_t value, int *out_value);"},
+    {"name": "ecritum_value_get_int", "machoSymbol": "_ecritum_value_get_int", "declaration": "int ecritum_value_get_int(ecritum_value_t value, int64_t *out_value);"},
+    {"name": "ecritum_value_get_double", "machoSymbol": "_ecritum_value_get_double", "declaration": "int ecritum_value_get_double(ecritum_value_t value, double *out_value);"},
+    {"name": "ecritum_value_get_string", "machoSymbol": "_ecritum_value_get_string", "declaration": "int ecritum_value_get_string(ecritum_value_t value, ecritum_string_view_t *out_value);"},
+    {"name": "ecritum_value_get_data", "machoSymbol": "_ecritum_value_get_data", "declaration": "int ecritum_value_get_data(ecritum_value_t value, ecritum_bytes_t *out_value);"},
+    {"name": "ecritum_value_count", "machoSymbol": "_ecritum_value_count", "declaration": "int ecritum_value_count(ecritum_value_t value, size_t *out_count);"},
+    {"name": "ecritum_value_array_get", "machoSymbol": "_ecritum_value_array_get", "declaration": "int ecritum_value_array_get(ecritum_value_t value, size_t index, ecritum_value_t *out_item, ecritum_error_t *out_error);"},
+    {"name": "ecritum_value_object_entry", "machoSymbol": "_ecritum_value_object_entry", "declaration": "int ecritum_value_object_entry(ecritum_value_t value, size_t index, ecritum_string_view_t *out_key, ecritum_value_t *out_value, ecritum_error_t *out_error);"},
+    {"name": "ecritum_call_argument_count", "machoSymbol": "_ecritum_call_argument_count", "declaration": "int ecritum_call_argument_count(ecritum_call_t call, size_t *out_count, ecritum_error_t *out_error);"},
+    {"name": "ecritum_call_argument", "machoSymbol": "_ecritum_call_argument", "declaration": "int ecritum_call_argument(ecritum_call_t call, size_t index, ecritum_value_t *out_argument, ecritum_error_t *out_error);"},
+    {"name": "ecritum_eval_start", "machoSymbol": "_ecritum_eval_start", "declaration": "int ecritum_eval_start( ecritum_context_t context, ecritum_string_view_t language, ecritum_bytes_t source, ecritum_string_view_t source_name, ecritum_bytes_t options_json, ecritum_job_t *out_job, ecritum_error_t *out_error );"},
+    {"name": "ecritum_job_poll", "machoSymbol": "_ecritum_job_poll", "declaration": "int ecritum_job_poll(ecritum_job_t job, int *out_state, ecritum_error_t *out_error);"},
+    {"name": "ecritum_job_wait", "machoSymbol": "_ecritum_job_wait", "declaration": "int ecritum_job_wait(ecritum_job_t job, uint64_t wait_timeout_nanos, int *out_state, ecritum_error_t *out_error);"},
+    {"name": "ecritum_job_cancel", "machoSymbol": "_ecritum_job_cancel", "declaration": "int ecritum_job_cancel(ecritum_job_t job, ecritum_error_t *out_error);"},
+    {"name": "ecritum_job_result", "machoSymbol": "_ecritum_job_result", "declaration": "int ecritum_job_result(ecritum_job_t job, ecritum_value_t *out_result, ecritum_error_t *out_error);"},
+    {"name": "ecritum_job_destroy", "machoSymbol": "_ecritum_job_destroy", "declaration": "int ecritum_job_destroy(ecritum_job_t *job, ecritum_error_t *out_error);"},
+    {"name": "ecritum_error_destroy", "machoSymbol": "_ecritum_error_destroy", "declaration": "int ecritum_error_destroy(ecritum_error_t *error);"},
+    {"name": "ecritum_error_status", "machoSymbol": "_ecritum_error_status", "declaration": "int ecritum_error_status(ecritum_error_t error, int *out_status);"},
+    {"name": "ecritum_error_category", "machoSymbol": "_ecritum_error_category", "declaration": "int ecritum_error_category(ecritum_error_t error, ecritum_string_view_t *out_category);"},
+    {"name": "ecritum_error_message", "machoSymbol": "_ecritum_error_message", "declaration": "int ecritum_error_message(ecritum_error_t error, ecritum_string_view_t *out_message);"},
+    {"name": "ecritum_error_operation", "machoSymbol": "_ecritum_error_operation", "declaration": "int ecritum_error_operation(ecritum_error_t error, ecritum_string_view_t *out_operation);"},
+    {"name": "ecritum_error_language", "machoSymbol": "_ecritum_error_language", "declaration": "int ecritum_error_language(ecritum_error_t error, ecritum_string_view_t *out_language);"},
+    {"name": "ecritum_error_source_name", "machoSymbol": "_ecritum_error_source_name", "declaration": "int ecritum_error_source_name(ecritum_error_t error, ecritum_string_view_t *out_source_name);"}
   ],
   "privateSymbols": [
     "_ecritum_graal_version",
     "_ecritum_graal_eval_clojure",
     "_ecritum_graal_eval_clojure_with_host",
+    "_ecritum_graal_eval_clojure_with_stdlib",
+    "_ecritum_graal_eval_javascript_with_stdlib",
     "_graal_create_isolate",
     "_graal_tear_down_isolate"
+  ],
+  "privateSymbolPatterns": [
+    "^_ecritum_graal_.*$",
+    "^_graal_.*$",
+    "^_Java_.*$",
+    "^_org_graalvm_.*$"
   ]
 }

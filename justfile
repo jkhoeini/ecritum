@@ -68,6 +68,9 @@ check-xcframework:
 check-abi:
     @scripts/check-abi.sh
 
+test-abi-checker:
+    python3 -m unittest Tests/ABI/test_check_abi.py
+
 build-swift:
     test -f Package.swift
     swift build
