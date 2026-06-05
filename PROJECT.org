@@ -859,7 +859,7 @@ Definition of done:
 - Versioned permission policy objects replace informal permission flags.
 - Leak and lifecycle tests pass.
 
-*** TODO M2-001 ADR for C ABI ownership, lifecycle, and errors
+*** DONE M2-001 ADR for C ABI ownership, lifecycle, and errors
 
 Lead persona: Architecture Expert.
 Reviewer personas: Clean Code, Tests, Security, Swift DX.
@@ -871,6 +871,52 @@ Definition of done:
   specified before code.
 - No exception crosses FFI.
 - Verification includes C and Swift lifecycle tests.
+
+Notes:
+
+- Accepted ADR-002 as the source of truth for C ABI ownership, lifecycle,
+  strings, and errors.
+- Rejected raw opaque pointer handles for M2. New public handles are opaque
+  value tokens backed by a generational registry so invalid and copied stale
+  handles can be rejected before dereferencing runtime objects.
+- Chose pointer-to-handle destroy/free APIs that zero caller storage, map cleanly
+  to Swift `close()`/`deinit`, and return status for live-child and teardown
+  failures.
+- Required structured `ecritum_error_t`, redacted diagnostics by default,
+  pointer+length input views, natural C struct alignment, explicit callback
+  ownership, deny-by-default config parsing, and catch-all FFI error conversion.
+- Required the lifecycle model to be a pure state machine plus named adapter
+  effects.
+- Required per-symbol ABI manifest coverage, C/Swift lifecycle tests, fake C ABI
+  adapter seam, ASan/UBSan, leak smoke, and TSan before claiming thread-safe
+  handle operations.
+- Resolved =ECRITUM-DEBT-0002= by making ADR-002 and the checked ABI manifest
+  the authority for status-code parity.
+- Claude ADR review: no blockers; refinements for busy destroy, value/error
+  thread-safety, stale `ecritum_call_t`, eval shape, context poisoning, and
+  struct alignment were applied.
+- Final persona signoff: Architecture PASS, Clean Code PASS, Tests/TDD PASS,
+  Security PASS, Swift DX PASS.
+
+#+begin_src markdown
+## Verification
+
+Layers tested: None
+Commands run:
+- `mise exec -- just plan-check` -> exit 0.
+- `mise exec -- just check-abi` -> exit 0.
+- `test -f docs/adr/0002-c-abi-ownership-lifecycle-strings-and-errors.md` -> exit 0.
+New tests added:
+- None; ADR-only task.
+Negative paths tested:
+- ADR requires invalid handle, stale handle, double destroy, null output, live context, teardown failure, structured error, and string ownership tests before M2 implementation can be accepted.
+Size impact:
+- N/A.
+Sanitizers:
+- not run: ADR-only task; ADR-002 requires ASan/UBSan, leak smoke, and TSan gates before implementation milestones claim lifecycle/thread-safety completion.
+Not verified:
+- C/Swift lifecycle implementation tests are not implemented yet; owned by M2-002, M2-003, and M2-006.
+#+end_src
 
 *** TODO M2-001A ADR for Swift API and permission policy shape
 
@@ -1278,9 +1324,9 @@ Definition of done:
 
 * ADR Backlog
 
-** TODO ADR-001 SwiftPM binary target and package layout
+** DONE ADR-001 SwiftPM binary target and package layout
 Output of: M1-001.
-** TODO ADR-002 C ABI ownership, lifecycle, strings, and errors
+** DONE ADR-002 C ABI ownership, lifecycle, strings, and errors
 Output of: M2-001.
 ** TODO ADR-003 Runtime/context concurrency and async job model
 Output of: M2-007.

@@ -19,23 +19,6 @@ not done if it introduced debt without an entry.
 
 ## Active Debt
 
-- ID: ECRITUM-DEBT-0002
-- Source task: M1-002/M1-003
-- Introduced by: SwiftPM and Native Image scaffold
-- Owner persona: TDD, Testability, and Verification Engineer
-- Date: 2026-06-05
-- Impact: Status codes are duplicated in `ecritum.h` and `EcritumStatus.java`.
-  Drift would silently break cross-language error interpretation.
-- Reason accepted: The scaffold needs a tiny status surface before the full C ABI
-  ownership/error ADR and ABI manifest tooling exist.
-- Resolve-by phase: M2-001
-- Exit condition: Status codes are covered by the accepted C ABI ownership/error
-  ADR and enforced by either generated constants, a checked ABI manifest, or a
-  cross-language verification test.
-- Removal task: M2-001 ADR for C ABI ownership, lifecycle, and errors
-- Verification required: ABI/status-code check in `mise exec -- just test` or
-  `mise exec -- just check-abi`.
-
 - ID: ECRITUM-DEBT-0004
 - Source task: M1-007
 - Introduced by: Initial performance and artifact budget policy
@@ -69,6 +52,20 @@ not done if it introduced debt without an entry.
   and conformance smoke for each measured runtime.
 
 ## Resolved Debt
+
+- ID: ECRITUM-DEBT-0002
+- Source task: M1-002/M1-003
+- Introduced by: SwiftPM and Native Image scaffold
+- Owner persona: TDD, Testability, and Verification Engineer
+- Date: 2026-06-05
+- Resolved in: M2-001
+- Resolution: ADR-002 accepts the C ABI ownership/error policy, makes the ABI
+  manifest the authority for every public status and symbol, and requires future
+  M2 status additions to update `docs/abi/ecritum-c-abi.json`, Java status
+  constants, Swift mapping, and C/Swift tests together.
+- Verification: Current M1 status parity is enforced by
+  `mise exec -- just check-abi`; ADR-002 requires the same gate to expand before
+  any new M2 ABI status or symbol is exported.
 
 - ID: ECRITUM-DEBT-0001
 - Source task: M1-002
