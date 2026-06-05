@@ -11,20 +11,28 @@ The target developer experience:
 import Ecritum
 
 let runtime = try EcritumRuntime(
-    languages: [.clojure, .javascript, .python, .ruby, .lua],
-    permissions: [.filesystem(.sandboxed(appScriptsURL)), .network(.deny), .process(.deny)]
+    .init(
+        languages: [.clojure],
+        policy: .defaultDeny.withFilesystem(
+            .readOnly(roots: [.directory(appScriptsURL)])
+        )
+    )
 )
 
-try runtime.register("app.notify") { call in
+let app = try runtime.namespace(.init("app"))
+try app.register(.init("notify")) { call in
     let message = try call.string(at: 0)
-    await app.showNotification(message)
+    notifier.enqueue(message)
     return .null
 }
 
-let result = try runtime.eval(
-    "(app.notify \"hello from clojure\")",
-    as: .clojure,
-    sourceName: "plugin.clj"
+let context = try runtime.context()
+let result = try await context.eval(
+    EcritumScript(
+        source: "(app/notify \"hello from clojure\")",
+        language: .clojure,
+        sourceName: "plugin.clj"
+    )
 )
 #+end_src
 
@@ -84,10 +92,12 @@ Sources/
   Ecritum/
     EcritumRuntime.swift
     EcritumLanguage.swift
+    EcritumScript.swift
+    EcritumNamespace.swift
     EcritumValue.swift
     EcritumError.swift
-    EcritumPermissions.swift
-    EcritumPlugin.swift
+    EcritumPermissionPolicy.swift
+    EcritumHostFunction.swift
   CEcritum/
     include/
       ecritum.h
@@ -109,33 +119,49 @@ Tests/
 
 * Swift API Design
 
+This section is the canonical Swift API direction after ADR-016. Earlier
+examples that use flat permission flags or `OptionSet` permissions are sketches,
+not accepted public API.
+
 ** Core Types
 
 #+begin_src swift
-public final class EcritumRuntime: Sendable {
-    public init(_ configuration: Configuration = .default) throws
+public final class EcritumRuntime {
+    public init(_ configuration: Configuration) throws
     public func context(_ configuration: ContextConfiguration = .default) throws -> EcritumContext
-    public func register(_ name: String, function: @escaping EcritumHostFunction) throws
-    public func close()
+    public func namespace(_ name: EcritumNamespace.Name) throws -> EcritumNamespace
+    public func close() throws
 }
 
-public final class EcritumContext: Sendable {
-    public func eval(_ source: String, as language: EcritumLanguage, sourceName: String? = nil) async throws -> EcritumValue
-    public func load(_ source: String, as language: EcritumLanguage, sourceName: String? = nil) async throws -> EcritumScript
-    public func set(_ name: String, _ value: EcritumValue) throws
-    public func close()
+public final class EcritumContext {
+    public func eval(_ script: EcritumScript) async throws -> EcritumValue
+    public func close() throws
 }
 
-public enum EcritumLanguage: String, Sendable {
-    case clojure
-    case javascript
-    case python
-    case ruby
-    case lua
+public struct EcritumScript: Equatable, Sendable {
+    public var source: String
+    public var language: EcritumLanguage
+    public var sourceName: String?
+    public var options: EcritumScriptOptions
 }
 
-public typealias EcritumHostFunction = @Sendable (EcritumCall) async throws -> EcritumValue
+public struct EcritumLanguage: RawRepresentable, Hashable, Codable, Sendable {
+    public let rawValue: String
+
+    public static let clojure: Self
+    public static let javascript: Self
+    public static let lua: Self
+    public static let python: Self
+    public static let ruby: Self
+}
+
+public typealias EcritumHostFunction = @Sendable (EcritumCall) throws -> EcritumValue
 #+end_src
+
+`EcritumRuntime`, `EcritumContext`, and future compiled script handles do not
+claim =Sendable= until synchronization or actor isolation exists and TSan-backed
+tests prove it. =EcritumScript= is a pure Swift value descriptor in M2; a
+compiled script handle is deferred until the async/job lifecycle is specified.
 
 ** Values
 
@@ -159,18 +185,22 @@ Do not expose arbitrary Swift objects directly. Expose named capability objects 
 ** Capability Registration
 
 #+begin_src swift
-let document = runtime.namespace("document")
+let document = try runtime.namespace(.init("document"))
 
-try document.register("getText") { call in
-    .string(await model.text)
+try document.register(.init("getText")) { call in
+    .string(model.textSnapshot())
 }
 
-try document.register("replaceSelection") { call in
+try document.register(.init("replaceSelection")) { call in
     let text = try call.string(at: 0)
-    await model.replaceSelection(text)
+    model.replaceSelection(text)
     return .null
 }
 #+end_src
+
+M2 host callbacks are synchronous. Async callbacks depend on ADR-003 executor
+and job semantics. Flat =runtime.register("document.getText")= may become sugar
+later, but the canonical model is a validated namespace plus function name.
 
 Scripts see a stable API:
 
@@ -200,64 +230,96 @@ ecritum.document.replace_selection("new text")
 Permissions must be explicit at runtime/context creation:
 
 #+begin_src swift
-public struct EcritumPermissions: OptionSet, Sendable {
-    public static let clock
-    public static let random
-    public static let filesystemRead
-    public static let filesystemWrite
-    public static let network
-    public static let process
-    public static let environment
+public struct EcritumPermissionPolicy: Codable, Equatable, Sendable {
+    public var schemaVersion: UInt = 1
+    public var filesystem: FilesystemPolicy = .denied
+    public var network: NetworkPolicy = .denied
+    public var process: ProcessPolicy = .denied
+    public var environment: EnvironmentPolicy = .denied
+    public var clock: ClockPolicy = .denied
+    public var random: RandomPolicy = .denied
+    public var log: LogPolicy = .denied
 }
 #+end_src
 
-The real implementation should use richer associated policies than a flat bitset:
+Public =OptionSet= permissions are rejected. They cannot encode filesystem
+roots, hosts, ports, command allowlists, environment keys, schema versions,
+resource limits, diagnostics, or context narrowing.
 
-- Filesystem: denied, read-only roots, read-write roots.
-- Network: denied, allowed hosts, loopback-only.
-- Process: denied by default, allowlisted commands only.
-- Environment: denied by default, allowlisted variable names only.
+The policy object is immutable, versioned, deny-by-default, and serialized to
+the same C config schema used by the native runtime. Unknown keys, unknown enum
+values, unsupported versions, invalid UTF-8/JSON, duplicate rules, and context
+attempts to widen runtime policy fail closed.
+
+- Filesystem: denied by default; explicit canonical roots and read-only or
+  read-write modes.
+- Network: denied by default; explicit scheme, host, and port rules with
+  redirect rechecking.
+- Process: denied by default; no shell strings, no =PATH= lookup, exact
+  allowlisted commands only if process support is accepted.
+- Environment: denied by default; exact variable names only, no wildcard and no
+  listing all variables.
+- Diagnostics: host-only configuration, redacted by default, raw/debug only by
+  explicit trusted-host opt-in.
 
 * C ABI Design
 
-The C ABI is the real stable layer. Swift, Rust, Zig, C++, and other wrappers sit above it.
+The C ABI is the real stable layer. Swift, Rust, Zig, C++, and other wrappers
+sit above it.
+
+ADR-002 is the authority for C ownership, lifecycle, strings, errors, and handle
+shape. The sketch below is illustrative and must be reconciled with ADR-002
+before implementation. In particular, M2 public handles are opaque value tokens,
+not dereferenceable pointers, and destroy/free functions use pointer-to-handle
+semantics so Swift can nil private handle storage during `close()` and `deinit`.
 
 #+begin_src c
-typedef struct ecritum_runtime ecritum_runtime_t;
-typedef struct ecritum_context ecritum_context_t;
-typedef struct ecritum_value ecritum_value_t;
-typedef struct ecritum_error ecritum_error_t;
-typedef struct ecritum_call ecritum_call_t;
+typedef uint64_t ecritum_runtime_t;
+typedef uint64_t ecritum_context_t;
+typedef uint64_t ecritum_value_t;
+typedef uint64_t ecritum_error_t;
+typedef uint64_t ecritum_call_t;
+
+typedef struct {
+    const char *data;
+    size_t len;
+} ecritum_string_view_t;
+
+typedef struct {
+    const uint8_t *data;
+    size_t len;
+} ecritum_bytes_t;
 
 typedef int (*ecritum_host_fn_t)(
-    ecritum_call_t *call,
+    ecritum_call_t call,
     void *user_data,
-    ecritum_value_t **result,
-    ecritum_error_t **error
+    ecritum_value_t *out_result,
+    ecritum_error_t *out_error
 );
 
-int ecritum_runtime_create(const char *config_json, ecritum_runtime_t **out, ecritum_error_t **error);
-void ecritum_runtime_destroy(ecritum_runtime_t *runtime);
+int ecritum_runtime_create(ecritum_bytes_t config_json, ecritum_runtime_t *out_runtime, ecritum_error_t *out_error);
+int ecritum_runtime_destroy(ecritum_runtime_t *runtime, ecritum_error_t *out_error);
 
-int ecritum_context_create(ecritum_runtime_t *runtime, const char *config_json, ecritum_context_t **out, ecritum_error_t **error);
-void ecritum_context_destroy(ecritum_context_t *context);
+int ecritum_context_create(ecritum_runtime_t runtime, ecritum_bytes_t config_json, ecritum_context_t *out_context, ecritum_error_t *out_error);
+int ecritum_context_destroy(ecritum_context_t *context, ecritum_error_t *out_error);
 
 int ecritum_register_function(
-    ecritum_runtime_t *runtime,
-    const char *name,
+    ecritum_runtime_t runtime,
+    ecritum_string_view_t namespace_name,
+    ecritum_string_view_t function_name,
     ecritum_host_fn_t function,
     void *user_data,
     void (*destroy_user_data)(void *)
 );
 
 int ecritum_eval(
-    ecritum_context_t *context,
-    const char *language,
-    const char *source,
-    const char *source_name,
-    const char *options_json,
-    ecritum_value_t **result,
-    ecritum_error_t **error
+    ecritum_context_t context,
+    ecritum_string_view_t language,
+    ecritum_bytes_t source,
+    ecritum_string_view_t source_name,
+    ecritum_bytes_t options_json,
+    ecritum_value_t *out_result,
+    ecritum_error_t *out_error
 );
 #+end_src
 
@@ -266,7 +328,8 @@ Rules:
 - No exceptions cross the C boundary.
 - Every allocated object has a matching =destroy= or =free= function.
 - Strings returned from the runtime are copied and freed by =ecritum_string_free=.
-- Callbacks may be invoked on Ecritum-managed threads, so Swift wrappers must hop to the right executor when needed.
+- Host callbacks are synchronous in M2. Async callbacks and executor hopping
+  depend on ADR-003.
 - Async should be added via job handles, not by blocking arbitrary native threads forever.
 
 * Language Plan

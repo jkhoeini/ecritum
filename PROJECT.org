@@ -918,7 +918,7 @@ Not verified:
 - C/Swift lifecycle implementation tests are not implemented yet; owned by M2-002, M2-003, and M2-006.
 #+end_src
 
-*** TODO M2-001A ADR for Swift API and permission policy shape
+*** DONE M2-001A ADR for Swift API and permission policy shape
 
 Lead persona: Swift DX.
 Reviewer personas: Architecture, Security, Clean Code, Tests.
@@ -934,6 +934,52 @@ Definition of done:
 - ADR defines `EcritumScript`, namespace registration, `close()`/`deinit`
   semantics, and whether `EcritumLanguage` is a closed enum or extensible type.
 - README.md and PLAN.org examples are updated or explicitly marked as sketches.
+
+Notes:
+
+- Accepted ADR-016 as the source of truth for Swift API and permission policy
+  shape.
+- Replaced README.md and PLAN.org canonical examples with a versioned
+  deny-by-default `EcritumPermissionPolicy`, namespace registration, and
+  `EcritumScript` eval.
+- Rejected public `OptionSet` permissions because they cannot encode roots,
+  hosts, ports, command allowlists, env keys, diagnostics mode, schema version,
+  context narrowing, resource limits, unknown-key failure, or contradictory
+  states.
+- Chose extensible string-backed `EcritumLanguage` with static known values.
+  Unsupported or unpackaged languages must return typed errors; this does not
+  claim Python/Ruby support in Core.
+- Defined `EcritumScript` as a pure Swift value descriptor for M2; compiled
+  script handles are deferred until ADR-003 and a C script handle exist.
+- Chose namespace-based host registration as canonical. Flat
+  `runtime.register("app.notify")` may become future sugar only.
+- Required `close() throws`, idempotent close, best-effort `deinit`, parent
+  runtime retention by contexts, and no `Sendable` claim for runtime/context
+  wrappers until synchronization and TSan tests exist.
+- Claude summary review: no blockers. Broader Claude plan attempts timed out and
+  are recorded here as operational noise; persona review carried the detailed
+  plan review.
+- Final persona signoff: Swift DX PASS, Architecture PASS, Security PASS,
+  Clean Code PASS, Tests/TDD PASS.
+
+#+begin_src markdown
+## Verification
+
+Layers tested: None
+Commands run:
+- `mise exec -- just plan-check` -> exit 0.
+- `test -f docs/adr/0016-swift-api-and-permission-policy-shape.md` -> exit 0.
+New tests added:
+- None; ADR/documentation-only task.
+Negative paths tested:
+- ADR requires policy unknown-key/version failures, invalid JSON/UTF-8, context widening rejection, close/deinit lifecycle errors, namespace validation, unsupported language errors, and status-to-Swift-error mapping before implementation can be accepted.
+Size impact:
+- N/A.
+Sanitizers:
+- not run: ADR-only task; ADR-016 inherits ADR-002 sanitizer/leak/TSan gates before lifecycle/thread-safety implementation can be accepted.
+Not verified:
+- README/SwiftHost examples do not compile yet because the M2 Swift API is not implemented; owned by M2 implementation tasks.
+#+end_src
 
 *** TODO M2-002 Implement value and error model
 
@@ -1354,7 +1400,7 @@ Output of: M2.5-001.
 Output of: M2-007.
 ** TODO ADR-015 Vulnerability response, SBOM, CVE tracking, and revocation
 Output of: M2.5-002 and M7-003.
-** TODO ADR-016 Swift API and permission policy shape
+** DONE ADR-016 Swift API and permission policy shape
 Output of: M2-001A.
 ** TODO ADR-017 Artifact reproducibility, signing, and checksum policy
 Output of: M1-004, M1-005, and M7-001.

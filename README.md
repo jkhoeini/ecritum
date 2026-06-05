@@ -22,24 +22,33 @@ User scripts then call those registered capabilities from supported scripting la
 import Ecritum
 
 let runtime = try EcritumRuntime(
-    languages: [.clojure, .javascript, .python, .ruby, .lua],
-    permissions: [.filesystemRead]
+    .init(
+        languages: [.clojure],
+        policy: .defaultDeny.withFilesystem(
+            .readOnly(roots: [.directory(appScriptsURL)])
+        )
+    )
 )
 
-try runtime.register("app.notify") { call in
+let app = try runtime.namespace(.init("app"))
+try app.register(.init("notify")) { call in
     let message = try call.string(at: 0)
-    await app.showNotification(message)
+    notifier.enqueue(message)
     return .null
 }
 
 let value = try await runtime.context().eval(
-    "(app.notify \"hello\")",
-    as: .clojure,
-    sourceName: "plugin.clj"
+    EcritumScript(
+        source: "(app/notify \"hello\")",
+        language: .clojure,
+        sourceName: "plugin.clj"
+    )
 )
 ```
 
-The public API should be capability-based: scripts only see functions, objects, and standard-library services that the host explicitly enables.
+The public API should be capability-based and deny-by-default: scripts only see
+functions, objects, and standard-library services that the host explicitly
+registers and enables through a versioned policy object.
 
 ## Initial Language Plan
 
@@ -154,6 +163,6 @@ Release gate baselines are documented in
 - Final runtime list for v0.
 - Binary size with SCI plus GraalJS.
 - Whether GraalPy and TruffleRuby are practical in the same native library.
-- Best Swift API shape for registering host functions.
-- Sandboxing model for user-provided scripts.
+- Async host callback and executor behavior.
+- Full sandbox threat model for user-provided scripts.
 - Final license and third-party notice strategy.
