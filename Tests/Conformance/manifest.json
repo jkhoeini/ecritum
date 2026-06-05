@@ -330,6 +330,115 @@
       }
     },
     {
+      "caseId": "stdlib.json.roundtrip",
+      "title": "Ecritum JSON facade round-trips deterministic JSON",
+      "category": "stdlib",
+      "required": true,
+      "capabilities": ["stdlib_json"],
+      "description": "The Clojure ecritum.json facade produces compact lexicographically sorted JSON.",
+      "request": {
+        "source": "write deterministic JSON"
+      },
+      "expected": {
+        "status": "ECRITUM_OK",
+        "value": {"kind": "string", "value": "{\"a\":1,\"b\":2}"}
+      }
+    },
+    {
+      "caseId": "stdlib.time.parse_format",
+      "title": "Ecritum time facade parses and formats instants",
+      "category": "stdlib",
+      "required": true,
+      "capabilities": ["stdlib_time"],
+      "description": "Pure time parse/format behavior is deterministic.",
+      "request": {
+        "source": "parse and format an ISO-8601 instant"
+      },
+      "expected": {
+        "status": "ECRITUM_OK",
+        "value": {"kind": "string", "value": "2026-06-05T00:00:00Z"}
+      }
+    },
+    {
+      "caseId": "stdlib.time.now_default_denied",
+      "title": "Ecritum time now is denied by default",
+      "category": "stdlib",
+      "required": true,
+      "capabilities": ["stdlib_time", "permission_default_deny"],
+      "description": "Wall-clock access requires an explicit clock capability.",
+      "request": {
+        "source": "call ecritum.time/now"
+      },
+      "expected": {
+        "status": "ECRITUM_ERROR_PERMISSION_DENIED",
+        "category": "permission",
+        "operation": "eval"
+      }
+    },
+    {
+      "caseId": "stdlib.fs.default_denied",
+      "title": "Ecritum filesystem facade is denied by default",
+      "category": "stdlib",
+      "required": true,
+      "capabilities": ["permission_default_deny"],
+      "description": "Filesystem facade reads fail without an explicit filesystem capability.",
+      "request": {
+        "source": "read through ecritum.fs without grants"
+      },
+      "expected": {
+        "status": "ECRITUM_ERROR_PERMISSION_DENIED",
+        "category": "permission",
+        "operation": "eval"
+      }
+    },
+    {
+      "caseId": "stdlib.fs.allowed_root_inside",
+      "title": "Ecritum filesystem facade reads inside an allowed root",
+      "category": "stdlib",
+      "required": true,
+      "capabilities": ["filesystem_allowed_root"],
+      "description": "A configured filesystem root permits reads inside that root.",
+      "request": {
+        "source": "read text inside a configured root"
+      },
+      "expected": {
+        "status": "ECRITUM_OK",
+        "value": {"kind": "string", "value": "inside-data"}
+      }
+    },
+    {
+      "caseId": "stdlib.fs.allowed_root_outside_denied",
+      "title": "Ecritum filesystem facade denies outside an allowed root",
+      "category": "stdlib",
+      "required": true,
+      "capabilities": ["filesystem_allowed_root"],
+      "description": "A configured filesystem root does not permit reads outside that root.",
+      "request": {
+        "source": "read text outside a configured root"
+      },
+      "expected": {
+        "status": "ECRITUM_ERROR_PERMISSION_DENIED",
+        "category": "permission",
+        "operation": "eval"
+      }
+    },
+    {
+      "caseId": "stdlib.http.default_denied",
+      "title": "Ecritum HTTP facade is denied by default",
+      "category": "stdlib",
+      "required": true,
+      "capabilities": ["permission_default_deny"],
+      "description": "HTTP requests are present but default-deny-only for M3-003.",
+      "request": {
+        "source": "call ecritum.http/request"
+      },
+      "expected": {
+        "status": "ECRITUM_ERROR_PERMISSION_DENIED",
+        "category": "permission",
+        "operation": "eval"
+      }
+    },
+    {
       "caseId": "timeout.long_running_script",
       "title": "Timeout cancels long-running script",
       "category": "timeout",

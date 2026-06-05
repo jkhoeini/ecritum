@@ -2,7 +2,9 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 static int failures = 0;
 
@@ -26,6 +28,46 @@ static ecritum_bytes_t bytes(const char *text) {
 static ecritum_string_view_t view(const char *text) {
     ecritum_string_view_t value = {text, strlen(text)};
     return value;
+}
+
+static char *runtime_config_with_read_root(const char *root) {
+    const char *prefix =
+        "{\"schemaVersion\":1,\"languages\":[\"clojure\"],"
+        "\"policy\":{\"filesystem\":{\"mode\":\"read_only\",\"roots\":[{\"kind\":\"directory\",\"path\":\"";
+    const char *suffix =
+        "\"}]},\"network\":{\"mode\":\"denied\"},\"process\":{\"mode\":\"denied\"},"
+        "\"environment\":{\"mode\":\"denied\"},\"clock\":{\"mode\":\"denied\"},\"random\":{\"mode\":\"denied\"},\"log\":{\"mode\":\"denied\"}},"
+        "\"diagnostics\":{\"mode\":\"redacted\"},\"resourceLimits\":{}}";
+    size_t len = strlen(prefix) + strlen(root) + strlen(suffix);
+    char *json = malloc(len + 1);
+    CHECK(json != NULL);
+    if (json == NULL) {
+        return NULL;
+    }
+    snprintf(json, len + 1, "%s%s%s", prefix, root, suffix);
+    return json;
+}
+
+static char *join_path(const char *root, const char *leaf) {
+    size_t len = strlen(root) + 1 + strlen(leaf);
+    char *path = malloc(len + 1);
+    CHECK(path != NULL);
+    if (path == NULL) {
+        return NULL;
+    }
+    snprintf(path, len + 1, "%s/%s", root, leaf);
+    return path;
+}
+
+static char *eval_source_with_path(const char *prefix, const char *path, const char *suffix) {
+    size_t len = strlen(prefix) + strlen(path) + strlen(suffix);
+    char *source = malloc(len + 1);
+    CHECK(source != NULL);
+    if (source == NULL) {
+        return NULL;
+    }
+    snprintf(source, len + 1, "%s%s%s", prefix, path, suffix);
+    return source;
 }
 
 static int is_terminal_state(int state) {
@@ -105,6 +147,16 @@ static void assert_string(ecritum_value_t value, const char *expected) {
     CHECK(ecritum_value_get_string(value, &actual) == ECRITUM_OK);
     CHECK(actual.len == expected_len);
     CHECK(memcmp(actual.data, expected, expected_len) == 0);
+}
+
+static void write_text_file(const char *path, const char *text) {
+    FILE *file = fopen(path, "w");
+    CHECK(file != NULL);
+    if (file == NULL) {
+        return;
+    }
+    CHECK(fputs(text, file) >= 0);
+    CHECK(fclose(file) == 0);
 }
 
 static void assert_data(ecritum_value_t value, const uint8_t *expected, size_t expected_len) {
@@ -318,8 +370,24 @@ int main(void) {
         CHECK(ecritum_value_destroy(&object) == ECRITUM_OK);
     }
 
+    ecritum_value_t json_value = eval(context, "(ecritum.json/write-string {\"b\" 2 \"a\" 1})");
+    assert_string(json_value, "{\"a\":1,\"b\":2}");
+    CHECK(ecritum_value_destroy(&json_value) == ECRITUM_OK);
+
+    ecritum_value_t time_value = eval(context, "(ecritum.time/format-instant (ecritum.time/parse-instant \"2026-06-05T00:00:00Z\"))");
+    assert_string(time_value, "2026-06-05T00:00:00Z");
+    CHECK(ecritum_value_destroy(&time_value) == ECRITUM_OK);
+
+    ecritum_value_t require_value = eval(context, "(do (require '[ecritum.json :as json]) (json/write-string {\"a\" 1}))");
+    assert_string(require_value, "{\"a\":1}");
+    CHECK(ecritum_value_destroy(&require_value) == ECRITUM_OK);
+
     expect_failed_eval(context, "(/ 1 0)", "runtime-source.clj", "runtime");
     expect_failed_eval(context, "(defn", "syntax-source.clj", "syntax");
+    expect_failed_eval_status(context, "(ecritum.time/now)", "time-denied.clj", ECRITUM_ERROR_PERMISSION_DENIED, "permission");
+    expect_failed_eval_status(context, "(ecritum.fs/read-text \"/tmp/ecritum\")", "fs-denied.clj", ECRITUM_ERROR_PERMISSION_DENIED, "permission");
+    expect_failed_eval_status(context, "(ecritum.http/request {\"url\" \"https://example.com\"})", "http-denied.clj", ECRITUM_ERROR_PERMISSION_DENIED, "permission");
+
     ecritum_value_t host_value = eval(context, "(app/answer)");
     assert_int(host_value, 42);
     CHECK(ecritum_value_destroy(&host_value) == ECRITUM_OK);
@@ -353,6 +421,66 @@ int main(void) {
 
     CHECK(ecritum_context_destroy(&context, &error) == ECRITUM_OK);
     CHECK(ecritum_runtime_destroy(&runtime, &error) == ECRITUM_OK);
+
+    char root_template[] = "/tmp/ecritumfacadesXXXXXX";
+    char *root = mkdtemp(root_template);
+    CHECK(root != NULL);
+    if (root != NULL) {
+        char *inside = join_path(root, "inside.txt");
+        char *outside = join_path("/tmp", "ecritum-facades-outside.txt");
+        char *link_path = join_path(root, "outside-link.txt");
+        write_text_file(inside, "inside-data");
+        write_text_file(outside, "outside-data");
+        CHECK(symlink(outside, link_path) == 0);
+
+        char *fs_config = runtime_config_with_read_root(root);
+        ecritum_runtime_t fs_runtime = 0;
+        ecritum_context_t fs_context = 0;
+        CHECK(ecritum_runtime_create(bytes(fs_config), &fs_runtime, &error) == ECRITUM_OK);
+        CHECK(ecritum_context_create(fs_runtime, empty_bytes(), &fs_context, &error) == ECRITUM_OK);
+
+        char *read_inside_source = eval_source_with_path("(ecritum.fs/read-text \"", inside, "\")");
+        ecritum_value_t read_inside = eval(fs_context, read_inside_source);
+        assert_string(read_inside, "inside-data");
+        CHECK(ecritum_value_destroy(&read_inside) == ECRITUM_OK);
+
+        char *bytes_inside_source = eval_source_with_path("(ecritum.fs/read-bytes \"", inside, "\")");
+        ecritum_value_t bytes_inside = eval(fs_context, bytes_inside_source);
+        assert_data(bytes_inside, (const uint8_t *)"inside-data", strlen("inside-data"));
+        CHECK(ecritum_value_destroy(&bytes_inside) == ECRITUM_OK);
+
+        char *exists_inside_source = eval_source_with_path("(ecritum.fs/exists? \"", inside, "\")");
+        ecritum_value_t exists_inside = eval(fs_context, exists_inside_source);
+        assert_bool(exists_inside, 1);
+        CHECK(ecritum_value_destroy(&exists_inside) == ECRITUM_OK);
+
+        char *outside_source = eval_source_with_path("(ecritum.fs/read-text \"", outside, "\")");
+        expect_failed_eval_status(fs_context, outside_source, "fs-outside.clj", ECRITUM_ERROR_PERMISSION_DENIED, "permission");
+
+        char *traversal_source = eval_source_with_path("(ecritum.fs/read-text \"", root, "/../ecritum-facades-outside.txt\")");
+        expect_failed_eval_status(fs_context, traversal_source, "fs-traversal.clj", ECRITUM_ERROR_PERMISSION_DENIED, "permission");
+
+        char *link_source = eval_source_with_path("(ecritum.fs/read-text \"", link_path, "\")");
+        expect_failed_eval_status(fs_context, link_source, "fs-symlink.clj", ECRITUM_ERROR_PERMISSION_DENIED, "permission");
+
+        CHECK(ecritum_context_destroy(&fs_context, &error) == ECRITUM_OK);
+        CHECK(ecritum_runtime_destroy(&fs_runtime, &error) == ECRITUM_OK);
+
+        free(read_inside_source);
+        free(bytes_inside_source);
+        free(exists_inside_source);
+        free(outside_source);
+        free(traversal_source);
+        free(link_source);
+        free(fs_config);
+        unlink(link_path);
+        unlink(inside);
+        unlink(outside);
+        rmdir(root);
+        free(inside);
+        free(outside);
+        free(link_path);
+    }
 
     if (failures != 0) {
         fprintf(stderr, "native_eval_smoke failures=%d\n", failures);

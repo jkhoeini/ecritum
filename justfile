@@ -50,6 +50,7 @@ check-native:
     nm -gU {{native_stable_dir}}/libecritum.dylib | grep -q ' _ecritum_graal_version$'
     nm -gU {{native_stable_dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_clojure$'
     nm -gU {{native_stable_dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_clojure_with_host$'
+    nm -gU {{native_stable_dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_clojure_with_stdlib$'
     nm -gU {{native_stable_dir}}/libecritum.dylib | grep -q ' _graal_create_isolate$'
     nm -gU {{native_stable_dir}}/libecritum.dylib | grep -q ' _graal_tear_down_isolate$'
 
@@ -95,6 +96,16 @@ conformance-clojure-native:
     mkdir -p build/conformance
     python3 scripts/run-conformance.py --manifest Tests/Conformance/manifest.json --category eval --category host --category error --strict --provider-timeout-seconds 30 --provider python3 Tests/Conformance/fixtures/clojure_native_provider.py > build/conformance/clojure-native.json
 
+test-facades-clojure:
+    test -d dist/local/EcritumRuntime.xcframework
+    mkdir -p build/facades
+    python3 scripts/run-conformance.py --manifest Tests/Conformance/manifest.json --category stdlib --strict --provider-timeout-seconds 30 --provider python3 Tests/Conformance/fixtures/clojure_native_provider.py > build/facades/clojure.json
+
+conformance-clojure-facades:
+    test -d dist/local/EcritumRuntime.xcframework
+    mkdir -p build/conformance
+    python3 scripts/run-conformance.py --manifest Tests/Conformance/manifest.json --category stdlib --strict --provider-timeout-seconds 30 --provider python3 Tests/Conformance/fixtures/clojure_native_provider.py > build/conformance/clojure-facades.json
+
 security:
     mkdir -p build/security
     python3 -m py_compile scripts/check-security-static.py scripts/run-security-abuse.py scripts/check-parser-abuse.py Tests/Security/fixtures/abuse_provider.py
@@ -111,6 +122,11 @@ test-security-abuse:
     mkdir -p build/security
     python3 scripts/run-security-abuse.py --manifest Tests/Security/abuse-manifest.json --provider python3 Tests/Security/fixtures/abuse_provider.py --mode baseline > build/security/abuse.json
     if python3 scripts/run-security-abuse.py --manifest Tests/Security/abuse-manifest.json --strict --provider python3 Tests/Security/fixtures/abuse_provider.py --mode baseline > build/security/abuse-strict.json; then echo "strict security abuse unexpectedly passed" >&2; exit 1; else status=$?; test $status -eq 1; fi
+
+security-clojure-facades:
+    test -d dist/local/EcritumRuntime.xcframework
+    mkdir -p build/security
+    python3 scripts/run-security-abuse.py --manifest Tests/Security/abuse-manifest.json --strict --provider-timeout-seconds 30 --provider python3 Tests/Security/fixtures/clojure_facade_abuse_provider.py > build/security/clojure-facades.json
 
 # Parser-abuse-equivalent gate until eval/value/error/callback fuzz surfaces exist.
 test-security-fuzz:
@@ -190,6 +206,8 @@ test: plan-check conformance security test-swift-auto test-java test-c-abi-lifec
 test-m3-002b: native test-native-eval-smoke test-native-eval-smoke-asan xcframework test-xcframework-eval-smoke check-abi license-report check-dep-delta
 
 test-m3-002c: native test-java test-c-abi-eval test-c-abi-eval-asan test-native-eval-smoke test-native-eval-smoke-asan xcframework test-xcframework-eval-smoke conformance-clojure-native security check-abi license-report check-dep-delta
+
+test-m3-003: native test-java test-c-abi-eval test-c-abi-eval-asan test-c-abi-policy-config test-c-abi-policy-config-asan test-native-eval-smoke test-native-eval-smoke-asan xcframework test-xcframework-eval-smoke test-facades-clojure conformance-clojure-facades security-clojure-facades security check-abi license-report check-dep-delta
 
 example-swift:
     @test -d dist/local/EcritumRuntime.xcframework || { echo "missing dist/local/EcritumRuntime.xcframework; run mise exec -- just xcframework first" >&2; exit 1; }

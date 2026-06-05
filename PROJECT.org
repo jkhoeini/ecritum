@@ -2559,18 +2559,159 @@ Remaining blockers and debt:
 - Robust host callback interruption is not claimed; callbacks run
   synchronously on the eval worker thread per ADR-021.
 
-*** TODO M3-003 Implement first standard-library facades
+*** DONE M3-003 Implement first standard-library facades
 
 Lead persona: Security.
 Reviewer personas: GraalVM Runtime, Clean Code, Tests, Unix.
 Depends on: M3-002.
 Write scope: native/, Tests/, docs/.
 
+Assigned sub-agents:
+
+- Security: Lovelace the 2nd.
+- GraalVM Runtime: Gibbs the 2nd.
+- Clean Code / functional core: Epicurus the 2nd.
+- Tests/TDD and verification: Linnaeus the 2nd.
+- Unix/reusable tooling: Carver the 2nd.
+
+Planning status:
+
+- 2026-06-05: Engineering manager started M3-003 in a fresh `jj` change on top
+  of completed M3-002. M3-002C's completed persona agents were closed before
+  assigning fresh M3-003 agents.
+- 2026-06-05: Claude pre-implementation consult was invoked directly with
+  `claude -p`, with no auth check, and timed out after 75 seconds with no
+  review output. Do not count Claude as signoff unless a later bounded retry
+  returns usable feedback.
+- 2026-06-05: Local research found the Swift/C policy schema and C config parser
+  already model filesystem roots, network rules, and clock/random/log toggles,
+  but `SciClojureEvaluator` currently has no policy-aware `ecritum.*` facade
+  and receives no effective policy snapshot.
+- 2026-06-05: Persona planning review completed. Security, GraalVM Runtime,
+  Clean Code, Tests/TDD, and Unix all blocked direct implementation until the
+  facade contracts and private effective-policy bridge are documented in an ADR.
+  Every persona attempted Claude directly; all Claude attempts timed out with no
+  usable output.
+- 2026-06-05: Drafted `docs/adr/0022-standard-library-facades.md` as the
+  proposed M3-003 decision record and sent it to the same M3-003 persona agents
+  plus Claude for review. Implementation remains blocked until ADR-022 is
+  reviewed and accepted or revised.
+- 2026-06-05: ADR-022 first review completed. Security, GraalVM Runtime, Clean
+  Code, Tests/TDD, and Unix found blockers in exact `require` grammar,
+  filesystem canonicalization/TOCTOU proof, HTTP scope, private bridge
+  contract, JSON edge cases, module boundaries, strict zero-pending
+  conformance/security gates, deterministic target outputs, and manifest
+  schema. Patched ADR-022 to define those items and make HTTP default-deny-only
+  for M3-003.
+- 2026-06-05: ADR-022 second review passed. Claude returned PASS and all five
+  M3-003 persona agents returned PASS, confirming prior blockers were resolved.
+  Marked ADR-022 Accepted. Implementation may proceed against ADR-022.
+
+Pre-implementation planning notes:
+
+- M3-003 needs an ADR or ADR-005/ADR-004 addendum before implementation because
+  it creates script-visible standard-library APIs and policy-enforced host side
+  effects.
+- The likely first implementation slice should keep `ecritum.json` pure and
+  deterministic, keep `ecritum.time` deterministic unless clock is explicitly
+  granted, and treat `ecritum.fs`/`ecritum.http` as facade APIs whose denied
+  paths are implemented before any side-effecting allowed paths.
+- Java must not receive raw C handles, raw Swift callbacks, or raw host objects.
+  If policy data crosses into the backend, it should be a copied private
+  manifest with pure policy decisions and named adapters.
+- Filesystem allowed-root behavior must be race-aware enough for the support
+  claim: normalize paths, deny traversal outside configured roots, and do not
+  expose raw `clojure.java.io` or `babashka.fs`.
+  Verification for allowed roots must use fixture directories, not ambient host
+  paths.
+- HTTP support should not add a broad HTTP client dependency or raw Java network
+  access without a reviewed ADR decision. Denied-by-default behavior can land
+  before allowed network side effects.
+- Accepted namespace shape for planning: `ecritum.json/read-string`,
+  `ecritum.json/write-string`, `ecritum.time/parse-instant`,
+  `ecritum.time/format-instant`, `ecritum.time/now`, `ecritum.fs/read-text`,
+  `ecritum.fs/read-bytes`, `ecritum.fs/exists?`, and `ecritum.http/request`.
+- Runtime direction: install `ecritum.*` through SCI `:namespaces`, but do not
+  rely on the current blanket `(require` denial forever because supported
+  namespaces must be require-able per ADR-005.
+- Clean-code direction: keep SCI vars thin and route through pure
+  `StandardLibraryPolicy` decisions plus named adapters for filesystem, HTTP,
+  clock, and JSON value conversion. Avoid reparsing policy JSON in Java and
+  avoid growing `SciClojureEvaluator` into the full facade runtime.
+- Test direction: start red in Java for namespace/facade semantics, then prove
+  the artifact path with native C and Swift XCFramework smoke tests. Add
+  `test-facades-clojure`, `conformance-clojure-facades`,
+  `security-clojure-facades`, and a composed `test-m3-003` target.
+- Conformance/security direction: extend the existing JSON runner protocols and
+  providers rather than adding one-off facade tools. Strict facade conformance
+  should cover JSON, time, filesystem default-deny, filesystem inside/outside
+  root, and HTTP default-deny. Security abuse should replace fixture pending
+  evidence with Clojure-native probes for raw IO/network/JDK escape hatches and
+  facade traversal/symlink cases.
+
 Definition of done:
 
 - Filesystem is denied by default and allowed only under configured roots.
 - Time/json/http behavior has deterministic tests.
 - Permission errors are explicit and documented.
+
+Implementation record:
+
+- 2026-06-05: Implemented ADR-022 standard-library facades for Clojure/SCI:
+  `ecritum.json`, `ecritum.time`, `ecritum.fs`, and default-deny-only
+  `ecritum.http`.
+- 2026-06-05: Added a private Native Image entrypoint
+  `ecritum_graal_eval_clojure_with_stdlib` and wired the C runtime wrapper to
+  pass a copied effective-policy manifest plus a private side-effect callback.
+  The public C ABI remains unchanged.
+- 2026-06-05: Kept JSON/time pure in Java; kept filesystem side effects in C
+  behind configured roots with canonicalization, `O_NOFOLLOW`, post-open path
+  revalidation, size caps, and UTF-8 validation for `read-text`.
+- 2026-06-05: Added native, Swift, conformance, security, and `just` gates for
+  facade behavior, exact supported requires, default denials, allowed-root
+  success, outside-root denial, traversal denial, and symlink escape denial.
+- 2026-06-05: Added a native symbol check for the private stdlib entrypoint in
+  `check-native`.
+
+Review record:
+
+- 2026-06-05: Persona implementation review found blockers in reserved aliases,
+  JSON surrogate handling, unknown policy keys, duplicate filesystem roots,
+  source-name propagation, native symbol verification, structured overflow
+  errors, and test coverage. Fixed those issues before final acceptance.
+- 2026-06-05: Accepted the remaining Clean Code concern about internal stdlib
+  bridge/require/normalization seams as `ECRITUM-DEBT-0008`; it does not change
+  the public ABI or M3-003 behavior claim and is scheduled for the M4.5
+  clean-code pass.
+- 2026-06-05: Tool-less Claude post-change review was invoked directly with
+  `claude -p` and no auth check; it produced no review content due to a bounded
+  wrapper failure, so it was not counted as signoff.
+- 2026-06-05: Read-only Claude implementation review was invoked directly with
+  `claude -p` and no auth check; it returned PASS with no blockers. Minor
+  non-blocking notes: Java policy error paths are mostly integration-covered,
+  `time.now` remains deny-only, and race coverage is represented by post-open
+  fail-closed containment evidence.
+
+Verification evidence:
+
+- `mise exec -- just test-m3-003` -> PASS on 2026-06-05. This included
+  `native`, `test-java`, `test-c-abi-eval`, `test-c-abi-eval-asan`,
+  `test-c-abi-policy-config`, `test-c-abi-policy-config-asan`,
+  `test-native-eval-smoke`, `test-native-eval-smoke-asan`, `xcframework`,
+  `test-xcframework-eval-smoke`, `test-facades-clojure`,
+  `conformance-clojure-facades`, `security-clojure-facades`, `security`,
+  `check-abi`, `license-report`, and `check-dep-delta`.
+- Native Image generated `build/native/macos-arm64/libecritum.dylib` at
+  30.67 MB and `check-native` verified `_ecritum_graal_version`,
+  `_ecritum_graal_eval_clojure`, `_ecritum_graal_eval_clojure_with_host`,
+  `_ecritum_graal_eval_clojure_with_stdlib`, `_graal_create_isolate`, and
+  `_graal_tear_down_isolate`.
+- Java tests: 23 tests, 0 failures.
+- Swift XCFramework runtime tests: 59 tests, 0 failures.
+- Security baseline tests: 22 tests, 0 failures; strict Clojure facade abuse
+  provider passed with `securityConformant=true`.
+- Dependency delta check passed with no violations; license-report generated
+  the current SPDX inventory with pre-existing release blockers still tracked.
 
 ** Milestone M4: JavaScript Runtime
 

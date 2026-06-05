@@ -142,6 +142,106 @@ final class EcritumEvalTests: XCTestCase {
         #endif
     }
 
+    func testArtifactBackedClojureStandardLibraryPureFacadesAndDefaultDenials() async throws {
+        #if ECRITUM_HAS_RUNTIME_ARTIFACT
+        let runtime = try EcritumRuntime()
+        let context = try runtime.context()
+
+        let json = try await context.eval(EcritumScript(
+            "(ecritum.json/write-string {\"b\" 2 \"a\" 1})",
+            language: .clojure,
+            sourceName: "swift-facade-json.clj"
+        ))
+        XCTAssertEqual(json, .string("{\"a\":1,\"b\":2}"))
+
+        let time = try await context.eval(EcritumScript(
+            "(ecritum.time/format-instant (ecritum.time/parse-instant \"2026-06-05T00:00:00Z\"))",
+            language: .clojure,
+            sourceName: "swift-facade-time.clj"
+        ))
+        XCTAssertEqual(time, .string("2026-06-05T00:00:00Z"))
+
+        do {
+            _ = try await context.eval(EcritumScript(
+                "(ecritum.time/now)",
+                language: .clojure,
+                sourceName: "swift-time-denied.clj"
+            ))
+            XCTFail("expected time permission denial")
+        } catch let error as EcritumError {
+            XCTAssertEqual(error.status, .permissionDenied)
+            XCTAssertEqual(error.category, .permission)
+            XCTAssertEqual(error.details?.sourceName, "swift-time-denied.clj")
+        }
+
+        do {
+            _ = try await context.eval(EcritumScript(
+                "(ecritum.http/request {\"url\" \"https://example.com\"})",
+                language: .clojure,
+                sourceName: "swift-http-denied.clj"
+            ))
+            XCTFail("expected http permission denial")
+        } catch let error as EcritumError {
+            XCTAssertEqual(error.status, .permissionDenied)
+            XCTAssertEqual(error.category, .permission)
+            XCTAssertEqual(error.details?.sourceName, "swift-http-denied.clj")
+        }
+        #else
+        throw XCTSkip("requires local runtime artifact")
+        #endif
+    }
+
+    func testArtifactBackedClojureFilesystemFacadeUsesConfiguredRoot() async throws {
+        #if ECRITUM_HAS_RUNTIME_ARTIFACT
+        let fileManager = FileManager.default
+        let root = URL(fileURLWithPath: "/tmp/ecritum-swift-facades-\(UUID().uuidString)", isDirectory: true)
+        let outside = URL(fileURLWithPath: "/tmp/ecritum-swift-facades-outside-\(UUID().uuidString).txt")
+        try fileManager.createDirectory(at: root, withIntermediateDirectories: false)
+        defer {
+            try? fileManager.removeItem(at: root)
+            try? fileManager.removeItem(at: outside)
+        }
+        let inside = root.appendingPathComponent("inside.txt")
+        try "swift-data".write(to: inside, atomically: true, encoding: .utf8)
+        try "outside-data".write(to: outside, atomically: true, encoding: .utf8)
+
+        let runtime = try EcritumRuntime(.init(
+            languages: [.clojure],
+            policy: .defaultDeny.withFilesystem(.readOnly(roots: [try .directory(root)]))
+        ))
+        let context = try runtime.context()
+
+        let readText = try await context.eval(EcritumScript(
+            "(ecritum.fs/read-text \"\(inside.path)\")",
+            language: .clojure,
+            sourceName: "swift-fs-read.clj"
+        ))
+        XCTAssertEqual(readText, .string("swift-data"))
+
+        let readBytes = try await context.eval(EcritumScript(
+            "(ecritum.fs/read-bytes \"\(inside.path)\")",
+            language: .clojure,
+            sourceName: "swift-fs-bytes.clj"
+        ))
+        XCTAssertEqual(readBytes, .data(Data("swift-data".utf8)))
+
+        do {
+            _ = try await context.eval(EcritumScript(
+                "(ecritum.fs/read-text \"\(outside.path)\")",
+                language: .clojure,
+                sourceName: "swift-fs-outside.clj"
+            ))
+            XCTFail("expected outside-root permission denial")
+        } catch let error as EcritumError {
+            XCTAssertEqual(error.status, .permissionDenied)
+            XCTAssertEqual(error.category, .permission)
+            XCTAssertEqual(error.details?.sourceName, "swift-fs-outside.clj")
+        }
+        #else
+        throw XCTSkip("requires local runtime artifact")
+        #endif
+    }
+
     func testArtifactBackedClojureEvalCallsRegisteredSwiftHostFunctions() async throws {
         #if ECRITUM_HAS_RUNTIME_ARTIFACT
         let runtime = try EcritumRuntime()

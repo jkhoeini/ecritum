@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -150,6 +151,128 @@ final class SciClojureEvaluatorTest {
     }
 
     @Test
+    void installsEcritumJsonNamespaceWithDeterministicRoundTrip() {
+        assertEquals("{\"a\":1,\"b\":2}", ok("(ecritum.json/write-string {\"b\" 2 \"a\" 1})"));
+
+        SciEvalResult result = SciClojureEvaluator.evaluate(
+            "(ecritum.json/read-string \"{\\\"items\\\":[true,false,\\\"x\\\"],\\\"n\\\":1}\")",
+            "facade-json.clj"
+        );
+
+        LinkedHashMap<String, Object> expected = new LinkedHashMap<>();
+        expected.put("items", List.of(true, false, "x"));
+        expected.put("n", 1L);
+        assertEquals(EcritumStatus.OK, result.status(), result.message());
+        assertEquals(expected, result.value());
+    }
+
+    @Test
+    void rejectsUnsupportedJsonShapesWithScriptErrors() {
+        SciEvalResult duplicate = SciClojureEvaluator.evaluate(
+            "(ecritum.json/read-string \"{\\\"a\\\":1,\\\"a\\\":2}\")",
+            "facade-json-duplicate.clj"
+        );
+        assertEquals(EcritumStatus.SCRIPT, duplicate.status());
+        assertEquals("runtime", duplicate.category());
+        assertTrue(duplicate.message().contains("duplicate JSON object key"));
+
+        SciEvalResult keywordKey = SciClojureEvaluator.evaluate(
+            "(ecritum.json/write-string {:a 1})",
+            "facade-json-key.clj"
+        );
+        assertEquals(EcritumStatus.SCRIPT, keywordKey.status());
+        assertEquals("runtime", keywordKey.category());
+        assertTrue(keywordKey.message().contains("string map keys"));
+
+        SciEvalResult integerOverflow = SciClojureEvaluator.evaluate(
+            "(ecritum.json/read-string \"9223372036854775808\")",
+            "facade-json-overflow.clj"
+        );
+        assertEquals(EcritumStatus.SCRIPT, integerOverflow.status());
+        assertEquals("runtime", integerOverflow.category());
+        assertTrue(integerOverflow.message().contains("overflow"));
+
+        SciEvalResult bigIntegerOverflow = SciClojureEvaluator.evaluate(
+            "(ecritum.json/write-string 9223372036854775808N)",
+            "facade-json-bigint.clj"
+        );
+        assertEquals(EcritumStatus.SCRIPT, bigIntegerOverflow.status());
+        assertEquals("runtime", bigIntegerOverflow.category());
+        assertTrue(bigIntegerOverflow.message().contains("integer"));
+
+        SciEvalResult nonFinite = SciClojureEvaluator.evaluate(
+            "(ecritum.json/write-string ##NaN)",
+            "facade-json-nan.clj"
+        );
+        assertEquals(EcritumStatus.SCRIPT, nonFinite.status());
+        assertEquals("runtime", nonFinite.category());
+        assertTrue(nonFinite.message().contains("finite"));
+
+        SciEvalResult loneSurrogate = SciClojureEvaluator.evaluate(
+            "(ecritum.json/read-string \"\\\"\\\\uD800\\\"\")",
+            "facade-json-surrogate.clj"
+        );
+        assertEquals(EcritumStatus.SCRIPT, loneSurrogate.status());
+        assertEquals("runtime", loneSurrogate.category());
+        assertTrue(loneSurrogate.message().contains("surrogate"));
+    }
+
+    @Test
+    void rejectsDataValuesWhenWritingJson() {
+        SciEvalResult data = SciClojureEvaluator.evaluate(
+            "(ecritum.json/write-string (app/blob))",
+            "facade-json-data.clj",
+            List.of(new HostProjection("app", "blob")),
+            (namespace, function, arguments) -> new byte[] {0, 1}
+        );
+
+        assertEquals(EcritumStatus.SCRIPT, data.status());
+        assertEquals("runtime", data.category());
+        assertTrue(data.message().contains("data"));
+    }
+
+    @Test
+    void installsEcritumTimeNamespaceWithPureParseAndFormat() {
+        assertEquals(
+            "2026-06-05T00:00:00Z",
+            ok("(ecritum.time/format-instant (ecritum.time/parse-instant \"2026-06-05T00:00:00Z\"))")
+        );
+    }
+
+    @Test
+    void deniesSideEffectFacadesByDefaultWithPermissionStatus() {
+        assertPermissionDenied("(ecritum.time/now)", "facade-time.clj");
+        assertPermissionDenied("(ecritum.fs/read-text \"/tmp/ecritum\")", "facade-fs.clj");
+        assertPermissionDenied("(ecritum.fs/read-bytes \"/tmp/ecritum\")", "facade-fs.clj");
+        assertPermissionDenied("(ecritum.fs/exists? \"/tmp/ecritum\")", "facade-fs.clj");
+        assertPermissionDenied("(ecritum.http/request {\"url\" \"https://example.com\"})", "facade-http.clj");
+    }
+
+    @Test
+    void permitsOnlyLiteralEcritumRequireForms() {
+        assertEquals(
+            "{\"a\":1}",
+            ok("(do (require 'ecritum.json) (ecritum.json/write-string {\"a\" 1}))")
+        );
+        assertEquals(
+            "{\"a\":1}",
+            ok("(do (require '[ecritum.json :as json]) (json/write-string {\"a\" 1}))")
+        );
+        assertEquals(
+            "{\"a\":1}",
+            ok("(do (require 'ecritum.time '[ecritum.json :as json] 'ecritum.fs 'ecritum.http) (json/write-string {\"a\" 1}))")
+        );
+        assertScriptError("(require 'clojure.java.io)", "permission");
+        assertScriptError("(require '[ecritum.json :refer [write-string]])", "permission");
+        assertScriptError("(require '[ecritum.json :refer :all])", "permission");
+        assertScriptError("(require '[ecritum.json :as java.io])", "permission");
+        assertScriptError("(require '[ecritum.json :as clojure.java.io])", "permission");
+        assertScriptError("(require 'ecritum.json 'clojure.java.io)", "permission");
+        assertScriptError("(require (symbol \"ecritum.json\"))", "permission");
+        assertScriptError("(requiring-resolve 'ecritum.json/write-string)", "permission");
+    }
+
+    @Test
     void deniesProjectionBypassProbesBeforeHostInvocation() {
         List<String> probes = List.of(
             "((resolve (symbol \"app\" \"answer\")))",
@@ -174,7 +297,7 @@ final class SciClojureEvaluatorTest {
                 }
             );
 
-            assertEquals(EcritumStatus.SCRIPT, result.status(), probe);
+            assertEquals(EcritumStatus.PERMISSION_DENIED, result.status(), probe);
             assertEquals("permission", result.category(), probe);
             assertEquals(0, calls.get(), probe);
         }
@@ -210,8 +333,18 @@ final class SciClojureEvaluatorTest {
 
     private void assertScriptError(String source, String category) {
         SciEvalResult result = SciClojureEvaluator.evaluate(source, "security-source.clj");
-        assertEquals(EcritumStatus.SCRIPT, result.status(), source);
+        int expectedStatus = category.equals("permission") ? EcritumStatus.PERMISSION_DENIED : EcritumStatus.SCRIPT;
+        assertEquals(expectedStatus, result.status(), source);
         assertEquals(category, result.category(), source);
         assertInstanceOf(String.class, result.message());
+    }
+
+    private void assertPermissionDenied(String source, String sourceName) {
+        SciEvalResult result = SciClojureEvaluator.evaluate(source, sourceName);
+        assertEquals(EcritumStatus.PERMISSION_DENIED, result.status(), source);
+        assertEquals("permission", result.category(), source);
+        assertEquals("clojure", result.language());
+        assertEquals(sourceName, result.sourceName());
+        assertTrue(result.message().contains(sourceName));
     }
 }

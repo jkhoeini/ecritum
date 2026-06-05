@@ -19,6 +19,30 @@ not done if it introduced debt without an entry.
 
 ## Active Debt
 
+- ID: ECRITUM-DEBT-0008
+- Source task: M3-003
+- Introduced by: First standard-library facades
+- Owner persona: Clean Code and Functional Core Engineer
+- Date: 2026-06-05
+- Impact: The Clojure facade behavior is verified through Java/native/Swift/
+  conformance/security gates, but some internal boundaries remain too coupled:
+  literal `require` preprocessing lives in `SciClojureEvaluator`,
+  `StandardLibraryBridge` uses normalized Java values rather than an explicit
+  backend-wire result type, and facade functions reuse evaluator normalization.
+- Reason accepted: The public ABI remains unchanged, the native boundary uses a
+  private stdlib entrypoint, denied-by-default behavior is covered, and Claude's
+  final read-only implementation review found no blockers. Splitting these
+  internal seams now would be a larger refactor after the M3-003 acceptance gate
+  passed.
+- Resolve-by phase: M4.5
+- Exit condition: Require preprocessing, facade value normalization, and stdlib
+  bridge result mapping have dedicated internal modules or an ADR explicitly
+  accepts the current coupling.
+- Removal task: M4.5 clean-code pass before ABI freeze.
+- Verification required: `mise exec -- just test-java`,
+  `mise exec -- just test-m3-003`, and a Clean Code persona review confirming
+  the internal seams are either decoupled or intentionally accepted.
+
 - ID: ECRITUM-DEBT-0007
 - Source task: M3-002
 - Introduced by: Clojure eval and host-call roll-up

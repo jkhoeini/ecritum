@@ -1,13 +1,16 @@
 #include "ecritum.h"
 
 #include <errno.h>
+#include <fcntl.h>
 #include <limits.h>
 #include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <time.h>
+#include <unistd.h>
 
 #ifdef ECRITUM_TESTING
 typedef struct __graal_isolate_t {
@@ -226,8 +229,11 @@ typedef struct {
     char *source_name;
     size_t source_name_len;
     ecritum_runtime_t runtime;
+    ecritum_context_t context;
     char *host_manifest;
     size_t host_manifest_len;
+    char *standard_library_manifest;
+    size_t standard_library_manifest_len;
     ecritum_projection_pin_t *projection_pins;
     size_t projection_pin_count;
 } ecritum_eval_work_t;
@@ -439,6 +445,12 @@ static int view_equals(ecritum_string_view_t view_value, const char *expected) {
     return view_value.len == expected_len
         && view_value.data != NULL
         && memcmp(view_value.data, expected, expected_len) == 0;
+}
+
+static int ends_with(const char *text, const char *suffix) {
+    size_t text_len = strlen(text);
+    size_t suffix_len = strlen(suffix);
+    return text_len >= suffix_len && strcmp(text + text_len - suffix_len, suffix) == 0;
 }
 
 static uint16_t next_generation(uint16_t generation) {
@@ -1066,6 +1078,252 @@ static void config_destroy(ecritum_policy_config_t *config) {
     string_set_destroy(&config->process_commands);
     string_set_destroy(&config->environment_keys);
     free(config);
+}
+
+typedef struct {
+    char *data;
+    size_t len;
+    size_t capacity;
+} ecritum_text_builder_t;
+
+static int text_builder_reserve(ecritum_text_builder_t *builder, size_t extra) {
+    if (builder->len > SIZE_MAX - extra - 1u) {
+        return ECRITUM_ERROR_OUT_OF_MEMORY;
+    }
+    size_t required = builder->len + extra + 1u;
+    if (required <= builder->capacity) {
+        return ECRITUM_OK;
+    }
+    size_t next_capacity = builder->capacity == 0 ? 256u : builder->capacity;
+    while (next_capacity < required) {
+        if (next_capacity > SIZE_MAX / 2u) {
+            return ECRITUM_ERROR_OUT_OF_MEMORY;
+        }
+        next_capacity *= 2u;
+    }
+    char *next = realloc(builder->data, next_capacity);
+    if (next == NULL) {
+        return ECRITUM_ERROR_OUT_OF_MEMORY;
+    }
+    builder->data = next;
+    builder->capacity = next_capacity;
+    return ECRITUM_OK;
+}
+
+static int text_builder_append_len(ecritum_text_builder_t *builder, const char *text, size_t len) {
+    int status = text_builder_reserve(builder, len);
+    if (status != ECRITUM_OK) {
+        return status;
+    }
+    if (len > 0) {
+        memcpy(builder->data + builder->len, text, len);
+    }
+    builder->len += len;
+    builder->data[builder->len] = '\0';
+    return ECRITUM_OK;
+}
+
+static int text_builder_append(ecritum_text_builder_t *builder, const char *text) {
+    return text_builder_append_len(builder, text, strlen(text));
+}
+
+static int text_builder_append_u64(ecritum_text_builder_t *builder, uint64_t value) {
+    char digits[32];
+    snprintf(digits, sizeof(digits), "%llu", (unsigned long long)value);
+    return text_builder_append(builder, digits);
+}
+
+static int text_builder_append_json_string(ecritum_text_builder_t *builder, const char *text) {
+    int status = text_builder_append(builder, "\"");
+    if (status != ECRITUM_OK) {
+        return status;
+    }
+    for (size_t index = 0; text[index] != '\0'; index++) {
+        unsigned char ch = (unsigned char)text[index];
+        switch (ch) {
+        case '"':
+            status = text_builder_append(builder, "\\\"");
+            break;
+        case '\\':
+            status = text_builder_append(builder, "\\\\");
+            break;
+        case '\b':
+            status = text_builder_append(builder, "\\b");
+            break;
+        case '\f':
+            status = text_builder_append(builder, "\\f");
+            break;
+        case '\n':
+            status = text_builder_append(builder, "\\n");
+            break;
+        case '\r':
+            status = text_builder_append(builder, "\\r");
+            break;
+        case '\t':
+            status = text_builder_append(builder, "\\t");
+            break;
+        default:
+            if (ch < 0x20) {
+                char escaped[7];
+                snprintf(escaped, sizeof(escaped), "\\u%04x", ch);
+                status = text_builder_append(builder, escaped);
+            } else {
+                status = text_builder_append_len(builder, (const char *)&text[index], 1u);
+            }
+            break;
+        }
+        if (status != ECRITUM_OK) {
+            return status;
+        }
+    }
+    return text_builder_append(builder, "\"");
+}
+
+static int compare_string_pointers(const void *left, const void *right) {
+    const char *const *left_text = left;
+    const char *const *right_text = right;
+    return strcmp(*left_text, *right_text);
+}
+
+static int text_builder_append_sorted_string_array(ecritum_text_builder_t *builder, const ecritum_string_set_t *set) {
+    int status = text_builder_append(builder, "[");
+    if (status != ECRITUM_OK) {
+        return status;
+    }
+    char **sorted = NULL;
+    if (set->count > 0) {
+        sorted = calloc(set->count, sizeof(char *));
+        if (sorted == NULL) {
+            return ECRITUM_ERROR_OUT_OF_MEMORY;
+        }
+        for (size_t index = 0; index < set->count; index++) {
+            sorted[index] = set->items[index];
+        }
+        qsort(sorted, set->count, sizeof(char *), compare_string_pointers);
+    }
+    for (size_t index = 0; index < set->count; index++) {
+        if (index > 0) {
+            status = text_builder_append(builder, ",");
+            if (status != ECRITUM_OK) {
+                free(sorted);
+                return status;
+            }
+        }
+        status = text_builder_append_json_string(builder, sorted[index]);
+        if (status != ECRITUM_OK) {
+            free(sorted);
+            return status;
+        }
+    }
+    free(sorted);
+    return text_builder_append(builder, "]");
+}
+
+static const char *filesystem_mode_name(int mode) {
+    if (mode == ECRITUM_FS_READ_ONLY) {
+        return "read_only";
+    }
+    if (mode == ECRITUM_FS_READ_WRITE) {
+        return "read_write";
+    }
+    return "denied";
+}
+
+static int text_builder_append_network_rules(ecritum_text_builder_t *builder, const ecritum_string_set_t *set) {
+    int status = text_builder_append(builder, "[");
+    if (status != ECRITUM_OK) {
+        return status;
+    }
+    char **sorted = NULL;
+    if (set->count > 0) {
+        sorted = calloc(set->count, sizeof(char *));
+        if (sorted == NULL) {
+            return ECRITUM_ERROR_OUT_OF_MEMORY;
+        }
+        for (size_t index = 0; index < set->count; index++) {
+            sorted[index] = set->items[index];
+        }
+        qsort(sorted, set->count, sizeof(char *), compare_string_pointers);
+    }
+    for (size_t index = 0; index < set->count; index++) {
+        char *first = strchr(sorted[index], '|');
+        char *second = first == NULL ? NULL : strchr(first + 1, '|');
+        if (first == NULL || second == NULL) {
+            free(sorted);
+            return ECRITUM_ERROR_INTERNAL;
+        }
+        if (index > 0) {
+            status = text_builder_append(builder, ",");
+            if (status != ECRITUM_OK) {
+                free(sorted);
+                return status;
+            }
+        }
+        status = text_builder_append(builder, "{\"scheme\":");
+        if (status == ECRITUM_OK) {
+            status = text_builder_append_len(builder, "\"", 1u);
+        }
+        if (status == ECRITUM_OK) {
+            status = text_builder_append_len(builder, sorted[index], (size_t)(first - sorted[index]));
+        }
+        if (status == ECRITUM_OK) {
+            status = text_builder_append(builder, "\",\"host\":");
+        }
+        if (status == ECRITUM_OK) {
+            char saved = *second;
+            *second = '\0';
+            status = text_builder_append_json_string(builder, first + 1);
+            *second = saved;
+        }
+        if (status == ECRITUM_OK) {
+            status = text_builder_append(builder, ",\"port\":");
+        }
+        if (status == ECRITUM_OK) {
+            status = text_builder_append(builder, second + 1);
+        }
+        if (status == ECRITUM_OK) {
+            status = text_builder_append(builder, "}");
+        }
+        if (status != ECRITUM_OK) {
+            free(sorted);
+            return status;
+        }
+    }
+    free(sorted);
+    return text_builder_append(builder, "]");
+}
+
+static int create_standard_library_manifest_locked(ecritum_handle_slot_t *context_entry, ecritum_eval_work_t *work) {
+    if (context_entry == NULL || work == NULL) {
+        return ECRITUM_ERROR_INVALID_ARGUMENT;
+    }
+    const ecritum_policy_config_t *config = context_entry->value.context.config;
+    ecritum_text_builder_t builder = {0};
+    int filesystem_mode = config == NULL ? ECRITUM_FS_DENIED : config->filesystem_mode;
+    int network_allowed = config == NULL ? 0 : config->network_allowed;
+    int clock_allowed = config == NULL ? 0 : config->clock_allowed;
+    const ecritum_string_set_t empty_set = {0};
+    const ecritum_string_set_t *filesystem_roots = config == NULL ? &empty_set : &config->filesystem_roots;
+    const ecritum_string_set_t *network_rules = config == NULL ? &empty_set : &config->network_rules;
+
+    int status = text_builder_append(&builder, "{\"schemaVersion\":1,\"filesystem\":{\"mode\":");
+    if (status == ECRITUM_OK) status = text_builder_append_json_string(&builder, filesystem_mode_name(filesystem_mode));
+    if (status == ECRITUM_OK) status = text_builder_append(&builder, ",\"roots\":");
+    if (status == ECRITUM_OK) status = text_builder_append_sorted_string_array(&builder, filesystem_roots);
+    if (status == ECRITUM_OK) status = text_builder_append(&builder, "},\"network\":{\"mode\":");
+    if (status == ECRITUM_OK) status = text_builder_append_json_string(&builder, network_allowed ? "allowed" : "denied");
+    if (status == ECRITUM_OK) status = text_builder_append(&builder, ",\"rules\":");
+    if (status == ECRITUM_OK) status = text_builder_append_network_rules(&builder, network_allowed ? network_rules : &empty_set);
+    if (status == ECRITUM_OK) status = text_builder_append(&builder, "},\"clock\":{\"mode\":");
+    if (status == ECRITUM_OK) status = text_builder_append_json_string(&builder, clock_allowed ? "allowed" : "denied");
+    if (status == ECRITUM_OK) status = text_builder_append(&builder, "},\"resourceLimits\":{}}");
+    if (status != ECRITUM_OK) {
+        free(builder.data);
+        return status;
+    }
+    work->standard_library_manifest = builder.data;
+    work->standard_library_manifest_len = builder.len;
+    return ECRITUM_OK;
 }
 
 static int valid_utf8(const uint8_t *data, size_t len) {
@@ -3523,6 +3781,7 @@ static void eval_work_destroy(ecritum_eval_work_t *work) {
     free(work->source);
     free(work->source_name);
     free(work->host_manifest);
+    free(work->standard_library_manifest);
     free(work->projection_pins);
     free(work);
 }
@@ -4150,6 +4409,19 @@ static int host_call_bridge_from_graal(
     long long *out_bytes_written
 );
 
+static int standard_library_bridge_from_graal(
+    size_t context_handle,
+    char *operation_name,
+    size_t operation_name_len,
+    char *source_name,
+    size_t source_name_len,
+    char *arguments,
+    size_t arguments_len,
+    char *out_buffer,
+    size_t out_buffer_size,
+    long long *out_bytes_written
+);
+
 static void *eval_worker_main(void *raw_work) {
     ecritum_eval_work_t *work = raw_work;
     if (work == NULL) {
@@ -4180,7 +4452,7 @@ static void *eval_worker_main(void *raw_work) {
     long long backend_bytes_written = 0;
 
     if (backend_status == ECRITUM_OK) {
-        backend_status = ecritum_graal_eval_clojure_with_host(
+        backend_status = ecritum_graal_eval_clojure_with_stdlib(
             thread,
             (char *)work->source,
             work->source_len,
@@ -4190,6 +4462,10 @@ static void *eval_worker_main(void *raw_work) {
             work->host_manifest_len,
             host_call_bridge_from_graal,
             (size_t)work->runtime,
+            work->standard_library_manifest,
+            work->standard_library_manifest_len,
+            standard_library_bridge_from_graal,
+            (size_t)work->context,
             (char *)backend_buffer,
             sizeof(backend_buffer),
             &backend_bytes_written
@@ -4341,6 +4617,16 @@ __attribute__((visibility("default"))) int ecritum_eval_start(
     work->job = job;
     work->isolate = isolate;
     work->runtime = make_handle(ECRITUM_HANDLE_KIND_RUNTIME, runtime_slot, runtime_generation);
+    work->context = context;
+    int manifest_status = create_standard_library_manifest_locked(context_entry, work);
+    if (manifest_status != ECRITUM_OK) {
+        release_job_context_locked(job, &job_entry->value.job);
+        tombstone_slot_locked(job_entry);
+        if (out_error != NULL) *out_error = create_error_locked(manifest_status, "eval_start", "standard-library policy snapshot failed");
+        pthread_mutex_unlock(&registry_mutex);
+        eval_work_destroy(work);
+        return manifest_status;
+    }
     int projection_status = create_host_projection_snapshot_locked(runtime_slot, runtime_generation, work);
     if (projection_status != ECRITUM_OK) {
         release_job_context_locked(job, &job_entry->value.job);
@@ -4851,6 +5137,333 @@ static int write_bridge_error(
         category,
         message
     );
+}
+
+static int bridge_name_equals(const char *name, size_t name_len, const char *expected) {
+    size_t expected_len = strlen(expected);
+    return name != NULL && name_len == expected_len && memcmp(name, expected, expected_len) == 0;
+}
+
+static int value_record_single_string_arg(
+    const ecritum_value_record_t *arguments_record,
+    const uint8_t **out_data,
+    size_t *out_len
+) {
+    if (arguments_record == NULL
+        || arguments_record->kind != ECRITUM_VALUE_KIND_ARRAY
+        || arguments_record->value.array.count != 1
+        || out_data == NULL
+        || out_len == NULL) {
+        return ECRITUM_ERROR_INVALID_ARGUMENT;
+    }
+    const ecritum_value_record_t *argument = &arguments_record->value.array.items[0];
+    if (argument->kind != ECRITUM_VALUE_KIND_STRING) {
+        return ECRITUM_ERROR_INVALID_ARGUMENT;
+    }
+    *out_data = argument->value.bytes.data;
+    *out_len = argument->value.bytes.len;
+    return ECRITUM_OK;
+}
+
+static int copy_path_argument(const uint8_t *data, size_t len, char **out_path) {
+    if (out_path == NULL) {
+        return ECRITUM_ERROR_INVALID_ARGUMENT;
+    }
+    *out_path = NULL;
+    if (data == NULL || len == 0 || len >= PATH_MAX) {
+        return ECRITUM_ERROR_PERMISSION_DENIED;
+    }
+    for (size_t index = 0; index < len; index++) {
+        if (data[index] == 0) {
+            return ECRITUM_ERROR_PERMISSION_DENIED;
+        }
+    }
+    if (data[0] != '/') {
+        return ECRITUM_ERROR_PERMISSION_DENIED;
+    }
+    char *copy = malloc(len + 1u);
+    if (copy == NULL) {
+        return ECRITUM_ERROR_OUT_OF_MEMORY;
+    }
+    memcpy(copy, data, len);
+    copy[len] = '\0';
+    *out_path = copy;
+    return ECRITUM_OK;
+}
+
+static int path_has_bad_relative_component(const char *path) {
+    if (path == NULL) {
+        return 1;
+    }
+    if (strcmp(path, ".") == 0 || strcmp(path, "..") == 0) {
+        return 1;
+    }
+    return strstr(path, "/../") != NULL
+        || strstr(path, "/./") != NULL
+        || ends_with(path, "/..")
+        || ends_with(path, "/.");
+}
+
+static int path_is_under_root(const char *path, const char *root) {
+    size_t root_len = strlen(root);
+    return strcmp(path, root) == 0 || (strncmp(path, root, root_len) == 0 && path[root_len] == '/');
+}
+
+static int resolve_allowed_root(const ecritum_policy_config_t *config, const char *path, char out_real_path[PATH_MAX]) {
+    if (config == NULL || config->filesystem_mode == ECRITUM_FS_DENIED || path == NULL || path_has_bad_relative_component(path)) {
+        return ECRITUM_ERROR_PERMISSION_DENIED;
+    }
+    char path_real[PATH_MAX];
+    if (realpath(path, path_real) == NULL) {
+        return errno == ENOENT ? ECRITUM_ERROR_CLOSED : ECRITUM_ERROR_PERMISSION_DENIED;
+    }
+    for (size_t index = 0; index < config->filesystem_roots.count; index++) {
+        char root_real[PATH_MAX];
+        if (realpath(config->filesystem_roots.items[index], root_real) == NULL) {
+            continue;
+        }
+        if (path_is_under_root(path_real, root_real)) {
+            copy_text(out_real_path, PATH_MAX, path_real);
+            return ECRITUM_OK;
+        }
+    }
+    return ECRITUM_ERROR_PERMISSION_DENIED;
+}
+
+static int lexical_path_may_be_under_root(const ecritum_policy_config_t *config, const char *path) {
+    if (config == NULL || config->filesystem_mode == ECRITUM_FS_DENIED || path == NULL || path_has_bad_relative_component(path)) {
+        return 0;
+    }
+    for (size_t index = 0; index < config->filesystem_roots.count; index++) {
+        char root_real[PATH_MAX];
+        if (realpath(config->filesystem_roots.items[index], root_real) == NULL) {
+            continue;
+        }
+        if (path_is_under_root(path, root_real) || path_is_under_root(path, config->filesystem_roots.items[index])) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int opened_file_is_under_root(int fd, const ecritum_policy_config_t *config) {
+    char opened_path[PATH_MAX];
+    if (fcntl(fd, F_GETPATH, opened_path) != 0) {
+        return 0;
+    }
+    char opened_real[PATH_MAX];
+    if (realpath(opened_path, opened_real) == NULL) {
+        return 0;
+    }
+    for (size_t index = 0; index < config->filesystem_roots.count; index++) {
+        char root_real[PATH_MAX];
+        if (realpath(config->filesystem_roots.items[index], root_real) == NULL) {
+            continue;
+        }
+        if (path_is_under_root(opened_real, root_real)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int write_bool_bridge_result(
+    char *out_buffer,
+    size_t out_buffer_size,
+    long long *out_bytes_written,
+    int value
+) {
+    ecritum_value_record_t record = {0};
+    record.kind = ECRITUM_VALUE_KIND_BOOL;
+    record.value.bool_value = value ? 1 : 0;
+    return backend_write_result((uint8_t *)out_buffer, out_buffer_size, out_bytes_written, ECRITUM_OK, &record, "", "", "", "");
+}
+
+static int write_owned_bytes_bridge_result(
+    char *out_buffer,
+    size_t out_buffer_size,
+    long long *out_bytes_written,
+    int kind,
+    uint8_t *data,
+    size_t len
+) {
+    ecritum_value_record_t record = {0};
+    record.kind = kind;
+    record.value.bytes.data = data;
+    record.value.bytes.len = len;
+    int status = backend_write_result((uint8_t *)out_buffer, out_buffer_size, out_bytes_written, ECRITUM_OK, &record, "", "", "", "");
+    free(data);
+    return status;
+}
+
+#define ECRITUM_STDLIB_FILE_MAX_BYTES 32768u
+
+static int standard_library_fs_exists(
+    const ecritum_policy_config_t *config,
+    const char *path,
+    char *out_buffer,
+    size_t out_buffer_size,
+    long long *out_bytes_written
+) {
+    char real_path[PATH_MAX];
+    int status = resolve_allowed_root(config, path, real_path);
+    if (status == ECRITUM_OK) {
+        return write_bool_bridge_result(out_buffer, out_buffer_size, out_bytes_written, 1);
+    }
+    if (status == ECRITUM_ERROR_CLOSED && lexical_path_may_be_under_root(config, path)) {
+        return write_bool_bridge_result(out_buffer, out_buffer_size, out_bytes_written, 0);
+    }
+    return write_bridge_error(out_buffer, out_buffer_size, out_bytes_written, ECRITUM_ERROR_PERMISSION_DENIED, "permission", "filesystem access is not permitted");
+}
+
+static int standard_library_fs_read(
+    const ecritum_policy_config_t *config,
+    const char *path,
+    int as_text,
+    char *out_buffer,
+    size_t out_buffer_size,
+    long long *out_bytes_written
+) {
+    if (config == NULL || config->filesystem_mode == ECRITUM_FS_DENIED) {
+        return write_bridge_error(out_buffer, out_buffer_size, out_bytes_written, ECRITUM_ERROR_PERMISSION_DENIED, "permission", "filesystem access is not permitted");
+    }
+    char real_path[PATH_MAX];
+    if (resolve_allowed_root(config, path, real_path) != ECRITUM_OK) {
+        return write_bridge_error(out_buffer, out_buffer_size, out_bytes_written, ECRITUM_ERROR_PERMISSION_DENIED, "permission", "filesystem access is not permitted");
+    }
+    int fd = open(real_path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+    if (fd < 0) {
+        return write_bridge_error(out_buffer, out_buffer_size, out_bytes_written, ECRITUM_ERROR_PERMISSION_DENIED, "permission", "filesystem access is not permitted");
+    }
+    int close_fd = 1;
+    int status = ECRITUM_OK;
+    struct stat metadata;
+    if (fstat(fd, &metadata) != 0 || !S_ISREG(metadata.st_mode) || metadata.st_size < 0 || metadata.st_size > (off_t)ECRITUM_STDLIB_FILE_MAX_BYTES) {
+        status = ECRITUM_ERROR_PERMISSION_DENIED;
+    }
+    if (status == ECRITUM_OK && !opened_file_is_under_root(fd, config)) {
+        status = ECRITUM_ERROR_PERMISSION_DENIED;
+    }
+    size_t len = status == ECRITUM_OK ? (size_t)metadata.st_size : 0u;
+    uint8_t *data = NULL;
+    if (status == ECRITUM_OK) {
+        data = malloc(len == 0 ? 1u : len);
+        if (data == NULL) {
+            status = ECRITUM_ERROR_OUT_OF_MEMORY;
+        }
+    }
+    if (status == ECRITUM_OK) {
+        size_t offset = 0;
+        while (offset < len) {
+            ssize_t count = read(fd, data + offset, len - offset);
+            if (count < 0) {
+                if (errno == EINTR) {
+                    continue;
+                }
+                status = ECRITUM_ERROR_INTERNAL;
+                break;
+            }
+            if (count == 0) {
+                status = ECRITUM_ERROR_INTERNAL;
+                break;
+            }
+            offset += (size_t)count;
+        }
+    }
+    if (close_fd) {
+        close(fd);
+    }
+    if (status == ECRITUM_OK && as_text && !valid_utf8(data, len)) {
+        status = ECRITUM_ERROR_SCRIPT;
+    }
+    if (status == ECRITUM_OK) {
+        return write_owned_bytes_bridge_result(
+            out_buffer,
+            out_buffer_size,
+            out_bytes_written,
+            as_text ? ECRITUM_VALUE_KIND_STRING : ECRITUM_VALUE_KIND_DATA,
+            data,
+            len
+        );
+    }
+    free(data);
+    if (status == ECRITUM_ERROR_SCRIPT) {
+        return write_bridge_error(out_buffer, out_buffer_size, out_bytes_written, ECRITUM_ERROR_SCRIPT, "runtime", "file is not valid utf-8");
+    }
+    return write_bridge_error(out_buffer, out_buffer_size, out_bytes_written, ECRITUM_ERROR_PERMISSION_DENIED, "permission", "filesystem access is not permitted");
+}
+
+static int standard_library_bridge_from_graal(
+    size_t context_handle,
+    char *operation_name,
+    size_t operation_name_len,
+    char *source_name,
+    size_t source_name_len,
+    char *arguments,
+    size_t arguments_len,
+    char *out_buffer,
+    size_t out_buffer_size,
+    long long *out_bytes_written
+) {
+    (void)source_name;
+    (void)source_name_len;
+    if (operation_name == NULL || arguments == NULL || out_buffer == NULL || out_bytes_written == NULL) {
+        return ECRITUM_ERROR_INVALID_ARGUMENT;
+    }
+    *out_bytes_written = 0;
+
+    ecritum_value_record_t arguments_record = {0};
+    int status = backend_decode_ok_value((const uint8_t *)arguments, arguments_len, &arguments_record);
+    if (status != ECRITUM_OK) {
+        return write_bridge_error(out_buffer, out_buffer_size, out_bytes_written, ECRITUM_ERROR_INVALID_ARGUMENT, "runtime", "standard-library arguments are invalid");
+    }
+
+    const uint8_t *path_data = NULL;
+    size_t path_len = 0;
+    if (!bridge_name_equals(operation_name, operation_name_len, "fs.read_text")
+        && !bridge_name_equals(operation_name, operation_name_len, "fs.read_bytes")
+        && !bridge_name_equals(operation_name, operation_name_len, "fs.exists")) {
+        value_record_destroy(&arguments_record);
+        return write_bridge_error(out_buffer, out_buffer_size, out_bytes_written, ECRITUM_ERROR_PERMISSION_DENIED, "permission", "standard-library operation is not permitted");
+    }
+    status = value_record_single_string_arg(&arguments_record, &path_data, &path_len);
+    if (status != ECRITUM_OK) {
+        value_record_destroy(&arguments_record);
+        return write_bridge_error(out_buffer, out_buffer_size, out_bytes_written, ECRITUM_ERROR_SCRIPT, "runtime", "filesystem path must be a string");
+    }
+    char *path = NULL;
+    status = copy_path_argument(path_data, path_len, &path);
+    if (status != ECRITUM_OK) {
+        value_record_destroy(&arguments_record);
+        return write_bridge_error(out_buffer, out_buffer_size, out_bytes_written, ECRITUM_ERROR_PERMISSION_DENIED, "permission", "filesystem access is not permitted");
+    }
+
+    pthread_mutex_lock(&registry_mutex);
+    ecritum_handle_slot_t *context_entry = validate_locked((ecritum_context_t)context_handle, ECRITUM_HANDLE_KIND_CONTEXT);
+    if (context_entry == NULL) {
+        pthread_mutex_unlock(&registry_mutex);
+        free(path);
+        value_record_destroy(&arguments_record);
+        return write_bridge_error(out_buffer, out_buffer_size, out_bytes_written, ECRITUM_ERROR_INVALID_HANDLE, "internal", "standard-library context is invalid");
+    }
+    ecritum_policy_config_t *config = config_clone(context_entry->value.context.config);
+    pthread_mutex_unlock(&registry_mutex);
+    if (config == NULL) {
+        free(path);
+        value_record_destroy(&arguments_record);
+        return write_bridge_error(out_buffer, out_buffer_size, out_bytes_written, ECRITUM_ERROR_OUT_OF_MEMORY, "internal", "standard-library policy copy failed");
+    }
+    if (bridge_name_equals(operation_name, operation_name_len, "fs.exists")) {
+        status = standard_library_fs_exists(config, path, out_buffer, out_buffer_size, out_bytes_written);
+    } else if (bridge_name_equals(operation_name, operation_name_len, "fs.read_text")) {
+        status = standard_library_fs_read(config, path, 1, out_buffer, out_buffer_size, out_bytes_written);
+    } else {
+        status = standard_library_fs_read(config, path, 0, out_buffer, out_buffer_size, out_bytes_written);
+    }
+    config_destroy(config);
+    free(path);
+    value_record_destroy(&arguments_record);
+    return status;
 }
 
 static int host_call_bridge_from_graal(

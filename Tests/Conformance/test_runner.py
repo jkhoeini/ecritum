@@ -33,6 +33,13 @@ REQUIRED_CASE_IDS = {
     "permission.default_deny.unrestricted_java_lookup",
     "permission.filesystem.allowed_root_inside",
     "permission.filesystem.allowed_root_outside_denied",
+    "stdlib.json.roundtrip",
+    "stdlib.time.parse_format",
+    "stdlib.time.now_default_denied",
+    "stdlib.fs.default_denied",
+    "stdlib.fs.allowed_root_inside",
+    "stdlib.fs.allowed_root_outside_denied",
+    "stdlib.http.default_denied",
     "lifecycle.c.create_destroy_no_leak",
     "lifecycle.swift.create_destroy_no_leak",
     "allocation.public_c_release_coverage",
@@ -297,7 +304,7 @@ class ConformanceRunnerTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["ok"], True)
-        self.assertEqual(payload["cases"], 23)
+        self.assertEqual(payload["cases"], 30)
 
     def test_unknown_case_id_is_runner_error(self):
         result = run_conformance("--case", "missing.case", "--list")

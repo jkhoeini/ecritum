@@ -56,6 +56,38 @@
       "phase": "callback_error",
       "required": true,
       "expected": {"status": "ECRITUM_ERROR_INVALID_HANDLE"}
+    },
+    {
+      "caseId": "require.arbitrary_namespace.denied",
+      "title": "Arbitrary require is denied",
+      "capability": "unrestricted_java_lookup",
+      "phase": "normal_eval",
+      "required": true,
+      "expected": {"status": "ECRITUM_ERROR_PERMISSION_DENIED"}
+    },
+    {
+      "caseId": "require.refer_denied",
+      "title": "Refer require forms are denied",
+      "capability": "unrestricted_java_lookup",
+      "phase": "normal_eval",
+      "required": true,
+      "expected": {"status": "ECRITUM_ERROR_PERMISSION_DENIED"}
+    },
+    {
+      "caseId": "filesystem.facade.traversal_denied",
+      "title": "Filesystem facade traversal outside root is denied",
+      "capability": "filesystem",
+      "phase": "normal_eval",
+      "required": true,
+      "expected": {"status": "ECRITUM_ERROR_PERMISSION_DENIED"}
+    },
+    {
+      "caseId": "filesystem.facade.symlink_escape_denied",
+      "title": "Filesystem facade symlink escape is denied",
+      "capability": "filesystem",
+      "phase": "normal_eval",
+      "required": true,
+      "expected": {"status": "ECRITUM_ERROR_PERMISSION_DENIED"}
     }
   ]
 }

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import ctypes
 import json
+import tempfile
 import sys
 from pathlib import Path
 
@@ -23,7 +24,15 @@ KIND_OBJECT = 7
 JOB_SUCCEEDED = 2
 TERMINAL_JOBS = {2, 3, 5, 6, 7}
 
-CAPABILITIES = ["eval", "host_call", "script_error"]
+CAPABILITIES = [
+    "eval",
+    "host_call",
+    "script_error",
+    "stdlib_json",
+    "stdlib_time",
+    "permission_default_deny",
+    "filesystem_allowed_root",
+]
 STATUS_NAMES = {
     0: "ECRITUM_OK",
     1: "ECRITUM_ERROR_INVALID_ARGUMENT",
@@ -176,15 +185,48 @@ def load_library():
     return lib
 
 
+def runtime_config_with_read_root(root):
+    return json.dumps(
+        {
+            "schemaVersion": 1,
+            "languages": ["clojure"],
+            "policy": {
+                "filesystem": {
+                    "mode": "read_only",
+                    "roots": [{"kind": "directory", "path": str(root)}],
+                },
+                "network": {"mode": "denied"},
+                "process": {"mode": "denied"},
+                "environment": {"mode": "denied"},
+                "clock": {"mode": "denied"},
+                "random": {"mode": "denied"},
+                "log": {"mode": "denied"},
+            },
+            "diagnostics": {"mode": "redacted"},
+            "resourceLimits": {},
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+
+
 class RuntimeSession:
-    def __init__(self, lib):
+    def __init__(self, lib, runtime_config=b""):
         self.lib = lib
+        self.runtime_config = runtime_config
         self.runtime = ctypes.c_uint64(0)
         self.context = ctypes.c_uint64(0)
         self.namespace = ctypes.c_uint64(0)
         self.callbacks = []
         self.host_calls = []
         self._create()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, traceback):
+        self.close()
+        return False
 
     def close(self):
         error = ctypes.c_uint64(0)
@@ -199,9 +241,11 @@ class RuntimeSession:
             self._destroy_error(error)
 
     def _create(self):
+        config, config_keepalive = make_bytes(self.runtime_config)
         empty, _ = make_bytes(b"")
         error = ctypes.c_uint64(0)
-        status = self.lib.ecritum_runtime_create(empty, ctypes.byref(self.runtime), ctypes.byref(error))
+        self._config_keepalive = config_keepalive
+        status = self.lib.ecritum_runtime_create(config, ctypes.byref(self.runtime), ctypes.byref(error))
         self._check(status, error, "runtime_create")
         status = self.lib.ecritum_context_create(self.runtime.value, empty, ctypes.byref(self.context), ctypes.byref(error))
         self._check(status, error, "context_create")
@@ -413,6 +457,55 @@ def run_case(case, session):
         session.host_calls = []
         session.eval("(app/notify)")
         return pass_result(case_id, {"hostCalls": session.host_calls})
+    if case_id == "stdlib.json.roundtrip":
+        result = session.eval('(ecritum.json/write-string {"b" 2 "a" 1})')
+        return pass_result(case_id, {"status": "ECRITUM_OK", "value": result["value"]})
+    if case_id == "stdlib.time.parse_format":
+        result = session.eval('(ecritum.time/format-instant (ecritum.time/parse-instant "2026-06-05T00:00:00Z"))')
+        return pass_result(case_id, {"status": "ECRITUM_OK", "value": result["value"]})
+    if case_id == "stdlib.time.now_default_denied":
+        result = session.eval("(ecritum.time/now)")
+        return pass_result(case_id, {
+            "status": result["status"],
+            "category": result["category"],
+            "operation": result["operation"],
+        })
+    if case_id == "stdlib.fs.default_denied":
+        result = session.eval('(ecritum.fs/read-text "/tmp/ecritum-conformance-denied")')
+        return pass_result(case_id, {
+            "status": result["status"],
+            "category": result["category"],
+            "operation": result["operation"],
+        })
+    if case_id == "stdlib.http.default_denied":
+        result = session.eval('(ecritum.http/request {"url" "https://example.com"})')
+        return pass_result(case_id, {
+            "status": result["status"],
+            "category": result["category"],
+            "operation": result["operation"],
+        })
+    if case_id in {"stdlib.fs.allowed_root_inside", "stdlib.fs.allowed_root_outside_denied"}:
+        with tempfile.TemporaryDirectory(prefix="ecritum-conformance-") as root_name:
+            root = Path(root_name)
+            inside = root / "inside.txt"
+            inside.write_text("inside-data", encoding="utf-8")
+            outside_handle = tempfile.NamedTemporaryFile(prefix="ecritum-conformance-outside-", delete=False)
+            outside = Path(outside_handle.name)
+            outside_handle.write(b"outside-data")
+            outside_handle.close()
+            try:
+                with RuntimeSession(session.lib, runtime_config_with_read_root(root)) as fs_session:
+                    if case_id == "stdlib.fs.allowed_root_inside":
+                        result = fs_session.eval(f'(ecritum.fs/read-text "{inside}")')
+                        return pass_result(case_id, {"status": "ECRITUM_OK", "value": result["value"]})
+                    result = fs_session.eval(f'(ecritum.fs/read-text "{outside}")')
+                    return pass_result(case_id, {
+                        "status": result["status"],
+                        "category": result["category"],
+                        "operation": result["operation"],
+                    })
+            finally:
+                outside.unlink(missing_ok=True)
     return pending_result(case)
 
 

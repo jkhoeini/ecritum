@@ -63,18 +63,64 @@ final class SciClojureEvaluator {
         List<HostProjection> projections,
         HostFunctionInvoker hostInvoker
     ) {
+        return evaluate(
+            source,
+            sourceName,
+            projections,
+            hostInvoker,
+            StandardLibraryPolicy.denied(),
+            StandardLibraryBridge.denying()
+        );
+    }
+
+    static SciEvalResult evaluate(
+        String source,
+        String sourceName,
+        List<HostProjection> projections,
+        HostFunctionInvoker hostInvoker,
+        StandardLibraryPolicy standardLibraryPolicy,
+        StandardLibraryBridge standardLibraryBridge
+    ) {
         String safeSourceName = sourceName == null ? "" : sourceName;
         if (source == null) {
             return SciEvalResult.scriptError(LANGUAGE, safeSourceName, "runtime", errorPrefix(safeSourceName) + "missing source");
         }
-        if (ConservativeSourceDenyPolicy.denies(source)) {
-            return SciEvalResult.scriptError(LANGUAGE, safeSourceName, "permission", errorPrefix(safeSourceName) + "permission denied");
+        RequireRewrite requireRewrite = SupportedRequireForms.rewrite(source);
+        if (!requireRewrite.allowed() || ConservativeSourceDenyPolicy.denies(requireRewrite.source())) {
+            return new SciEvalResult(
+                EcritumStatus.PERMISSION_DENIED,
+                null,
+                LANGUAGE,
+                safeSourceName,
+                "permission",
+                errorPrefix(safeSourceName) + "permission denied"
+            );
         }
 
         try {
-            Object rawValue = EVAL_STRING.invoke(source, evalOptions(projections, hostInvoker));
+            Object rawValue = EVAL_STRING.invoke(
+                requireRewrite.source(),
+                evalOptions(
+                    projections,
+                    hostInvoker,
+                    standardLibraryPolicy,
+                    standardLibraryBridge,
+                    requireRewrite.aliases()
+                )
+            );
             return SciEvalResult.ok(normalizeValue(rawValue));
         } catch (Throwable ex) {
+            StandardLibraryException facadeError = findStandardLibraryException(ex);
+            if (facadeError != null) {
+                return new SciEvalResult(
+                    facadeError.status(),
+                    null,
+                    LANGUAGE,
+                    safeSourceName,
+                    facadeError.category(),
+                    errorPrefix(safeSourceName) + facadeError.category() + " error: " + sanitizeMessage(facadeError.getMessage())
+                );
+            }
             HostFunctionException hostError = findHostFunctionException(ex);
             if (hostError != null) {
                 return new SciEvalResult(
@@ -97,26 +143,30 @@ final class SciClojureEvaluator {
     }
 
     private static IPersistentMap evalOptions(List<HostProjection> projections, HostFunctionInvoker hostInvoker) {
-        if (projections == null || projections.isEmpty()) {
-            return EVAL_OPTIONS;
-        }
-        Map<String, IPersistentMap> namespaceFunctions = new LinkedHashMap<>();
-        for (HostProjection projection : projections) {
-            if (projection == null || projection.namespace() == null || projection.function() == null) {
-                continue;
-            }
-            IPersistentMap functions = namespaceFunctions.getOrDefault(projection.namespace(), RT.map());
-            functions = functions.assoc(
-                Symbol.intern(projection.function()),
-                new ProjectedHostFunction(projection.namespace(), projection.function(), hostInvoker)
-            );
-            namespaceFunctions.put(projection.namespace(), functions);
-        }
-        IPersistentMap namespaces = RT.map();
-        for (Map.Entry<String, IPersistentMap> entry : namespaceFunctions.entrySet()) {
-            namespaces = namespaces.assoc(Symbol.intern(entry.getKey()), entry.getValue());
-        }
-        return EVAL_OPTIONS.assoc(Keyword.intern(null, "namespaces"), namespaces);
+        return evalOptions(
+            projections,
+            hostInvoker,
+            StandardLibraryPolicy.denied(),
+            StandardLibraryBridge.denying(),
+            Map.of()
+        );
+    }
+
+    private static IPersistentMap evalOptions(
+        List<HostProjection> projections,
+        HostFunctionInvoker hostInvoker,
+        StandardLibraryPolicy standardLibraryPolicy,
+        StandardLibraryBridge standardLibraryBridge,
+        Map<String, String> aliases
+    ) {
+        return SciNamespaceInstaller.install(
+            EVAL_OPTIONS,
+            projections,
+            hostInvoker,
+            standardLibraryPolicy,
+            standardLibraryBridge,
+            aliases
+        );
     }
 
     private static String errorPrefix(String sourceName) {
@@ -126,7 +176,7 @@ final class SciClojureEvaluator {
         return LANGUAGE + " " + sourceName + ": ";
     }
 
-    private static Object normalizeValue(Object value) {
+    static Object normalizeValue(Object value) {
         if (value == null
             || value instanceof Boolean
             || value instanceof String
@@ -213,6 +263,17 @@ final class SciClojureEvaluator {
         return null;
     }
 
+    private static StandardLibraryException findStandardLibraryException(Throwable ex) {
+        Throwable current = ex;
+        while (current != null) {
+            if (current instanceof StandardLibraryException standardLibraryException) {
+                return standardLibraryException;
+            }
+            current = current.getCause();
+        }
+        return null;
+    }
+
     private static boolean containsAny(String value, String... needles) {
         if (value == null) {
             return false;
@@ -275,7 +336,203 @@ final class SciClojureEvaluator {
         }
     }
 
-    private static final class ProjectedHostFunction extends RestFn {
+    private record RequireRewrite(String source, Map<String, String> aliases, boolean allowed) {
+        static RequireRewrite denied() {
+            return new RequireRewrite("", Map.of(), false);
+        }
+    }
+
+    private static final class SupportedRequireForms {
+        private static final List<String> ALLOWED_NAMESPACES = List.of(
+            "ecritum.json",
+            "ecritum.time",
+            "ecritum.fs",
+            "ecritum.http"
+        );
+
+        private SupportedRequireForms() {
+        }
+
+        static RequireRewrite rewrite(String source) {
+            if (!source.contains("(require")) {
+                return new RequireRewrite(source, Map.of(), true);
+            }
+
+            StringBuilder rewritten = new StringBuilder(source.length());
+            LinkedHashMap<String, String> aliases = new LinkedHashMap<>();
+            int index = 0;
+            boolean inString = false;
+            boolean escaped = false;
+            boolean inComment = false;
+            boolean foundRequire = false;
+            while (index < source.length()) {
+                char ch = source.charAt(index);
+                if (inString) {
+                    rewritten.append(ch);
+                    if (escaped) {
+                        escaped = false;
+                    } else if (ch == '\\') {
+                        escaped = true;
+                    } else if (ch == '"') {
+                        inString = false;
+                    }
+                    index++;
+                } else if (inComment) {
+                    rewritten.append(ch);
+                    if (ch == '\n' || ch == '\r') {
+                        inComment = false;
+                    }
+                    index++;
+                } else if (ch == '"') {
+                    rewritten.append(ch);
+                    inString = true;
+                    index++;
+                } else if (ch == ';') {
+                    rewritten.append(ch);
+                    inComment = true;
+                    index++;
+                } else if (startsRequireForm(source, index)) {
+                    int end = findFormEnd(source, index);
+                    if (end < 0) {
+                        return RequireRewrite.denied();
+                    }
+                    if (!parseRequireForm(source.substring(index, end + 1), aliases)) {
+                        return RequireRewrite.denied();
+                    }
+                    rewritten.append("nil");
+                    index = end + 1;
+                    foundRequire = true;
+                } else {
+                    rewritten.append(ch);
+                    index++;
+                }
+            }
+
+            if (!foundRequire) {
+                return new RequireRewrite(source, Map.of(), true);
+            }
+            return new RequireRewrite(rewritten.toString(), Map.copyOf(aliases), true);
+        }
+
+        private static boolean startsRequireForm(String source, int index) {
+            String marker = "(require";
+            if (!source.startsWith(marker, index)) {
+                return false;
+            }
+            int next = index + marker.length();
+            return next < source.length() && Character.isWhitespace(source.charAt(next));
+        }
+
+        private static int findFormEnd(String source, int start) {
+            int depth = 0;
+            boolean inString = false;
+            boolean escaped = false;
+            for (int index = start; index < source.length(); index++) {
+                char ch = source.charAt(index);
+                if (inString) {
+                    if (escaped) {
+                        escaped = false;
+                    } else if (ch == '\\') {
+                        escaped = true;
+                    } else if (ch == '"') {
+                        inString = false;
+                    }
+                    continue;
+                }
+                if (ch == '"') {
+                    inString = true;
+                } else if (ch == '(') {
+                    depth++;
+                } else if (ch == ')') {
+                    depth--;
+                    if (depth == 0) {
+                        return index;
+                    }
+                    if (depth < 0) {
+                        return -1;
+                    }
+                }
+            }
+            return -1;
+        }
+
+        private static boolean parseRequireForm(String form, Map<String, String> aliases) {
+            String body = form.substring("(require".length(), form.length() - 1).trim();
+            List<String> clauses = splitClauses(body);
+            if (clauses.isEmpty()) {
+                return false;
+            }
+            for (String clause : clauses) {
+                if (!parseRequireClause(clause, aliases)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private static List<String> splitClauses(String body) {
+            ArrayList<String> clauses = new ArrayList<>();
+            StringBuilder current = new StringBuilder();
+            int bracketDepth = 0;
+            for (int index = 0; index < body.length(); index++) {
+                char ch = body.charAt(index);
+                if (ch == '"' || ch == '(' || ch == ')' || ch == ';') {
+                    return List.of();
+                }
+                if (ch == '[') {
+                    bracketDepth++;
+                } else if (ch == ']') {
+                    bracketDepth--;
+                    if (bracketDepth < 0) {
+                        return List.of();
+                    }
+                }
+                if (Character.isWhitespace(ch) && bracketDepth == 0) {
+                    if (!current.isEmpty()) {
+                        clauses.add(current.toString());
+                        current.setLength(0);
+                    }
+                } else {
+                    current.append(ch);
+                }
+            }
+            if (bracketDepth != 0) {
+                return List.of();
+            }
+            if (!current.isEmpty()) {
+                clauses.add(current.toString());
+            }
+            return clauses;
+        }
+
+        private static boolean parseRequireClause(String clause, Map<String, String> aliases) {
+            if (clause.startsWith("'[") && clause.endsWith("]")) {
+                String[] tokens = clause.substring(2, clause.length() - 1).trim().split("\\s+");
+                if (tokens.length != 3 || !":as".equals(tokens[1])) {
+                    return false;
+                }
+                if (!ALLOWED_NAMESPACES.contains(tokens[0]) || !isAlias(tokens[2])) {
+                    return false;
+                }
+                aliases.put(tokens[2], tokens[0]);
+                return true;
+            }
+            if (!clause.startsWith("'")) {
+                return false;
+            }
+            return ALLOWED_NAMESPACES.contains(clause.substring(1));
+        }
+
+        private static boolean isAlias(String alias) {
+            if (!alias.matches("[A-Za-z][A-Za-z0-9_-]*")) {
+                return false;
+            }
+            String lower = alias.toLowerCase();
+            return !List.of("ecritum", "java", "javax", "sun", "clojure", "graal", "truffle", "sci").contains(lower);
+        }
+    }
+
+    static final class ProjectedHostFunction extends RestFn {
         private final String namespace;
         private final String function;
         private final HostFunctionInvoker invoker;

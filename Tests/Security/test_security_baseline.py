@@ -379,7 +379,7 @@ class SecurityBaselineTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
         self.assertTrue(payload["ok"])
-        self.assertEqual(payload["cases"], 64)
+        self.assertEqual(payload["cases"], 68)
 
     def test_abuse_manifest_requires_targeted_cases_to_stay_required(self):
         with tempfile.TemporaryDirectory() as directory:
