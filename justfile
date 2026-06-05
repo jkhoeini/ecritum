@@ -36,7 +36,7 @@ test-java:
 
 native:
     test -f {{maven_project}}
-    mvn -s {{maven_settings}} -f {{maven_project}} -Pnative -DskipTests package
+    MACOSX_DEPLOYMENT_TARGET={{min_macos}} mvn -s {{maven_settings}} -f {{maven_project}} -Pnative -DskipTests package
     test -f {{native_output}}
     mkdir -p {{native_stable_dir}}
     mkdir -p {{native_private_headers_dir}}
@@ -54,23 +54,33 @@ check-native:
 xcframework:
     test -d build/native
     scripts/build-xcframework.sh
+    just check-xcframework
+
+check-xcframework:
+    scripts/check-xcframework.sh
 
 build-swift:
     test -f Package.swift
     swift build
 
 test-swift-scaffold:
-    test -f Package.swift
-    swift package reset
-    swift test
+    scripts/swift-test.sh --mode scaffold
 
 test-swift:
     test -d dist/local/EcritumRuntime.xcframework
-    test -f Package.swift
-    swift package reset
-    swift test
+    scripts/swift-test.sh --mode runtime
 
-test: plan-check test-swift-scaffold test-java
+test-swift-auto:
+    @if [ -d dist/local/EcritumRuntime.xcframework ]; then \
+        scripts/swift-test.sh --mode runtime; \
+    else \
+        scripts/swift-test.sh --mode scaffold; \
+    fi
+
+test: plan-check test-swift-auto test-java
+
+inspect:
+    python3 scripts/inspect-artifact.py
 
 size:
     @if [ -d dist ]; then du -sh dist/*; else echo "No dist artifacts yet."; fi

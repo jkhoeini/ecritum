@@ -6,11 +6,23 @@ import PackageDescription
 let localRuntimePath = "dist/local/EcritumRuntime.xcframework"
 let packageDirectory = URL(fileURLWithPath: #filePath).deletingLastPathComponent().path
 let localRuntimeFullPath = packageDirectory + "/" + localRuntimePath
-let hasLocalRuntime = FileManager.default.fileExists(atPath: localRuntimeFullPath)
+let localRuntimeMode = ProcessInfo.processInfo.environment["ECRITUM_LOCAL_RUNTIME"]
+let localRuntimeState = ProcessInfo.processInfo.environment["ECRITUM_LOCAL_RUNTIME_STATE"]
+let hasLocalRuntimeFile = FileManager.default.fileExists(atPath: localRuntimeFullPath)
+let forceScaffoldRuntime = localRuntimeMode == "0"
+let hasLocalRuntime: Bool
+if localRuntimeMode == "1" {
+    hasLocalRuntime = localRuntimeState?.hasPrefix("v4:runtime:runtime-present:") == true
+        && hasLocalRuntimeFile
+} else if forceScaffoldRuntime {
+    hasLocalRuntime = false
+} else {
+    hasLocalRuntime = hasLocalRuntimeFile
+}
 
 let releaseRuntimeURL = ProcessInfo.processInfo.environment["ECRITUM_RUNTIME_URL"]
 let releaseRuntimeChecksum = ProcessInfo.processInfo.environment["ECRITUM_RUNTIME_CHECKSUM"]
-let hasReleaseRuntime = releaseRuntimeURL != nil && releaseRuntimeChecksum != nil
+let hasReleaseRuntime = !forceScaffoldRuntime && releaseRuntimeURL != nil && releaseRuntimeChecksum != nil
 
 var runtimeDependency: [Target.Dependency] = []
 var swiftSettings: [SwiftSetting] = []
@@ -25,7 +37,7 @@ if hasLocalRuntime {
     )
     runtimeDependency.append("EcritumRuntime")
     swiftSettings.append(.define("ECRITUM_HAS_RUNTIME_ARTIFACT"))
-} else if let releaseRuntimeURL, let releaseRuntimeChecksum {
+} else if hasReleaseRuntime, let releaseRuntimeURL, let releaseRuntimeChecksum {
     targets.append(
         .binaryTarget(
             name: "EcritumRuntime",
@@ -49,7 +61,8 @@ targets.append(contentsOf: [
     ),
     .testTarget(
         name: "EcritumTests",
-        dependencies: ["Ecritum"]
+        dependencies: ["Ecritum"],
+        swiftSettings: swiftSettings
     ),
 ])
 
@@ -66,4 +79,3 @@ let package = Package(
     ],
     targets: targets
 )
-

@@ -61,6 +61,8 @@
               <imageName>libecritum</imageName>
               <buildArgs>
                 <buildArg>--shared</buildArg>
+                <buildArg>--native-compiler-options=-mmacosx-version-min=14.0</buildArg>
+                <buildArg>-H:NativeLinkerOption=-mmacosx-version-min=14.0</buildArg>
               </buildArgs>
             </configuration>
             <executions>

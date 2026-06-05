@@ -584,12 +584,13 @@ Not verified:
 - Public packaged =ecritum_version= bridge, =@rpath= install name, XCFramework
   assembly, C host smoke, and clean-machine =dlopen= are owned by M1-004/M1-006.
 
-*** TODO M1-004 Build XCFramework assembly path
+*** DONE M1-004 Build XCFramework assembly path
 
 Lead persona: Release.
 Reviewer personas: Unix, Tests, Swift DX.
 Depends on: M1-002, M1-003.
-Write scope: scripts/, justfile, dist/, Sources/CEcritum/shim.c.
+Write scope: scripts/, justfile, dist/, Package.swift, Sources/CEcritum/shim.c,
+native/pom.xml.
 
 Definition of done:
 
@@ -605,6 +606,48 @@ Definition of done:
 - SwiftPM test consumes the assembled artifact.
 - Artifact inspection reports symbols, linked dylibs, bundled resources, size,
   checksum, and runtime list.
+
+Notes:
+
+- Built =dist/local/EcritumRuntime.xcframework= as a framework-style artifact
+  with public =Headers/ecritum.h= and private
+  =Resources/libecritum_graal.dylib=.
+- Removed the weak CEcritum fallback so the packaged runtime owns
+  =ecritum_version= when the artifact is present.
+- =check-xcframework.sh= verifies public/private header boundaries, public
+  symbol isolation, no leaked workspace-local install paths, macOS 14.0 min
+  versions, wrapper/private install names, and =dlopen + dlsym= happy and
+  negative ABI paths.
+- =Package.swift= and =scripts/swift-test.sh= support explicit scaffold and
+  runtime modes with content-hash runtime artifact state, including scaffold
+  mode that ignores release artifact environment variables.
+- Claude final full-diff review on 2026-06-05: PASS, no blockers.
+- Persona review round found blockers in =just test= runtime coverage, packaged
+  negative ABI paths, and DEBT records; all were fixed before final verification.
+- Final persona signoff: Swift DX PASS, Tests PASS, Release PASS.
+
+#+begin_src markdown
+## Verification
+
+Layers tested: Unit, Contract, Integration, Packaging, Release
+Commands run:
+- `mise exec -- just native` -> exit 0; Native Image built `libecritum.dylib`, copied private Graal headers, and `just check-native` found `_ecritum_graal_version`, `_graal_create_isolate`, `_graal_tear_down_isolate`.
+- `mise exec -- just xcframework` -> exit 0; assembled `dist/local/EcritumRuntime.xcframework` and ran `just check-xcframework`.
+- `mise exec -- just check-xcframework` -> exit 0; verified public `_ecritum_version`, no private Graal exports, no Graal headers in public headers, `@rpath`/`@loader_path` install names, macOS 14.0 min versions, and `dlopen + dlsym` smoke.
+- `scripts/check-xcframework.sh --artifact "$PWD/dist/local/EcritumRuntime.xcframework"` -> exit 0; absolute artifact paths do not trigger false workspace-path leak failures.
+- `mise exec -- just inspect` -> exit 0; artifact SHA256 `ec66bb6b8f335d4a179d9b6ee431253ec4486fb11b87a3c1802bd800700da103`, wrapper size 33,568 bytes, private runtime size 12,931,416 bytes, headers only `Headers/ecritum.h`, runtime list `GraalVM Native Image`, `Ecritum C wrapper`.
+- Artifact absent: moved `dist/local/EcritumRuntime.xcframework` aside and ran `mise exec -- just test-swift-scaffold` -> exit 0; 4 Swift tests, 2 expected runtime skips, 0 failures.
+- `mise exec -- just test-swift` -> exit 0; 4 Swift tests, 0 skips, 0 failures; Swift and CEcritum paths returned `0.1.0-dev` from the packaged runtime.
+- `ECRITUM_RUNTIME_URL=https://example.invalid/EcritumRuntime.xcframework.zip ECRITUM_RUNTIME_CHECKSUM=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef mise exec -- just test-swift-scaffold` -> exit 0; scaffold mode ignored release artifact env vars.
+- `mise exec -- just test` -> exit 0; plan checks passed, Swift runtime tests ran with 4 tests/0 skips/0 failures because the artifact exists, and Java tests ran 3 tests/0 failures.
+New tests added:
+- `scripts/check-xcframework.sh` packaged C `dlopen + dlsym` smoke with null buffer, zero length, and undersized buffer negative paths.
+- `Tests/EcritumTests/EcritumTests.swift` runtime-artifact Swift/CEcritum assertions gated by `ECRITUM_HAS_RUNTIME_ARTIFACT`.
+Negative paths tested:
+- Missing artifact scaffold mode, release-env ignored in scaffold mode, null buffer, zero length, undersized version buffer, private header leak check, private symbol leak check, workspace-local install path leak check.
+Size impact:
+- Public wrapper: 33,568 bytes. Private Graal runtime: 12,931,416 bytes. Artifact SHA256: `ec66bb6b8f335d4a179d9b6ee431253ec4486fb11b87a3c1802bd800700da103`.
+#+end_src
 
 *** TODO M1-005 Establish CI and release gate baselines
 

@@ -19,26 +19,6 @@ not done if it introduced debt without an entry.
 
 ## Active Debt
 
-- ID: ECRITUM-DEBT-0001
-- Source task: M1-002
-- Introduced by: SwiftPM and C module scaffold
-- Owner persona: Release
-- Date: 2026-06-05
-- Impact: `Sources/CEcritum/shim.c` provides a weak fallback
-  `ecritum_version` symbol that only returns `ECRITUM_ERROR_RUNTIME_UNAVAILABLE`.
-  This keeps the source package linkable before a local runtime artifact exists,
-  but it is not the final public runtime implementation.
-- Reason accepted: M1-002 scaffolds the C module before M1-004 assembles and
-  links the Native Image runtime artifact.
-- Resolve-by phase: M1-004
-- Exit condition: `ecritum_version(char *, size_t)` bridges to the packaged
-  Native Image entry point, owns Graal isolate setup/teardown internally, and the
-  Swift runtime-wrapper test passes through the local XCFramework.
-- Removal task: M1-004 Build XCFramework assembly path
-- Verification required: `mise exec -- just xcframework`, `mise exec -- just
-  test-swift`, symbol inspection proving public `ecritum_version`, and C/Swift
-  smoke tests.
-
 - ID: ECRITUM-DEBT-0002
 - Source task: M1-002/M1-003
 - Introduced by: SwiftPM and Native Image scaffold
@@ -56,20 +36,31 @@ not done if it introduced debt without an entry.
 - Verification required: ABI/status-code check in `mise exec -- just test` or
   `mise exec -- just check-abi`.
 
+## Resolved Debt
+
+- ID: ECRITUM-DEBT-0001
+- Source task: M1-002
+- Introduced by: SwiftPM scaffold
+- Owner persona: Swift API and Developer Experience Engineer
+- Date: 2026-06-05
+- Resolved in: M1-004
+- Resolution: Removed the weak `ecritum_version` fallback from
+  `Sources/CEcritum/shim.c`; SwiftPM runtime tests now require the packaged
+  `EcritumRuntime.xcframework` to provide the public C symbol.
+- Verification: `mise exec -- just test-swift-scaffold` proves the scaffold
+  path without a runtime artifact, and `mise exec -- just test-swift` proves the
+  packaged runtime path with no skipped runtime tests.
+
 - ID: ECRITUM-DEBT-0003
 - Source task: M1-002
 - Introduced by: SwiftPM scaffold
 - Owner persona: Swift API and Developer Experience Engineer
 - Date: 2026-06-05
-- Impact: Swift test tasks run `swift package reset` before test execution. This
-  keeps manifest-time binary target switching deterministic while M1 artifacts
-  are moving, but it forces full rebuilds during development.
-- Reason accepted: M1 still validates local/release artifact switching, and the
-  conservative reset avoids stale manifest behavior.
-- Resolve-by phase: M1-004
-- Exit condition: Swift test tasks invalidate SwiftPM state only when
-  `dist/local/EcritumRuntime.xcframework` availability changes, or release
-  validation proves reset is unnecessary.
-- Removal task: M1-004 Build XCFramework assembly path
-- Verification required: Run `mise exec -- just test-swift-scaffold` before the
-  local XCFramework exists and `mise exec -- just test-swift` after it exists.
+- Resolved in: M1-004
+- Resolution: `scripts/swift-test.sh` records a content hash of runtime artifact
+  availability in `build/swift-test/ecritum-runtime-artifact-state`, exports an
+  explicit `ECRITUM_LOCAL_RUNTIME` manifest mode, and resets SwiftPM package
+  state when the mode or artifact content changes.
+- Verification: `mise exec -- just test-swift-scaffold` passed with the artifact
+  absent, `mise exec -- just test-swift` passed with the artifact present, and
+  `mise exec -- just test` passed with the artifact present.
