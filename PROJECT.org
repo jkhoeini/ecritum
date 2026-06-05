@@ -1901,12 +1901,59 @@ Not implemented:
   hardened-runtime, SBOM, CVE tracking, and vulnerability-response process.
   These are deliberately assigned to M2.5-002 and ADR-015 follow-up gates.
 
-*** TODO M2.5-002 Add security abuse-test baseline
+*** DONE M2.5-002 Add security abuse-test baseline
 
 Lead persona: Tests.
 Reviewer personas: Security, Unix, Architecture.
 Depends on: M2.5-001.
-Write scope: Tests/, scripts/, justfile.
+Write scope: Tests/, scripts/, justfile, docs/release-gates.md, PROJECT.org.
+
+Assignment:
+
+- Engineering manager: Codex.
+- Lead persona agent: Tests/TDD (Ramanujan).
+- Reviewer agents: Security (Fermat), Unix tooling (Ken), Architecture
+  (Dewey).
+- Claude plan consult: started with read-only tools but produced no output in
+  bounded waits and was terminated. Do not count it as review evidence for the
+  plan; proceed from persona reviews and run Claude diff review after the
+  executable gates exist.
+
+Accepted plan:
+
+- Add `test-security-static` as a scriptable static check for forbidden
+  Polyglot, Java/host interop, native access, and Native Image metadata
+  patterns outside named negative-test fixtures.
+- Add `test-security-abuse` as an executable abuse matrix baseline that covers
+  filesystem, network, process, environment, reflection, class loading, native
+  loading, unrestricted Java lookup, raw Polyglot access, raw host object
+  access, raw C handle access, classpath/JAR mutation, callback use after
+  return, allowed filesystem root inside, outside-root denial, and redirect
+  denial. Current runtime-provider cases remain pending until eval/language
+  providers exist; strict mode must fail while required cases are pending.
+- Add `test-security-fuzz` as a parser-abuse-equivalent gate that maps current
+  C config/lifecycle/host-registration coverage and explicitly records blocked
+  eval/value/error/callback parser surfaces until public APIs exist.
+- Add these normal-mode security gates to `just test`. Keep strict
+  support-claim checks as focused expected-fail commands until real providers
+  exist.
+- Record hardened runtime, SBOM, CVE tracking, vulnerability-response, revocation
+  and Native Image metadata-hardening requirements in release gates, feeding
+  ADR-015 and M7 release tasks.
+
+Pre-implementation review:
+
+- Tests/TDD: BLOCKER until named gates, manifests, scripts, and red/green
+  evidence exist. Existing conformance strict behavior is the correct false-claim
+  base.
+- Security: BLOCKER until `test-security-static`, `test-security-abuse`, and
+  `test-security-fuzz`/parser-equivalent gates exist; release hardening/SBOM/CVE
+  requirements must be recorded.
+- Unix tooling: BLOCKER while the task is empty. Requires deterministic JSON
+  stdout, diagnostics on stderr, `0/1/2` exit codes, build artifacts under
+  `build/security`, and reusable scripts modeled on `run-conformance.py`.
+- Architecture: BLOCKER while the task is empty. Requires executable baselines
+  without false runtime-security claims while eval/language providers are absent.
 
 Definition of done:
 
@@ -1914,6 +1961,67 @@ Definition of done:
   loading, native loading, unrestricted Java lookup, invalid handles, and
   oversized inputs.
 - Hardened-runtime, SBOM, and CVE tracking requirements are recorded for release.
+
+Implementation:
+
+- Added `scripts/check-security-static.py` and `just test-security-static`.
+  It scans source/build metadata, including `.mvn` config files, for forbidden
+  Polyglot, host interop, Native Image, and broad metadata patterns while
+  allowing named negative fixtures.
+- Added `Tests/Security/abuse-manifest.json`,
+  `Tests/Security/fixtures/abuse_provider.py`,
+  `scripts/run-security-abuse.py`, and `just test-security-abuse`. The normal
+  baseline reports pending required cases until eval/language providers exist;
+  strict mode is expected to fail while those cases remain pending.
+- Added `Tests/Security/parser-abuse-manifest.json`,
+  `scripts/check-parser-abuse.py`, and `just test-security-fuzz` as the current
+  parser-abuse-equivalent gate. Covered cases must carry evidence commands, and
+  `--verify-evidence` executes them.
+- Updated `docs/release-gates.md` with hardened runtime, SBOM, CVE monitoring,
+  vulnerability response, revocation, and security gate requirements.
+- Added the security target to `just test`.
+
+Verification:
+
+- Red: focused security unit tests failed before implementation for missing
+  scripts, manifests, just targets, and release-gate terms.
+- Red after first review: added regressions for provider false-green,
+  non-executed parser evidence, optional targeted abuse cases, Maven config
+  scanning, host-class lookup, Native Image metadata, missing actual status,
+  wrong actual status, and declared-capability pending.
+- `python3 -m unittest Tests/Security/test_security_baseline.py` -> 22 tests,
+  exit 0.
+- `mise exec -- just test-security-static` -> exit 0.
+- `mise exec -- just test-security-abuse` -> exit 0; strict output recorded as
+  expected failure with 64 pending required cases.
+- `mise exec -- just test-security-fuzz` -> exit 0; evidence output recorded 12
+  executed commands and 0 failures; strict output recorded as expected failure
+  with 5 blocked parser-abuse surfaces.
+- `mise exec -- just security` -> exit 0.
+- `mise exec -- just conformance` -> exit 0.
+- `mise exec -- just test` -> exit 0.
+
+Post-change review completed:
+
+- Tests/TDD first review: BLOCKER. Fixed executable evidence validation,
+  targeted-case required validation, Maven config scanning, and added
+  regression tests. Second review: PASS.
+- Security first review: BLOCKER. Fixed provider pass normalization, expected
+  actual-status validation, host-class lookup scanning, and Native Image metadata
+  scanning. Second review: PASS.
+- Architecture first review: BLOCKER. Fixed provider capability honesty so an
+  unsupported provider cannot claim `securityConformant`. Second review: PASS.
+- Clean Code first review: BLOCKER. Added pure normalization before summary and
+  kept side effects in provider/evidence adapters. Second review: PASS.
+- Unix tooling review: PASS, then second review PASS after fixes. JSON stdout,
+  stderr diagnostics, `0/1/2` exits, strict expected-fail recipes, and
+  `build/security` artifacts were verified.
+- Claude first diff review: PASS with non-blocking clarity notes. Fixed the
+  validate-manifest/incomplete-matrix test clarity and added a justfile comment
+  that `test-security-fuzz` is parser-abuse-equivalent until fuzz surfaces exist.
+- Claude second review: PASS. Confirmed prior blockers were resolved; only
+  noted a cosmetic duplicate Native Image metadata regex that over-reports
+  rather than under-reports.
 
 ** Milestone M3: Clojure First Runtime
 

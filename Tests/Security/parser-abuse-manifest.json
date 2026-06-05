@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 1,
+  "suite": "ecritum-parser-abuse",
+  "cases": [
+    {
+      "caseId": "config.invalid_utf8",
+      "surface": "config",
+      "vector": "invalid_utf8",
+      "status": "covered",
+      "evidenceCommands": ["mise exec -- just test-c-abi-policy-config"]
+    },
+    {
+      "caseId": "config.oversized_input",
+      "surface": "config",
+      "vector": "oversized_input",
+      "status": "covered",
+      "evidenceCommands": ["mise exec -- just test-c-abi-policy-config"]
+    },
+    {
+      "caseId": "config.duplicate_keys",
+      "surface": "config",
+      "vector": "duplicate_keys",
+      "status": "covered",
+      "evidenceCommands": ["mise exec -- just test-c-abi-policy-config"]
+    },
+    {
+      "caseId": "config.bad_paths",
+      "surface": "config",
+      "vector": "bad_paths",
+      "status": "covered",
+      "evidenceCommands": ["mise exec -- just test-c-abi-policy-config"]
+    },
+    {
+      "caseId": "config.deep_nesting",
+      "surface": "config",
+      "vector": "deep_nesting",
+      "status": "covered",
+      "evidenceCommands": ["mise exec -- just test-c-abi-policy-config-asan"]
+    },
+    {
+      "caseId": "config.large_arrays",
+      "surface": "config",
+      "vector": "large_arrays",
+      "status": "covered",
+      "evidenceCommands": ["mise exec -- just test-c-abi-policy-config-asan"]
+    },
+    {
+      "caseId": "callback.nul_bytes",
+      "surface": "callback",
+      "vector": "nul_bytes",
+      "status": "covered",
+      "evidenceCommands": ["mise exec -- just test-c-abi-host-registration"]
+    },
+    {
+      "caseId": "callback.oversized_input",
+      "surface": "callback",
+      "vector": "oversized_input",
+      "status": "covered",
+      "evidenceCommands": ["mise exec -- just test-c-abi-host-registration-asan"]
+    },
+    {
+      "caseId": "handle.stale_handle",
+      "surface": "handle",
+      "vector": "stale_handle",
+      "status": "covered",
+      "evidenceCommands": ["mise exec -- just test-c-abi-lifecycle"]
+    },
+    {
+      "caseId": "handle.wrong_handle_kind",
+      "surface": "handle",
+      "vector": "wrong_handle_kind",
+      "status": "covered",
+      "evidenceCommands": ["mise exec -- just test-c-abi-lifecycle"]
+    },
+    {
+      "caseId": "handle.double_destroy",
+      "surface": "handle",
+      "vector": "double_destroy",
+      "status": "covered",
+      "evidenceCommands": ["mise exec -- just test-c-abi-asan"]
+    },
+    {
+      "caseId": "handle.use_after_destroy",
+      "surface": "handle",
+      "vector": "use_after_destroy",
+      "status": "covered",
+      "evidenceCommands": ["mise exec -- just test-c-abi-host-registration-asan"]
+    },
+    {
+      "caseId": "eval_options.invalid_utf8",
+      "surface": "eval_options",
+      "vector": "invalid_utf8",
+      "status": "blocked",
+      "blockedBy": "M3 eval/options ABI"
+    },
+    {
+      "caseId": "source.oversized_input",
+      "surface": "source",
+      "vector": "oversized_input",
+      "status": "blocked",
+      "blockedBy": "M3 eval/source ABI"
+    },
+    {
+      "caseId": "value.deep_nesting",
+      "surface": "value",
+      "vector": "deep_nesting",
+      "status": "blocked",
+      "blockedBy": "M3 value conversion ABI"
+    },
+    {
+      "caseId": "error.nul_bytes",
+      "surface": "error",
+      "vector": "nul_bytes",
+      "status": "blocked",
+      "blockedBy": "M3 eval error ABI"
+    },
+    {
+      "caseId": "callback.concurrent_calls",
+      "surface": "callback",
+      "vector": "concurrent_calls",
+      "status": "blocked",
+      "blockedBy": "ADR-003 async job and callback executor implementation"
+    }
+  ]
+}

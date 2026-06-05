@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "suite": "ecritum-security-abuse",
+  "matrix": {
+    "capabilities": [
+      "filesystem",
+      "network",
+      "process",
+      "environment",
+      "reflection",
+      "class_loading",
+      "native_loading",
+      "unrestricted_java_lookup",
+      "raw_polyglot_access",
+      "raw_host_object_access",
+      "raw_c_handle_access",
+      "classpath_mutation"
+    ],
+    "phases": [
+      "normal_eval",
+      "timeout",
+      "cancellation",
+      "callback_error",
+      "cleanup"
+    ]
+  },
+  "targetedCases": [
+    {
+      "caseId": "filesystem.allowed_root.inside",
+      "title": "Allowed filesystem root permits access inside the root",
+      "capability": "filesystem",
+      "phase": "normal_eval",
+      "required": true,
+      "expected": {"status": "ECRITUM_OK"}
+    },
+    {
+      "caseId": "filesystem.allowed_root.outside_denied",
+      "title": "Allowed filesystem root denies access outside the root",
+      "capability": "filesystem",
+      "phase": "normal_eval",
+      "required": true,
+      "expected": {"status": "ECRITUM_ERROR_PERMISSION_DENIED"}
+    },
+    {
+      "caseId": "network.redirect_to_denied_host",
+      "title": "Network redirect to an unallowed host is denied",
+      "capability": "network",
+      "phase": "normal_eval",
+      "required": true,
+      "expected": {"status": "ECRITUM_ERROR_PERMISSION_DENIED"}
+    },
+    {
+      "caseId": "host.callback_scope.use_after_return",
+      "title": "Callback-scope handles are invalid after callback return",
+      "capability": "raw_c_handle_access",
+      "phase": "callback_error",
+      "required": true,
+      "expected": {"status": "ECRITUM_ERROR_INVALID_HANDLE"}
+    }
+  ]
+}

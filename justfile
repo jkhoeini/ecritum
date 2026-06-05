@@ -88,6 +88,30 @@ conformance:
 
 test-conformance: conformance
 
+security:
+    mkdir -p build/security
+    python3 -m py_compile scripts/check-security-static.py scripts/run-security-abuse.py scripts/check-parser-abuse.py Tests/Security/fixtures/abuse_provider.py
+    python3 -m unittest Tests/Security/test_security_baseline.py
+    just test-security-static
+    just test-security-abuse
+    just test-security-fuzz
+
+test-security-static:
+    mkdir -p build/security
+    python3 scripts/check-security-static.py > build/security/static.json
+
+test-security-abuse:
+    mkdir -p build/security
+    python3 scripts/run-security-abuse.py --manifest Tests/Security/abuse-manifest.json --provider python3 Tests/Security/fixtures/abuse_provider.py --mode baseline > build/security/abuse.json
+    if python3 scripts/run-security-abuse.py --manifest Tests/Security/abuse-manifest.json --strict --provider python3 Tests/Security/fixtures/abuse_provider.py --mode baseline > build/security/abuse-strict.json; then echo "strict security abuse unexpectedly passed" >&2; exit 1; else status=$?; test $status -eq 1; fi
+
+# Parser-abuse-equivalent gate until eval/value/error/callback fuzz surfaces exist.
+test-security-fuzz:
+    mkdir -p build/security
+    python3 scripts/check-parser-abuse.py --manifest Tests/Security/parser-abuse-manifest.json > build/security/parser-abuse.json
+    python3 scripts/check-parser-abuse.py --manifest Tests/Security/parser-abuse-manifest.json --verify-evidence > build/security/parser-abuse-evidence.json
+    if python3 scripts/check-parser-abuse.py --manifest Tests/Security/parser-abuse-manifest.json --strict > build/security/parser-abuse-strict.json; then echo "strict parser abuse unexpectedly passed" >&2; exit 1; else status=$?; test $status -eq 1; fi
+
 test-c-abi-lifecycle:
     mkdir -p build/c-abi
     clang -DECRITUM_TESTING -I Sources/CEcritum/include -I build/native/macos-arm64/include/private scripts/ecritum_runtime_wrapper.c Tests/C/lifecycle_contract.c -o build/c-abi/lifecycle_contract
@@ -128,7 +152,7 @@ test-lifecycle-leak-smoke:
         binary="dist/local/EcritumRuntime.xcframework/$slice/EcritumRuntime.framework/EcritumRuntime"; \
         leaks --atExit -- build/c-abi/framework_lifecycle_smoke "$binary"
 
-test: plan-check conformance test-swift-auto test-java test-c-abi-lifecycle test-c-abi-asan test-c-abi-host-registration test-c-abi-host-registration-asan test-c-abi-policy-config test-c-abi-policy-config-asan test-examples-auto
+test: plan-check conformance security test-swift-auto test-java test-c-abi-lifecycle test-c-abi-asan test-c-abi-host-registration test-c-abi-host-registration-asan test-c-abi-policy-config test-c-abi-policy-config-asan test-examples-auto
 
 example-swift:
     @test -d dist/local/EcritumRuntime.xcframework || { echo "missing dist/local/EcritumRuntime.xcframework; run mise exec -- just xcframework first" >&2; exit 1; }

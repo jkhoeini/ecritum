@@ -54,6 +54,27 @@ First-eval remains explicit `not_applicable` until an eval ABI exists.
 The strict license step exits nonzero while shipped licenses remain unknown.
 That is intentional: unknown shipped licenses block release publication.
 
+The M2.5 security baseline adds these CI gates:
+
+- `just test-security-static`
+- `just test-security-abuse`
+- `just test-security-fuzz`
+
+`test-security-static` blocks forbidden Polyglot, Java interop, native access,
+and Native Image metadata patterns outside named negative fixtures.
+`test-security-abuse` records the abuse matrix for ambient filesystem, network,
+process, environment, reflection, class loading, native loading, unrestricted
+Java lookup, raw host access, raw C handle access, and classpath mutation.
+`test-security-fuzz` is the current parser-abuse equivalent: it maps available C
+config, lifecycle, and host-registration coverage and records blocked eval,
+source, value, error, and callback parser surfaces until those public APIs exist.
+
+Release publication also requires a hardened runtime plan, signed/notarized
+artifacts, revocation mechanics, dependency digest locks, SBOM publication,
+CVE monitoring, and a vulnerability response process. These requirements are
+recorded here as release gates; implementation and final publication policy are
+owned by ADR-015 and M7 release tasks.
+
 ## ABI Gate
 
 `docs/abi/ecritum-c-abi.json` is the checked M1 ABI manifest. `just check-abi`
