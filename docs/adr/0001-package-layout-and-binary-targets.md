@@ -70,11 +70,21 @@ Consumers depend only on the `Ecritum` product.
 headers and isolate details are implementation details and must not become the
 public integration surface.
 
+Native Image `@CEntryPoint` exports may use private `ecritum_graal_*` symbol
+names and Graal isolate parameters. Those symbols are build/package inputs, not
+consumer ABI. The packaged runtime must expose the stable public `ecritum_*`
+symbols from `ecritum.h`; the wrapper layer owns isolate creation, thread
+attachment, teardown, and conversion to Ecritum status codes.
+
 The Maven project lives under `native/pom.xml`. `just build-java`,
 `just test-java`, and `just native` must call Maven with `-f native/pom.xml`.
 M1 native build outputs are copied into `build/native/macos-arm64/` as the
 stable script boundary. Maven's `native/target/` remains an implementation
 detail. Multi-platform naming is deferred until M7.
+
+Private GraalVM generated headers needed by wrapper implementation are copied
+under `build/native/macos-arm64/include/private/`. They must not be copied into
+the public framework `Headers/` directory.
 
 `just xcframework` reads `build/native/**/libecritum.dylib`, wraps it as a
 framework, and uses `xcodebuild -create-xcframework` to write
@@ -128,6 +138,10 @@ by artifact availability:
 - Otherwise, release manifests use
   `.binaryTarget(name: "EcritumRuntime", url: ".../EcritumRuntime.xcframework.zip", checksum: "...")`.
 
+`ECRITUM_RUNTIME_URL` and `ECRITUM_RUNTIME_CHECKSUM` are release-automation
+inputs, not arbitrary developer configuration. CI and release jobs must source
+them from trusted release metadata.
+
 M1 should implement local-artifact detection in the manifest with
 `FileManager.default.fileExists(atPath:)`, then prove the toolchain accepts that
 manifest behavior. If it does not, use the generated release-manifest fallback
@@ -141,14 +155,23 @@ preparing a public tag.
 Before the first public release, the remote URL and checksum are placeholders and
 plain `swift test` is not the canonical command. Contributors use
 `mise exec -- just test`. Until the local XCFramework exists, `just test` runs
-`plan-check` and any other scaffold-independent checks, then prints the missing
-`just xcframework` prerequisite instead of invoking a failing SwiftPM build.
-After `mise exec -- just xcframework`, `mise exec -- just test-swift` and plain
-`swift test` must build and run the Swift tests.
+`plan-check` and scaffold-level Swift/Maven tests that do not require the binary
+artifact; runtime-wrapper tests must skip with a clear `just xcframework`
+prerequisite. After `mise exec -- just xcframework`, `mise exec -- just
+test-swift` and plain `swift test` must build and run the runtime-wrapper tests.
+The pre-artifact Swift scaffold suite is available as `mise exec -- just
+test-swift-scaffold`.
 
-Any checked-in or generated stub artifact must be valid for macOS arm64, export
-`ecritum_version`, and be recorded in DEBT.md with an exit condition. Invalid
-empty placeholder framework directories are not allowed.
+Because `Package.swift` switches binary-target behavior from filesystem and
+environment state, automation that changes artifact availability must run
+`swift package reset` before `swift test` until release validation proves a
+lighter invalidation path.
+
+Any checked-in or generated stub artifact that fills the public runtime artifact
+role must be valid for macOS arm64, export `ecritum_version`, and be recorded in
+DEBT.md with an exit condition. Raw Native Image build outputs may expose private
+`ecritum_graal_*` symbols before packaging, but they are not consumer artifacts.
+Invalid empty placeholder framework directories are not allowed.
 
 Release packaging must verify the URL/checksum manifest path before tagging a
 release. If SwiftPM manifest-time local-artifact detection is not accepted by the
@@ -186,9 +209,12 @@ M7 work unless M1 implementation proves them cheaply.
   stdout.
 - `just inspect`: calls `scripts/inspect-artifact.sh`.
 - `just check-abi`: calls `scripts/check-abi.sh`.
+- `just test-swift-scaffold`: runs Swift scaffold tests before the local runtime
+  artifact exists.
 - `just test-swift`: requires `dist/local/EcritumRuntime.xcframework`.
-- `just test`: runs the currently available checks and includes Swift tests once
-  the package and local artifact exist.
+- `just test`: runs plan checks, Swift scaffold tests, and Java tests before the
+  local artifact exists; after the artifact exists, the same Swift test target
+  must also exercise the runtime-wrapper path.
 
 Scripts must be noninteractive, expose `--help`, send diagnostics to stderr, exit
 nonzero on failure, accept input/output paths as arguments, and work outside the
@@ -271,6 +297,9 @@ test and must not depend on SwiftPM.
 - GraalVM `@CEntryPoint` constraints are kept behind the stable Ecritum ABI:
   static entry points, simple C-compatible parameters, explicit isolate handling,
   and no uncaught exceptions crossing the C boundary.
+- M1-004 must bridge from public `ecritum_version(char *, size_t)` to the private
+  Native Image entry point and must keep generated Graal headers out of the
+  public framework headers.
 - The resource-bundle question for GraalPy and TruffleRuby is deferred to later
   runtime inclusion ADRs.
 
@@ -281,9 +310,12 @@ M1 must verify:
 - `mise exec -- just test` before source scaffolding continues to run plan checks.
 - `mise exec -- just build-java` uses `native/pom.xml`.
 - `mise exec -- just native` produces
-  `build/native/macos-arm64/libecritum.dylib`.
+  `build/native/macos-arm64/libecritum.dylib` with private
+  `ecritum_graal_version` and Graal isolate lifecycle symbols.
 - `mise exec -- just xcframework` produces
   `dist/local/EcritumRuntime.xcframework`.
+- `mise exec -- just test-swift-scaffold` runs before the local XCFramework
+  exists.
 - `mise exec -- just test-swift` runs after the local XCFramework exists.
 - `swift test` runs after the local XCFramework exists.
 - Tests fail with clear diagnostics for missing, stale, wrong-architecture, or
@@ -295,8 +327,8 @@ M1 must verify:
 - `mise exec -- just inspect` reports symbols, linked dylibs, bundled resources,
   size, checksum, and runtime list.
 - `mise exec -- just check-abi` verifies the checked-in public symbol manifest.
-- `swift test` calls `Ecritum.version` through `CEcritum` after
-  `just xcframework`.
+- `swift test` calls `Ecritum.version` through public `CEcritum` after
+  `just xcframework`, and the packaged artifact exports `ecritum_version`.
 - `Examples/CHost` includes `ecritum.h`, links the XCFramework dylib directly,
   calls `ecritum_version`, and asserts non-empty output.
 - A clean-machine smoke test can run `dlopen + ecritum_version` without GraalVM,

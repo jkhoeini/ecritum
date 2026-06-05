@@ -328,7 +328,9 @@ Definition of done:
 
 - Package.swift, Sources/Ecritum, Sources/CEcritum, native/pom.xml, scripts, and
   Tests are scaffolded.
-- Native Image exports an =ecritum_version= C symbol.
+- Native Image produces private GraalVM C entry points, and the packaged runtime
+  exposes the stable public =ecritum_version= ABI through the CEcritum/native
+  wrapper boundary.
 - XCFramework is assembled for macOS arm64.
 - Swift test calls =Ecritum.version= through the C module.
 - C host smoke test calls the same symbol directly.
@@ -419,43 +421,186 @@ Not verified:
 - Package.swift, native build, XCFramework assembly, Swift tests, C smoke, and
   clean-machine checks are owned by later M1 tasks.
 
-*** TODO M1-002 Scaffold SwiftPM and C module
+*** DONE M1-002 Scaffold SwiftPM and C module
 
 Lead persona: Swift DX.
+Assigned to: Swift API and Developer Experience Engineer.
 Reviewer personas: Architecture, Clean Code, Tests.
 Depends on: M1-001.
 Write scope: Package.swift, Sources/, Tests/.
+
+Research:
+
+- Read ADR-001 package layout and binary target strategy.
+- Read README.md and PLAN.org Swift API sketches.
+- Read AGENTS.md, TEAM.md, PROJECT.org, and DEBT.md.
+- Consult Claude directly with `claude -p` and no auth-check step.
+
+Plan:
+
+- Add Package.swift with Ecritum, CEcritum, and local/release EcritumRuntime
+  binary target strategy from ADR-001.
+- Add CEcritum public header declaring `ecritum_version` and shim source owned
+  by the public ABI layer.
+- Add minimal Swift wrapper exposing `Ecritum.version`.
+- Add tests that can run once the local XCFramework exists and produce clear
+  diagnostics before it exists.
 
 Definition of done:
 
 - Swift package builds.
 - Public Swift API is minimal and documented.
 - C header is included through CEcritum.
-- Unit test proves the wrapper path.
+- Pre-artifact unit test proves clear missing-runtime behavior.
+- Runtime wrapper-path test exists and is gated until M1-004 supplies the local
+  XCFramework.
 
-*** TODO M1-003 Scaffold native Maven project and version export
+Review:
+
+- Architecture persona review: no blocking ABI-boundary issue; public
+  =ecritum_*= stays in CEcritum and private Graal entry points stay under
+  =ecritum_graal_*=.
+- Tests persona review: M1-002 can be accepted as scaffold work, but the full M1
+  milestone cannot be done until M1-004 proves the runtime-wrapper path with a
+  local XCFramework.
+- Unix/Release persona review: required a split between pre-artifact Swift
+  scaffold tests and artifact-backed runtime tests; added
+  =test-swift-scaffold= and kept =test-swift= for XCFramework-backed tests.
+- Claude first diff review found blocking gaps: no =ecritum_version= fallback
+  implementation, implicit Native Image buffer truncation, missing negative
+  tests, manifest-cache risk, trusted release-env documentation, and untracked
+  debt. These were fixed or ledgered.
+- Claude second diff review found one claimed JDK-25 blocker, but
+  =mise exec -- just doctor= verified the repo-pinned toolchain is Java 25.0.2;
+  non-blocking findings around private header copying, =NULL= style, aggressive
+  SwiftPM reset, and M1-004 install-name work were fixed or assigned.
+- Final Claude REVIEW-readiness diff review reported no blockers and said
+  M1-002 and M1-003 are ready to accept.
+
+## Verification
+
+Layers tested: Unit, Contract
+Commands run:
+- =mise exec -- just doctor= -> exit 0; Java 25.0.2, Maven 3.9.16, Swift
+  6.3.2, Native Image 25.0.2.
+- =mise exec -- just test-swift-scaffold= -> exit 0; 4 Swift tests executed, 1
+  expected skip for the missing local XCFramework, 0 failures.
+- =mise exec -- just test= -> exit 0; 4 Swift tests executed with 1 expected
+  skip, and 3 Java tests executed with 0 failures.
+New tests added:
+- =Tests/EcritumTests/EcritumTests.swift= covers missing runtime, CEcritum weak
+  fallback linking, and invalid fallback arguments.
+Negative paths tested:
+- Missing runtime artifact throws =EcritumError.runtimeArtifactMissing=.
+- CEcritum fallback returns =ECRITUM_ERROR_INVALID_ARGUMENT= for nil/zero
+  arguments and =ECRITUM_ERROR_RUNTIME_UNAVAILABLE= before the artifact exists.
+Size impact:
+- N/A for Swift/C source scaffold.
+Sanitizers:
+- not run: no sanitizer task exists yet.
+Not verified:
+- XCFramework-backed Swift runtime path, public packaged =ecritum_version=, and
+  C host smoke are owned by M1-004/M1-006.
+
+*** DONE M1-003 Scaffold native Maven project and version export
 
 Lead persona: GraalVM Runtime.
+Assigned to: GraalVM and Polyglot Runtime Engineer.
 Reviewer personas: Architecture, Tests, Unix.
 Depends on: M1-001.
 Write scope: native/.
 
+Research:
+
+- Read ADR-001 package layout and binary target strategy.
+- Read PLAN.org C ABI and implementation sequence.
+- Read justfile current native tasks.
+- Read AGENTS.md, TEAM.md, PROJECT.org, and DEBT.md.
+- Consult Claude directly with `claude -p` and no auth-check step.
+
+Plan:
+
+- Add native/pom.xml using the pinned GraalVM/Maven toolchain assumptions.
+- Add minimal Java source exporting a private `ecritum_graal_version` Native
+  Image C-entry-point compatible function. GraalVM requires an isolate argument
+  on exported Java entry points; CEcritum must remain the public ABI boundary.
+- Add native Java tests for the version value where practical before Native
+  Image exists.
+- Keep generated Graal headers private; CEcritum owns the public header.
+
 Definition of done:
 
 - Maven build creates the Java artifact.
-- Native Image can produce a shared library exporting =ecritum_version=.
-- Native build failure modes are documented.
+- Native Image can produce a shared library exporting private
+  =ecritum_graal_version= plus the Graal isolate lifecycle symbols.
+- Native build failure modes and the M1-004 public-wrapper follow-up are
+  documented.
+
+Review:
+
+- Architecture persona review: no blocking Native Image boundary issue; generated
+  Graal headers remain private build inputs and are not public ABI.
+- Tests persona review: required repeatable symbol evidence; added
+  =just check-native=.
+- Unix/Release persona review: required generated private headers to be copied to
+  the stable build boundary; =just native= now copies them under
+  =build/native/macos-arm64/include/private/=.
+- Claude reviews: see M1-002 review notes; Native Image buffer-size handling and
+  Java negative tests were added after first review.
+- Final Claude REVIEW-readiness diff review reported no blockers and said
+  M1-002 and M1-003 are ready to accept.
+
+## Verification
+
+Layers tested: Unit, Contract, Integration
+Commands run:
+- =mise exec -- just test= -> exit 0; 3 Java tests executed with 0 failures as
+  part of the rollup.
+- =mise exec -- just native= -> exit 0; Native Image generated
+  =native/target/libecritum.dylib= and =just native= copied the dylib plus
+  private generated headers into =build/native/macos-arm64/=.
+- =mise exec -- just check-native= -> exit 0; checked stable dylib and private
+  header existence plus =_ecritum_graal_version=, =_graal_create_isolate=, and
+  =_graal_tear_down_isolate= symbols.
+- =nm -gU build/native/macos-arm64/libecritum.dylib | rg
+  "ecritum|graal_create|graal_tear"= -> found =_ecritum_graal_version=,
+  =_graal_create_isolate=, and =_graal_tear_down_isolate=.
+- =otool -D build/native/macos-arm64/libecritum.dylib= -> raw Native Image
+  install name is absolute; M1-004 owns =@rpath= framework rewrite and
+  verification.
+New tests added:
+- =native/src/test/java/ecritum/NativeEntrypointsTest.java= covers version value,
+  invalid buffer sizes, and buffer-too-small status before Native Image
+  integration.
+Negative paths tested:
+- Java version buffer status returns =INVALID_ARGUMENT= for non-positive sizes
+  and =BUFFER_TOO_SMALL= when the terminator would not fit.
+Size impact:
+- Native Image output reported 12.93 MB total image size; copied dylib measured
+  14 MB by =du -h=.
+Sanitizers:
+- not run: no sanitizer task exists yet.
+Not verified:
+- Public packaged =ecritum_version= bridge, =@rpath= install name, XCFramework
+  assembly, C host smoke, and clean-machine =dlopen= are owned by M1-004/M1-006.
 
 *** TODO M1-004 Build XCFramework assembly path
 
 Lead persona: Release.
 Reviewer personas: Unix, Tests, Swift DX.
 Depends on: M1-002, M1-003.
-Write scope: scripts/, justfile, dist/.
+Write scope: scripts/, justfile, dist/, Sources/CEcritum/shim.c.
 
 Definition of done:
 
 - `just xcframework` assembles the local artifact.
+- The assembled artifact exposes public =ecritum_version= without exposing Graal
+  generated headers as the public ABI.
+- Verification proves Swift and C callers bind to the packaged runtime
+  implementation of =ecritum_version=, not the weak pre-artifact fallback in
+  =Sources/CEcritum/shim.c=.
+- Packaging rewrites the raw Native Image install name to an =@rpath=-compatible
+  framework install name and verifies it with =otool=.
 - Script output is stable and automation-friendly.
 - SwiftPM test consumes the assembled artifact.
 - Artifact inspection reports symbols, linked dylibs, bundled resources, size,
