@@ -2,7 +2,9 @@ package ecritum;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 final class NativeEntrypointsTest {
@@ -24,6 +26,16 @@ final class NativeEntrypointsTest {
 
         assertEquals(EcritumStatus.BUFFER_TOO_SMALL, NativeEntrypoints.versionBufferStatus(exactSize - 1));
         assertEquals(EcritumStatus.OK, NativeEntrypoints.versionBufferStatus(exactSize));
+    }
+
+    @Test
+    void parsesHostProjectionManifest() {
+        assertEquals(
+            List.of(new HostProjection("app", "answer"), new HostProjection("app.tools", "format")),
+            NativeEntrypoints.parseHostManifest("app/answer\napp.tools/format\n")
+        );
+        assertEquals(List.of(), NativeEntrypoints.parseHostManifest(""));
+        assertThrows(IllegalArgumentException.class, () -> NativeEntrypoints.parseHostManifest("missing-separator\n"));
     }
 
     @Test

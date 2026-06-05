@@ -19,6 +19,47 @@ not done if it introduced debt without an entry.
 
 ## Active Debt
 
+- ID: ECRITUM-DEBT-0007
+- Source task: M3-002
+- Introduced by: Clojure eval and host-call roll-up
+- Owner persona: Architecture Expert Engineer
+- Date: 2026-06-05
+- Impact: Script failures expose safe structured status/category/operation/
+  language/source-name/message diagnostics, but do not yet expose structured
+  script stack-frame accessors through the public C ABI. Swift has a stack-frame
+  model, but backend script stack frames remain empty.
+- Reason accepted: Raw JVM/Graal/SCI stack traces are unsafe to expose by
+  default, and a stable language-neutral public stack-frame ABI needs an ABI
+  freeze decision rather than an M3-002 implementation shortcut.
+- Resolve-by phase: M4.5
+- Exit condition: A public diagnostic stack-frame ABI is accepted and script
+  errors can expose redacted language-level frames when available, or the
+  roadmap explicitly drops stack-frame diagnostics from the support claim.
+- Removal task: M4.5 ABI freeze diagnostic stack-frame review
+- Verification required: `mise exec -- just check-abi`,
+  artifact-backed C/Swift script-error tests, and conformance evidence for
+  source-name plus stack-frame behavior when supported.
+
+- ID: ECRITUM-DEBT-0006
+- Source task: M3-002B
+- Introduced by: Embedded SCI eval backend
+- Owner persona: Release, Licensing, and Distribution Engineer
+- Date: 2026-06-05
+- Impact: SCI support increases `dist/local/EcritumRuntime.xcframework` to
+  29,951,339 bytes and the private Native Image runtime to 29,828,696 bytes,
+  exceeding ADR-018's initial M1 Core tripwires of 25,000,000 and 20,000,000
+  bytes.
+- Reason accepted: M3-002B is a backend integration slice and does not claim
+  release-ready Clojure support. The concrete SCI size data is needed before the
+  Core budget can be reaffirmed, revised, or split into Core/Full artifacts.
+- Resolve-by phase: M4.5
+- Exit condition: ADR-018 is revised or reaffirmed with SCI measurements, or
+  the SCI artifact is optimized/split until `mise exec -- just size` passes.
+- Removal task: M4.5 ABI freeze and packaged app smoke budget review
+- Verification required: `mise exec -- just size`,
+  `mise exec -- just bench-first-eval`, and documented Core/Full artifact
+  decision.
+
 - ID: ECRITUM-DEBT-0004
 - Source task: M1-007
 - Introduced by: Initial performance and artifact budget policy

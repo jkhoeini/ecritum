@@ -92,6 +92,9 @@ public enum EcritumErrorCategory: String, Sendable {
     case timeout
     case cancelled
     case script
+    case syntax
+    case runtime
+    case permission
     case callback
     case runtimeUnavailable = "runtime_unavailable"
     case teardownFailed = "teardown_failed"
@@ -206,7 +209,9 @@ public struct EcritumErrorDetails: Equatable, Sendable {
     func normalized(for status: EcritumStatus) -> EcritumErrorDetails {
         var details = self
         details.status = status
-        details.category = EcritumErrorCategory(status: status)
+        if details.category == .unknown {
+            details.category = EcritumErrorCategory(status: status)
+        }
         return details
     }
 }
@@ -355,48 +360,28 @@ public enum EcritumError: Error, Equatable, Sendable {
         switch self {
         case .runtimeArtifactMissing:
             return .runtimeArtifactMissing
-        case .invalidArgument:
-            return .invalidArgument
-        case .invalidHandle:
-            return .invalidHandle
-        case .bufferTooSmall:
-            return .bufferTooSmall
-        case .outOfMemory:
-            return .outOfMemory
-        case .invalidUTF8:
-            return .invalidUTF8
-        case .inputTooLarge:
-            return .inputTooLarge
-        case .invalidConfig:
-            return .invalidConfig
-        case .unsupportedConfigVersion:
-            return .unsupportedConfigVersion
-        case .contextsAlive:
-            return .contextsAlive
-        case .closed:
-            return .closed
-        case .busy:
-            return .busy
-        case .reentrantCall:
-            return .reentrantCall
-        case .permissionDenied:
-            return .permissionDenied
-        case .timeout:
-            return .timeout
-        case .cancelled:
-            return .cancelled
-        case .script:
-            return .script
-        case .callback:
-            return .callback
-        case .runtimeUnavailable:
-            return .runtimeUnavailable
-        case .teardownFailed:
-            return .teardownFailed
-        case .internalFailure:
-            return .internalFailure
-        case .alreadyExists:
-            return .alreadyExists
+        case let .invalidArgument(details),
+             let .invalidHandle(details),
+             let .bufferTooSmall(details),
+             let .outOfMemory(details),
+             let .invalidUTF8(details),
+             let .inputTooLarge(details),
+             let .invalidConfig(details),
+             let .unsupportedConfigVersion(details),
+             let .contextsAlive(details),
+             let .closed(details),
+             let .busy(details),
+             let .reentrantCall(details),
+             let .permissionDenied(details),
+             let .timeout(details),
+             let .cancelled(details),
+             let .script(details),
+             let .callback(details),
+             let .runtimeUnavailable(details),
+             let .teardownFailed(details),
+             let .internalFailure(details),
+             let .alreadyExists(details):
+            return details.category
         case let .unknownStatus(_, details):
             return details?.category ?? .unknown
         }

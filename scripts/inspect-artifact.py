@@ -90,7 +90,7 @@ payload = {
     "public_symbols": [line.strip() for line in run(["nm", "-gU", str(binary)])],
     "install_name": run(["otool", "-D", str(binary)])[1:],
     "linked_dylibs": run(["otool", "-L", str(binary)])[1:],
-    "embedded_runtime_list": ["GraalVM Native Image", "Ecritum C wrapper"],
+    "embedded_runtime_list": ["GraalVM Native Image", "SCI Clojure", "Ecritum C wrapper"],
 }
 
 print(json.dumps(payload, indent=2, sort_keys=True))

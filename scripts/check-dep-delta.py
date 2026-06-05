@@ -6,8 +6,16 @@ import subprocess
 
 BASELINE = {
     "shipped": [
+        "borkdude:edamame",
+        "borkdude:graal.locking",
         "EcritumRuntime.xcframework",
         "GraalVM Native Image embedded runtime code",
+        "org.babashka:sci",
+        "org.babashka:sci.impl.types",
+        "org.clojure:clojure",
+        "org.clojure:core.specs.alpha",
+        "org.clojure:spec.alpha",
+        "org.clojure:tools.reader",
     ],
     "build": [
         "org.graalvm.sdk:nativeimage",

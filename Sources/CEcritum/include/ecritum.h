@@ -39,7 +39,26 @@ typedef uint64_t ecritum_namespace_t;
 typedef uint64_t ecritum_function_t;
 typedef uint64_t ecritum_value_t;
 typedef uint64_t ecritum_call_t;
+typedef uint64_t ecritum_job_t;
 typedef uint64_t ecritum_error_t;
+
+#define ECRITUM_VALUE_KIND_NULL 0
+#define ECRITUM_VALUE_KIND_BOOL 1
+#define ECRITUM_VALUE_KIND_INT 2
+#define ECRITUM_VALUE_KIND_DOUBLE 3
+#define ECRITUM_VALUE_KIND_STRING 4
+#define ECRITUM_VALUE_KIND_DATA 5
+#define ECRITUM_VALUE_KIND_ARRAY 6
+#define ECRITUM_VALUE_KIND_OBJECT 7
+
+#define ECRITUM_JOB_PENDING 0
+#define ECRITUM_JOB_RUNNING 1
+#define ECRITUM_JOB_SUCCEEDED 2
+#define ECRITUM_JOB_FAILED 3
+#define ECRITUM_JOB_CANCEL_REQUESTED 4
+#define ECRITUM_JOB_CANCELLED 5
+#define ECRITUM_JOB_TIMED_OUT 6
+#define ECRITUM_JOB_POISONED 7
 
 typedef struct {
     const uint8_t *data;
@@ -50,6 +69,11 @@ typedef struct {
     const char *data;
     size_t len;
 } ecritum_string_view_t;
+
+typedef struct {
+    ecritum_string_view_t key;
+    ecritum_value_t value;
+} ecritum_object_entry_t;
 
 typedef int (*ecritum_host_fn_t)(
     ecritum_call_t call,
@@ -149,6 +173,66 @@ int ecritum_namespace_register_function(
  */
 int ecritum_function_destroy(ecritum_function_t *function, ecritum_error_t *out_error);
 
+/** Creates an owned immutable null value. */
+int ecritum_value_make_null(ecritum_value_t *out_value, ecritum_error_t *out_error);
+
+/** Creates an owned immutable boolean value. */
+int ecritum_value_make_bool(int value, ecritum_value_t *out_value, ecritum_error_t *out_error);
+
+/** Creates an owned immutable signed 64-bit integer value. */
+int ecritum_value_make_int(int64_t value, ecritum_value_t *out_value, ecritum_error_t *out_error);
+
+/** Creates an owned immutable double value. */
+int ecritum_value_make_double(double value, ecritum_value_t *out_value, ecritum_error_t *out_error);
+
+/** Creates an owned immutable UTF-8 string value by copying the input view. */
+int ecritum_value_make_string(ecritum_string_view_t value, ecritum_value_t *out_value, ecritum_error_t *out_error);
+
+/** Creates an owned immutable byte data value by copying the input view. */
+int ecritum_value_make_data(ecritum_bytes_t value, ecritum_value_t *out_value, ecritum_error_t *out_error);
+
+/** Creates an owned immutable array by deep-copying the input values. */
+int ecritum_value_make_array(const ecritum_value_t *items, size_t count, ecritum_value_t *out_value, ecritum_error_t *out_error);
+
+/** Creates an owned immutable object by deep-copying string keys and values. */
+int ecritum_value_make_object(const ecritum_object_entry_t *entries, size_t count, ecritum_value_t *out_value, ecritum_error_t *out_error);
+
+/** Destroys an owned value object and zeros the caller's handle. */
+int ecritum_value_destroy(ecritum_value_t *value);
+
+/** Copies the stable value kind constant from an owned value. */
+int ecritum_value_kind(ecritum_value_t value, int *out_kind);
+
+int ecritum_value_get_bool(ecritum_value_t value, int *out_value);
+int ecritum_value_get_int(ecritum_value_t value, int64_t *out_value);
+int ecritum_value_get_double(ecritum_value_t value, double *out_value);
+int ecritum_value_get_string(ecritum_value_t value, ecritum_string_view_t *out_value);
+int ecritum_value_get_data(ecritum_value_t value, ecritum_bytes_t *out_value);
+int ecritum_value_count(ecritum_value_t value, size_t *out_count);
+int ecritum_value_array_get(ecritum_value_t value, size_t index, ecritum_value_t *out_item, ecritum_error_t *out_error);
+
+/** Borrows the key view for the parent value lifetime and returns an owned value copy. */
+int ecritum_value_object_entry(ecritum_value_t value, size_t index, ecritum_string_view_t *out_key, ecritum_value_t *out_value, ecritum_error_t *out_error);
+
+int ecritum_call_argument_count(ecritum_call_t call, size_t *out_count, ecritum_error_t *out_error);
+int ecritum_call_argument(ecritum_call_t call, size_t index, ecritum_value_t *out_argument, ecritum_error_t *out_error);
+
+int ecritum_eval_start(
+    ecritum_context_t context,
+    ecritum_string_view_t language,
+    ecritum_bytes_t source,
+    ecritum_string_view_t source_name,
+    ecritum_bytes_t options_json,
+    ecritum_job_t *out_job,
+    ecritum_error_t *out_error
+);
+
+int ecritum_job_poll(ecritum_job_t job, int *out_state, ecritum_error_t *out_error);
+int ecritum_job_wait(ecritum_job_t job, uint64_t wait_timeout_nanos, int *out_state, ecritum_error_t *out_error);
+int ecritum_job_cancel(ecritum_job_t job, ecritum_error_t *out_error);
+int ecritum_job_result(ecritum_job_t job, ecritum_value_t *out_result, ecritum_error_t *out_error);
+int ecritum_job_destroy(ecritum_job_t *job, ecritum_error_t *out_error);
+
 /** Destroys an owned error object and zeros the caller's handle. */
 int ecritum_error_destroy(ecritum_error_t *error);
 
@@ -163,6 +247,12 @@ int ecritum_error_message(ecritum_error_t error, ecritum_string_view_t *out_mess
 
 /** Borrows the operation name from an error object. */
 int ecritum_error_operation(ecritum_error_t error, ecritum_string_view_t *out_operation);
+
+/** Borrows the guest language associated with an error object, when available. */
+int ecritum_error_language(ecritum_error_t error, ecritum_string_view_t *out_language);
+
+/** Borrows the guest source name associated with an error object, when available. */
+int ecritum_error_source_name(ecritum_error_t error, ecritum_string_view_t *out_source_name);
 
 #ifdef __cplusplus
 }

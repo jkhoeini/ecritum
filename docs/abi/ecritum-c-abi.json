@@ -162,6 +162,136 @@
       "declaration": "int ecritum_function_destroy(ecritum_function_t *function, ecritum_error_t *out_error);"
     },
     {
+      "name": "ecritum_value_make_null",
+      "machoSymbol": "_ecritum_value_make_null",
+      "declaration": "int ecritum_value_make_null(ecritum_value_t *out_value, ecritum_error_t *out_error);"
+    },
+    {
+      "name": "ecritum_value_make_bool",
+      "machoSymbol": "_ecritum_value_make_bool",
+      "declaration": "int ecritum_value_make_bool(int value, ecritum_value_t *out_value, ecritum_error_t *out_error);"
+    },
+    {
+      "name": "ecritum_value_make_int",
+      "machoSymbol": "_ecritum_value_make_int",
+      "declaration": "int ecritum_value_make_int(int64_t value, ecritum_value_t *out_value, ecritum_error_t *out_error);"
+    },
+    {
+      "name": "ecritum_value_make_double",
+      "machoSymbol": "_ecritum_value_make_double",
+      "declaration": "int ecritum_value_make_double(double value, ecritum_value_t *out_value, ecritum_error_t *out_error);"
+    },
+    {
+      "name": "ecritum_value_make_string",
+      "machoSymbol": "_ecritum_value_make_string",
+      "declaration": "int ecritum_value_make_string(ecritum_string_view_t value, ecritum_value_t *out_value, ecritum_error_t *out_error);"
+    },
+    {
+      "name": "ecritum_value_make_data",
+      "machoSymbol": "_ecritum_value_make_data",
+      "declaration": "int ecritum_value_make_data(ecritum_bytes_t value, ecritum_value_t *out_value, ecritum_error_t *out_error);"
+    },
+    {
+      "name": "ecritum_value_make_array",
+      "machoSymbol": "_ecritum_value_make_array",
+      "declaration": "int ecritum_value_make_array(const ecritum_value_t *items, size_t count, ecritum_value_t *out_value, ecritum_error_t *out_error);"
+    },
+    {
+      "name": "ecritum_value_make_object",
+      "machoSymbol": "_ecritum_value_make_object",
+      "declaration": "int ecritum_value_make_object(const ecritum_object_entry_t *entries, size_t count, ecritum_value_t *out_value, ecritum_error_t *out_error);"
+    },
+    {
+      "name": "ecritum_value_destroy",
+      "machoSymbol": "_ecritum_value_destroy",
+      "declaration": "int ecritum_value_destroy(ecritum_value_t *value);"
+    },
+    {
+      "name": "ecritum_value_kind",
+      "machoSymbol": "_ecritum_value_kind",
+      "declaration": "int ecritum_value_kind(ecritum_value_t value, int *out_kind);"
+    },
+    {
+      "name": "ecritum_value_get_bool",
+      "machoSymbol": "_ecritum_value_get_bool",
+      "declaration": "int ecritum_value_get_bool(ecritum_value_t value, int *out_value);"
+    },
+    {
+      "name": "ecritum_value_get_int",
+      "machoSymbol": "_ecritum_value_get_int",
+      "declaration": "int ecritum_value_get_int(ecritum_value_t value, int64_t *out_value);"
+    },
+    {
+      "name": "ecritum_value_get_double",
+      "machoSymbol": "_ecritum_value_get_double",
+      "declaration": "int ecritum_value_get_double(ecritum_value_t value, double *out_value);"
+    },
+    {
+      "name": "ecritum_value_get_string",
+      "machoSymbol": "_ecritum_value_get_string",
+      "declaration": "int ecritum_value_get_string(ecritum_value_t value, ecritum_string_view_t *out_value);"
+    },
+    {
+      "name": "ecritum_value_get_data",
+      "machoSymbol": "_ecritum_value_get_data",
+      "declaration": "int ecritum_value_get_data(ecritum_value_t value, ecritum_bytes_t *out_value);"
+    },
+    {
+      "name": "ecritum_value_count",
+      "machoSymbol": "_ecritum_value_count",
+      "declaration": "int ecritum_value_count(ecritum_value_t value, size_t *out_count);"
+    },
+    {
+      "name": "ecritum_value_array_get",
+      "machoSymbol": "_ecritum_value_array_get",
+      "declaration": "int ecritum_value_array_get(ecritum_value_t value, size_t index, ecritum_value_t *out_item, ecritum_error_t *out_error);"
+    },
+    {
+      "name": "ecritum_value_object_entry",
+      "machoSymbol": "_ecritum_value_object_entry",
+      "declaration": "int ecritum_value_object_entry(ecritum_value_t value, size_t index, ecritum_string_view_t *out_key, ecritum_value_t *out_value, ecritum_error_t *out_error);"
+    },
+    {
+      "name": "ecritum_call_argument_count",
+      "machoSymbol": "_ecritum_call_argument_count",
+      "declaration": "int ecritum_call_argument_count(ecritum_call_t call, size_t *out_count, ecritum_error_t *out_error);"
+    },
+    {
+      "name": "ecritum_call_argument",
+      "machoSymbol": "_ecritum_call_argument",
+      "declaration": "int ecritum_call_argument(ecritum_call_t call, size_t index, ecritum_value_t *out_argument, ecritum_error_t *out_error);"
+    },
+    {
+      "name": "ecritum_eval_start",
+      "machoSymbol": "_ecritum_eval_start",
+      "declaration": "int ecritum_eval_start( ecritum_context_t context, ecritum_string_view_t language, ecritum_bytes_t source, ecritum_string_view_t source_name, ecritum_bytes_t options_json, ecritum_job_t *out_job, ecritum_error_t *out_error );"
+    },
+    {
+      "name": "ecritum_job_poll",
+      "machoSymbol": "_ecritum_job_poll",
+      "declaration": "int ecritum_job_poll(ecritum_job_t job, int *out_state, ecritum_error_t *out_error);"
+    },
+    {
+      "name": "ecritum_job_wait",
+      "machoSymbol": "_ecritum_job_wait",
+      "declaration": "int ecritum_job_wait(ecritum_job_t job, uint64_t wait_timeout_nanos, int *out_state, ecritum_error_t *out_error);"
+    },
+    {
+      "name": "ecritum_job_cancel",
+      "machoSymbol": "_ecritum_job_cancel",
+      "declaration": "int ecritum_job_cancel(ecritum_job_t job, ecritum_error_t *out_error);"
+    },
+    {
+      "name": "ecritum_job_result",
+      "machoSymbol": "_ecritum_job_result",
+      "declaration": "int ecritum_job_result(ecritum_job_t job, ecritum_value_t *out_result, ecritum_error_t *out_error);"
+    },
+    {
+      "name": "ecritum_job_destroy",
+      "machoSymbol": "_ecritum_job_destroy",
+      "declaration": "int ecritum_job_destroy(ecritum_job_t *job, ecritum_error_t *out_error);"
+    },
+    {
       "name": "ecritum_error_destroy",
       "machoSymbol": "_ecritum_error_destroy",
       "declaration": "int ecritum_error_destroy(ecritum_error_t *error);"
@@ -185,10 +315,22 @@
       "name": "ecritum_error_operation",
       "machoSymbol": "_ecritum_error_operation",
       "declaration": "int ecritum_error_operation(ecritum_error_t error, ecritum_string_view_t *out_operation);"
+    },
+    {
+      "name": "ecritum_error_language",
+      "machoSymbol": "_ecritum_error_language",
+      "declaration": "int ecritum_error_language(ecritum_error_t error, ecritum_string_view_t *out_language);"
+    },
+    {
+      "name": "ecritum_error_source_name",
+      "machoSymbol": "_ecritum_error_source_name",
+      "declaration": "int ecritum_error_source_name(ecritum_error_t error, ecritum_string_view_t *out_source_name);"
     }
   ],
   "privateSymbols": [
     "_ecritum_graal_version",
+    "_ecritum_graal_eval_clojure",
+    "_ecritum_graal_eval_clojure_with_host",
     "_graal_create_isolate",
     "_graal_tear_down_isolate"
   ]

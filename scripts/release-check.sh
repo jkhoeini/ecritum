@@ -25,10 +25,11 @@ just test
 just check-abi
 just check-xcframework
 just inspect > build/release/inspect.json
-python3 scripts/size-artifact.py --require-artifact > build/release/size.json
 just bench-cold-start > build/release/cold-start.json
+just bench-first-eval > build/release/first-eval.json
 just bench-idle-rss > build/release/idle-rss.json
 just check-dep-delta > build/release/dependency-delta.json
 just package-artifact > build/release/package.json
 just license-report > build/release/licenses.spdx.json
+python3 scripts/size-artifact.py --require-artifact > build/release/size.json
 python3 scripts/license-report.py --strict > build/release/licenses-strict.spdx.json

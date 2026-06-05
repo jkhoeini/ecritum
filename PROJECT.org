@@ -2153,7 +2153,7 @@ Post-change review completed:
   PASS; no blockers, with non-blocking note that ADR-005 lists Claude CLI as a
   reviewer while PROJECT.org records the plan timeout.
 
-*** TODO M3-002 Implement Clojure eval and host calls
+*** DONE M3-002 Implement Clojure eval and host calls
 
 Lead persona: GraalVM Runtime.
 Reviewer personas: Architecture, Clean Code, Tests, Security, Release.
@@ -2165,6 +2165,399 @@ Definition of done:
 - Eval scalar/object/array smoke tests pass from Swift.
 - Script-to-host and host-return-to-script tests pass.
 - Language errors include source names and useful stack data.
+
+Assignment:
+
+- Engineering manager: Codex.
+- Lead persona agent: GraalVM Runtime.
+- Reviewer agents: Architecture, Clean Code, Tests/TDD, Security, Release.
+- Claude plan consult: required before implementation; call `claude -p`
+  directly without an auth check.
+
+Research notes:
+
+- Local source has C value handle typedefs but no public value constructors,
+  accessors, or destroy function yet.
+- ADR-003 requires `ecritum_job_t`, `ecritum_eval_start`, finite wait/poll,
+  single-drain `job_result`, and busy context semantics.
+- Swift has `EcritumValue`, lifecycle wrappers, namespace registration, and
+  host callback registration, but no async eval API and the current C callback
+  bridge discards returned values.
+- Clojars checked on 2026-06-05: `org.babashka/sci` current version is
+  `0.12.51`, EPL-1.0, with transitive dependencies `borkdude/edamame`
+  `1.5.37`, `borkdude/graal.locking` `0.0.2`,
+  `org.babashka/sci.impl.types` `0.0.2`, and `org.clojure/clojure`
+  `1.10.3`.
+
+Accepted implementation split:
+
+- M3-002A adds the language-neutral eval/job/value ABI, C contract tests, and
+  Swift async eval wrapper over the job state machine.
+- M3-002B embeds SCI with the exact dependency pin, scalar/array/object value
+  conversion, source-name diagnostics, and Native Image smoke tests.
+- M3-002C projects registered host functions into SCI namespaces, propagates
+  callback return values/errors, and wires strict Clojure conformance/security
+  provider cases.
+- M3-002 remains incomplete until all three slices are complete, reviewed, and
+  verified.
+
+Roll-up status:
+
+- 2026-06-05: M3-002A, M3-002B, and M3-002C are all done and verified.
+- Parent DoD evidence: Swift artifact-backed eval returns scalar/array/object
+  values; script-to-host and host-return-to-script tests pass from C, Swift,
+  Native Image, XCFramework, and strict packaged Clojure conformance; language
+  errors include structured operation/language/source-name/category/message
+  diagnostics.
+- Structured script stack-frame accessors are not part of the current public C
+  ABI and are tracked as `ECRITUM-DEBT-0007` for the M4.5 ABI diagnostic review.
+- Claude plan/post-change reviews for the latest M3-002C slice timed out and
+  are not counted as signoff. Persona reviews and the `test-m3-002c` gate are
+  the accepted completion evidence.
+
+Pre-implementation plan for M3-002A:
+
+- Red tests first: C job lifecycle and value accessor contract tests, Swift
+  async eval wrapper tests using a fake ABI, and callback result propagation
+  tests.
+- Keep the public ABI language-neutral: `ecritum_job_t`, `ecritum_eval_start`,
+  job state constants, value constructors/accessors/destroy, call argument
+  accessors, and no Clojure-specific symbol.
+- Implement the smallest test-mode backend that can drive the new ABI while
+  preserving ADR-003 single-job busy and single-drain result semantics.
+- Production SCI work waits for M3-002B after M3-002A's public surface is
+  reviewed and stable enough for the Native Image adapter.
+
+Verification plan for M3-002A:
+
+- `mise exec -- just test-c-abi-eval`
+- `mise exec -- just test-c-abi-eval-asan`
+- `mise exec -- just check-abi`
+- `mise exec -- just test-swift-scaffold`
+- `mise exec -- just conformance`
+- `mise exec -- just test`
+
+**** DONE M3-002A Add language-neutral eval/job/value ABI and Swift async wrapper
+
+Lead persona: GraalVM Runtime.
+Reviewer personas: Architecture, Clean Code, Tests/TDD, Security.
+Write scope: Sources/CEcritum/include/ecritum.h, Sources/Ecritum/, Tests/C/,
+Tests/EcritumTests/, scripts/ecritum_runtime_wrapper.c, justfile.
+
+Definition of done:
+
+- ADR-021 is accepted before public value/call accessor implementation lands.
+- Public C ABI exposes documented job and value functions without
+  Clojure-specific symbols.
+- C contract tests prove eval start, poll/wait/result/destroy, busy context,
+  cancel idempotence, `UINT64_MAX` wait rejection, active destroy rejection,
+  single-drain result/error ownership, undrained-result destroy, invalid/stale/
+  wrong-kind handles, and value accessors.
+- Swift async eval wrapper tests pass through a fake ABI and preserve
+  `EcritumValue` kinds, finite wait/result/destroy order, timeout/cancel
+  mapping, native cancel on Swift task cancellation, and no public job handle.
+- Callback return values are no longer discarded by the Swift/C bridge;
+  callback argument access, active-call cleanup pinning, callback result/error
+  precedence, and returned-value cleanup are tested.
+- `docs/abi/ecritum-c-abi.json`, `Tests/C/header_cpp_smoke.cpp`, and
+  conformance allocation/release evidence include the new symbols and tests.
+- The M3-002A fake evaluator is compiled only under `ECRITUM_TESTING` and does
+  not false-green real Clojure eval, host, timeout, or permission conformance.
+
+Completion evidence:
+
+- ADR-021 accepted before implementation.
+- Implemented public value/call/eval/job ABI in `ecritum.h`, the native wrapper,
+  Swift async eval wrappers, and Swift `EcritumCall.argumentCount()` /
+  `EcritumCall.value(at:)`.
+- C contract coverage includes value accessors, job lifecycle, single-drain
+  result ownership, active destroy pinning, stale/wrong-kind/arbitrary handles,
+  invalid callback result handles, same-runtime callback reentry rejection,
+  callback-scope invalidation, empty object-key duplicates, and registry
+  exhaustion under ASan/UBSan.
+- Swift coverage includes fake async eval sequencing, task cancellation,
+  callback argument access through a fake adapter, artifact invalid-call access,
+  and artifact-backed partial native value construction cleanup.
+- Verification passed:
+  `mise exec -- just test-c-abi-eval`;
+  `mise exec -- just test-c-abi-eval-asan`;
+  `mise exec -- just test-swift-scaffold`;
+  `mise exec -- just test-swift-auto`;
+  `mise exec -- just check-abi`;
+  `mise exec -- just xcframework`;
+  `mise exec -- just test`.
+- Review evidence: Architecture PASS; Clean Code PASS; Tests/TDD PASS;
+  Security PASS; Swift DX PASS; Unix/reusable-components PASS.
+- Claude review evidence: initial broad review found the missing
+  `EcritumCall.value(at:)` blocker; final micro-review returned PASS for the
+  arbitrary call-handle and object cleanup fixes.
+
+**** DONE M3-002B Embed SCI eval backend
+
+Lead persona: GraalVM Runtime.
+Reviewer personas: Architecture, Clean Code, Tests/TDD, Security, Release.
+Write scope: native/, Tests/, scripts/, justfile, docs/release-gates.md.
+Assigned sub-agents:
+
+- Architecture: Archimedes the 2nd.
+- Clean Code / functional purity: Pauli the 2nd.
+- Tests/TDD and verification: Nietzsche the 2nd.
+- Security: Godel the 2nd.
+- Release/licensing: Cicero the 2nd.
+- Reusable runtime/components: Goodall the 2nd.
+
+Scope decision:
+
+- M3-002B is trusted, pure SCI eval only. It does not claim full Clojure
+  support, untrusted-user scripting support, host function projection, raw Java
+  interop, raw IO/process/env access, raw classpath/deps support, or arbitrary
+  Babashka compatibility.
+- Public `ecritum_*` value/job/call handles remain owned by the C wrapper.
+  Native Image may expose private backend entrypoints only; no public
+  Clojure-specific ABI symbols are added in this slice.
+- Existing ADR-005 and ADR-021 cover the runtime and ABI decisions. A new ADR is
+  required before implementation only if this slice changes public ABI, job
+  semantics, host projection scope, raw SCI/Graal option exposure, distribution
+  contents beyond SCI/transitives, or user-facing support claims.
+
+Release dependency acceptance:
+
+- Clojars checked on 2026-06-05 lists `org.babashka/sci` `0.12.51`, EPL-1.0,
+  and dependencies `borkdude/edamame` `1.5.37`, `borkdude/graal.locking`
+  `0.0.2`, `org.babashka/sci.impl.types` `0.0.2`, and
+  `org.clojure/clojure` `1.10.3`.
+- The implementation records Clojars repository acceptance, exact dependency
+  tree, SPDX license mapping including EPL-1.0, manual acceptance for
+  `sci.impl.types`, dependency-delta baseline, and artifact/license gate output.
+
+Implementation record:
+
+- `native/pom.xml` pins SCI `0.12.51` and Maven uses the Clojars repository
+  required for SCI transitive artifacts.
+- Native Image exposes private backend entrypoint
+  `_ecritum_graal_eval_clojure`; the public ABI remains language-neutral.
+- Production `ecritum_eval_start` copies borrowed script inputs before return,
+  creates a detached worker thread, and uses condition-backed job wait/result
+  state instead of evaluating synchronously on the caller thread.
+- Eval is fail-closed for unsupported languages, non-empty raw options JSON, and
+  runtime `languages` configuration that does not include Clojure.
+- Structured script diagnostics now include public accessors for error
+  category, operation, language, and source name; Swift copies those details
+  before destroying the native error handle.
+- SCI result conversion covers scalar, array, object, nil, bool, string,
+  integer, and double values through the M3-002A value ABI.
+- SCI source policy rejects duplicate normalized map keys, denies conservative
+  dangerous source fragments, and redacts URL/token/password/secret/API-key
+  diagnostics before crossing the native boundary.
+
+Review record:
+
+- Architecture persona: PASS after async worker/job wait, fail-closed language
+  handling, and private-symbol guard fixes.
+- Clean Code persona: PASS after extracting the source-deny policy, rejecting
+  duplicate normalized map keys, and making language/options behavior explicit.
+- Tests/TDD persona: PASS after Java, C ABI, ASan, native artifact, XCFramework,
+  Swift, ABI, dependency, and release-report gates were added to the aggregate
+  verification path.
+- Security persona: PASS for trusted pure SCI eval after fail-closed
+  language/config/options behavior and redacted diagnostics tests.
+- Release persona: PASS for SCI dependency inventory and artifact evidence.
+  Remaining release blockers are not M3-002B functional blockers: artifact size
+  exceeds budget and two existing shipped-license entries remain NOASSERTION.
+- Claude plan/diff review was invoked directly with `claude -p` and no auth
+  check, as required. Calls hung with no output and were killed, including the
+  final 2026-06-05 tool-less diff review attempt. Do not count Claude as
+  signoff for this task; use the persona review record plus this blocker note.
+
+Definition of done:
+
+- DONE `native/pom.xml` pins SCI `0.12.51` and records dependency/license
+  impact.
+- DONE Native Image eval smoke returns scalar, vector, map, nil, bool, string,
+  and double values through the M3-002A value ABI.
+- DONE Script syntax/runtime failures return structured script errors with
+  category, operation, language, and source name.
+- DONE Native Image and artifact smoke tests pass.
+- DONE `scripts/license-report.py` and `scripts/check-dep-delta.py` inventory
+  and accept the exact SCI dependency tree for this slice.
+- DONE Verification recorded: `mise exec -- just test-java`, `mise exec -- just
+  native`, real native eval smoke, `mise exec -- just xcframework`, artifact eval
+  smoke, `mise exec -- just license-report`, `mise exec -- just
+  check-dep-delta`, `mise exec -- just check-abi`, and `mise exec -- just test`.
+
+Verification evidence:
+
+- `mise exec -- just test` -> PASS on 2026-06-05.
+- `mise exec -- just test-m3-002b` -> PASS in focused gate runs during this
+  task.
+- `mise exec -- just test-java` -> PASS, 10 Java tests.
+- `mise exec -- just test-c-abi-eval` and
+  `mise exec -- just test-c-abi-eval-asan` -> PASS.
+- `mise exec -- just native` -> PASS; `build/native/macos-arm64/libecritum.dylib`
+  built and exported the private Graal eval backend.
+- `mise exec -- just test-native-eval-smoke` and
+  `mise exec -- just test-native-eval-smoke-asan` -> PASS.
+- `mise exec -- just xcframework`, `mise exec -- just check-abi`, and
+  `mise exec -- just test-xcframework-eval-smoke` -> PASS.
+- `mise exec -- just bench-first-eval` -> PASS; 10 artifact-backed runs, p50
+  1.159 ms and p95 3.736 ms against budgets p50 500 ms and p95 1000 ms.
+- `mise exec -- just license-report` -> PASS/report-only and inventories SCI,
+  Clojure, edamame, tools.reader, sci.impl.types, and graal.locking as EPL-1.0.
+- `mise exec -- just check-dep-delta` -> PASS with no violations.
+- Refreshed release evidence is in `build/release/inspect.json`,
+  `build/release/first-eval.json`, `build/release/dependency-delta.json`,
+  `build/release/licenses.spdx.json`, and `build/release/size.json`.
+
+Remaining blockers and debt:
+
+- `mise exec -- just size` / `build/release/size.json` -> expected FAIL:
+  artifact 29,951,339 bytes exceeds 25,000,000 bytes and private runtime
+  29,828,696 bytes exceeds 20,000,000 bytes. Tracked by `ECRITUM-DEBT-0006`.
+- `mise exec -- just license-report-strict` remains expected FAIL until
+  `EcritumRuntime.xcframework` and GraalVM Native Image embedded runtime code
+  shipped-license NOASSERTION entries are resolved.
+- M3-002B remains trusted pure SCI eval only; untrusted scripting, host
+  projection, richer cancellation, and full Babashka/Clojure compatibility stay
+  out of scope for this milestone.
+
+**** DONE M3-002C Project host functions into SCI
+
+Lead persona: GraalVM Runtime.
+Reviewer personas: Security, Architecture, Clean Code, Tests/TDD, Release.
+Write scope: native/, Sources/, Tests/, Tests/Conformance/,
+Tests/Security/.
+Assigned sub-agents:
+
+- Architecture: Mencius the 2nd.
+- Security: Euclid the 2nd.
+- Clean Code / functional core: Confucius the 2nd.
+- Tests/TDD and verification: Maxwell the 2nd.
+- Release/GraalVM Runtime: Boole the 2nd.
+
+Planning status:
+
+- 2026-06-05: Engineering manager started M3-002C after M3-002B was marked
+  done. Fresh persona agents are reviewing architecture, security, clean-code,
+  verification, and release/GraalVM risks before implementation.
+- 2026-06-05: Claude plan consult was invoked directly with `claude -p`, with
+  no auth check, and timed out after 45 seconds with no review output. Do not
+  count Claude as signoff unless a later bounded retry returns usable feedback.
+- 2026-06-05: Persona planning review completed. Architecture, Security, Clean
+  Code, Tests/TDD, and Release/GraalVM all found the same implementation
+  blocker: production SCI has no host projection bridge and the current callback
+  invocation evidence is test-only. Accepted direction is a private Native Image
+  callback-pointer bridge, copied host-projection manifest, shared C invocation
+  helper, synchronous eval-worker callbacks, active projection pinning, and real
+  native/Swift/conformance/security tests.
+- 2026-06-05: ADR-021 was updated with an M3-002C host-projection addendum for
+  Clojure projection syntax, private bridge shape, projection lifetime, callback
+  thread/reentry behavior, value-kind coverage, and callback error mapping.
+
+Pre-implementation plan:
+
+- Keep the public C ABI unchanged. Host projection must use only existing
+  public namespace/function/call/value handles and private runtime entrypoints.
+- Add a private Native Image eval entrypoint that accepts a private C callback
+  function pointer plus an opaque runtime handle. The C wrapper passes these
+  only for production Clojure eval.
+- SCI exposes only explicitly registered Ecritum namespace/function pairs as
+  callable functions. No raw Java lookup, class loading, process, filesystem,
+  network, environment, raw C handle, or unrestricted host object access is
+  introduced by this task.
+- Java encodes host-call arguments as the existing backend value wire format.
+  The private C bridge resolves the registered function for the runtime,
+  creates a normal `ecritum_call_t`, invokes the existing `ecritum_host_fn_t`
+  callback with ADR-019 lifetime/reentry rules, validates the returned
+  `ecritum_value_t`, and encodes either the result value or a structured
+  callback/permission error back to SCI.
+- Move the existing test-only callback invocation implementation into a shared
+  internal helper so production host calls and `ECRITUM_TESTING` use the same
+  ownership, active-call, result-validation, and cleanup behavior.
+- Add C, Java, Swift, Native Image, XCFramework, conformance, and security
+  tests before marking this task done.
+- Add or update a real Clojure conformance provider so strict host/eval/error
+  conformance is backed by the packaged runtime rather than fixture
+  `pending_capability` results.
+- Fix release docs drift: `release-check` now runs first-eval evidence, so
+  `docs/release-gates.md` must not say first-eval is omitted from release check.
+
+Definition of done:
+
+- Registered host namespaces/functions are callable from Clojure only through
+  explicit ADR-019 projection.
+- Host callback arguments/results use public Ecritum call/value accessors.
+- Callback failure maps to `ECRITUM_ERROR_CALLBACK` and denied host projection
+  paths remain denied.
+- Strict Clojure conformance host/eval/error cases pass with no required
+  pending cases introduced by M3-002C.
+
+Implementation notes:
+
+- Added a private Native Image entrypoint
+  `_ecritum_graal_eval_clojure_with_host` for Clojure eval with host
+  projections. The public C ABI remains unchanged.
+- Added a copied host-projection manifest from registered namespace/function
+  pairs and active projection pinning so projected functions cannot be
+  destroyed while an eval job is using them.
+- Moved callback invocation into a shared internal C helper used by production
+  host projection and the `ECRITUM_TESTING` callback evidence path.
+- SCI now exposes only explicitly registered projected host functions and uses
+  the backend value wire format for host arguments/results, including data
+  values.
+- Added conservative deny probes for dynamic resolution/eval/import/new/interop
+  paths before host callbacks can be reached.
+- Added artifact-backed Swift eval coverage for registered Swift host
+  callbacks, callback argument reads, data return values, and callback failure
+  mapping.
+- Added `Tests/Conformance/fixtures/clojure_native_provider.py`, a packaged
+  XCFramework-backed Clojure provider for strict eval/host/error conformance.
+- Fixed release-gate documentation drift around first-eval evidence.
+
+Review status:
+
+- Persona planning review completed before implementation. Architecture,
+  Security, Clean Code, Tests/TDD, and Release/GraalVM all agreed on the
+  private callback-pointer bridge, copied projection manifest, active
+  projection pinning, shared invocation helper, and real native/Swift/
+  conformance/security tests.
+- Claude plan consult timed out after 45 seconds with no review output.
+- Claude post-change review was invoked directly with `claude -p` and no auth
+  check on 2026-06-05; it timed out after 75 seconds with no output. Do not
+  count Claude as signoff for M3-002C.
+
+Verification evidence:
+
+- `python3 -m py_compile Tests/Conformance/fixtures/clojure_native_provider.py
+  scripts/run-conformance.py` -> PASS.
+- `python3 -m json.tool Tests/Conformance/manifest.json >/dev/null` -> PASS.
+- `mise exec -- just test-java` -> PASS; 17 Java tests.
+- `mise exec -- just native` -> PASS; generated 29.86 MB Native Image dylib
+  and exported `_ecritum_graal_eval_clojure_with_host`.
+- `mise exec -- just test-c-abi-eval` and
+  `mise exec -- just test-c-abi-eval-asan` -> PASS.
+- `mise exec -- just test-native-eval-smoke` and
+  `mise exec -- just test-native-eval-smoke-asan` -> PASS.
+- `mise exec -- just xcframework` -> PASS.
+- `mise exec -- just test-xcframework-eval-smoke` -> PASS; 57 Swift tests.
+- `mise exec -- just conformance-clojure-native` -> PASS; strict packaged
+  Clojure eval/host/error provider passed 6 cases with 0 pending.
+- `mise exec -- just conformance` -> PASS; 23 runner tests.
+- `mise exec -- just check-abi` -> PASS.
+- `mise exec -- just security` -> PASS; 22 security tests plus static, abuse,
+  and parser-abuse gates.
+- `mise exec -- just test-m3-002c` -> PASS end to end, including native build,
+  Java tests, C/ASAN/native/Swift/conformance/security/ABI/license/dependency
+  gates.
+
+Remaining blockers and debt:
+
+- Claude review did not complete; keep using persona/tooling evidence until a
+  later Claude retry returns usable output.
+- Strict Clojure conformance here covers eval/host/error only. Permission,
+  timeout, filesystem-root, and broader Babashka compatibility remain pending
+  for later M3 tasks.
+- Robust host callback interruption is not claimed; callbacks run
+  synchronously on the eval worker thread per ADR-021.
 
 *** TODO M3-003 Implement first standard-library facades
 
@@ -2424,6 +2817,8 @@ Output of: M2-004.
 Output of: M2-005.
 ** DONE ADR-018 Performance and artifact budget policy
 Output of: M1-007.
+** DONE ADR-021 Value, call, and eval ABI surface
+Output of: M3-002A.
 
 * Test Pyramid
 

@@ -139,8 +139,40 @@ public struct EcritumFunctionName: Hashable, Sendable {
 
 public final class EcritumCall {
     private let handle: ecritum_call_t
+    private weak var adapter: EcritumCallABI?
+    private let fixtureArguments: [EcritumValue]?
 
-    init(handle: ecritum_call_t = 0) {
+    init(handle: ecritum_call_t = 0, adapter: EcritumCallABI? = nil, fixtureArguments: [EcritumValue]? = nil) {
         self.handle = handle
+        self.adapter = adapter
+        self.fixtureArguments = fixtureArguments
+    }
+
+    public func argumentCount() throws -> Int {
+        if let fixtureArguments {
+            return fixtureArguments.count
+        }
+        guard let adapter else {
+            throw EcritumError.invalidHandle(.lifecycle(.invalidHandle, operation: "call_argument_count"))
+        }
+        return try adapter.callArgumentCount(handle)
+    }
+
+    public func value(at index: Int) throws -> EcritumValue {
+        guard index >= 0 else {
+            throw EcritumError.invalidArgument(.lifecycle(.invalidArgument, operation: "call_argument"))
+        }
+        if let fixtureArguments {
+            guard index < fixtureArguments.count else {
+                throw EcritumError.invalidArgument(.lifecycle(.invalidArgument, operation: "call_argument"))
+            }
+            return fixtureArguments[index]
+        }
+        guard let adapter else {
+            throw EcritumError.invalidHandle(.lifecycle(.invalidHandle, operation: "call_argument"))
+        }
+        var nativeValue = try adapter.callArgument(handle, index: index)
+        defer { adapter.valueDestroy(&nativeValue) }
+        return try adapter.copyValue(nativeValue)
     }
 }

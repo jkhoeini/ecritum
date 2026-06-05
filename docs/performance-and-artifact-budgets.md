@@ -14,9 +14,9 @@ mise exec -- just bench-first-eval
 mise exec -- just check-dep-delta
 ```
 
-`bench-first-eval` emits explicit `not_applicable` JSON and exits zero until
-M2/M3 adds an eval API. The numeric first-eval budget exists now so the future
-eval implementation has a pre-existing gate.
+`bench-first-eval` compiles a tiny C host against the packaged XCFramework and
+measures `eval_start` through `job_result` for SCI Clojure. It exits nonzero when
+the packaged artifact is missing or when first-eval latency exceeds budget.
 
 ## Initial Core Gates
 
@@ -30,7 +30,7 @@ eval implementation has a pre-existing gate.
 | `dlopen+dlsym` | `just bench-cold-start` | p95 250 ms | measured per run |
 | First wrapper call | `just bench-cold-start` | p95 750 ms | measured per run |
 | Swift host cold start | `just bench-swift-cold-start` | p50 1,000 ms, p95 2,000 ms | measured per run |
-| First eval | `just bench-first-eval` | p50 500 ms, p95 1,000 ms | not applicable until eval ABI |
+| First eval | `just bench-first-eval` | p50 500 ms, p95 1,000 ms | measured per run |
 | Idle RSS | `just bench-idle-rss` | 75 MiB for M1 version runtime | measured per run |
 | Dependency/license delta | `just check-dep-delta` | no unreviewed delta | M1 baseline |
 

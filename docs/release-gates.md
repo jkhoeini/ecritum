@@ -39,17 +39,18 @@ mise exec -- just release-check
 - `just inspect`
 - `just size`
 - `just bench-cold-start`
+- `just bench-first-eval`
 - `just bench-idle-rss`
 - `just check-dep-delta`
 - `just package-artifact`
 - `just license-report`
 - `scripts/license-report.py --strict`
 
-`just bench-swift-cold-start` and `just bench-first-eval` are represented by the
-M1 budget policy but are not part of `release-check` yet. Swift host timing is
-kept out of release-check because it is a host-example benchmark rather than a
-release blocker while the C ABI packaging gates cover the artifact runtime path.
-First-eval remains explicit `not_applicable` until an eval ABI exists.
+`just bench-swift-cold-start` is represented by the M1 budget policy but is not
+part of `release-check` yet. Swift host timing is kept out of release-check
+because it is a host-example benchmark rather than a release blocker while the C
+ABI packaging gates cover the artifact runtime path. First-eval is part of
+`release-check` once the eval ABI exists.
 
 The strict license step exits nonzero while shipped licenses remain unknown.
 That is intentional: unknown shipped licenses block release publication.
@@ -128,6 +129,39 @@ For M1, the strict gate blocks on:
 The current Maven SDK inputs `org.graalvm.sdk:nativeimage` and
 `org.graalvm.sdk:word` are inventoried separately as build-time inputs. JUnit is
 inventoried as test-only.
+
+M3-002B adds embedded SCI Clojure eval. These Maven runtime dependencies are
+compiled into the Native Image and are therefore inventoried as shipped
+components:
+
+- `org.babashka:sci:0.12.51` from Clojars, EPL-1.0.
+- `org.clojure:clojure:1.10.3`, EPL-1.0.
+- `org.clojure:spec.alpha:0.2.194`, EPL-1.0.
+- `org.clojure:core.specs.alpha:0.2.56`, EPL-1.0.
+- `borkdude:edamame:1.5.37` from Clojars, EPL-1.0.
+- `org.clojure:tools.reader:1.5.2`, EPL-1.0.
+- `org.babashka:sci.impl.types:0.0.2` from Clojars, manually accepted as
+  EPL-1.0 based on Clojars/cljdoc metadata for the SCI project because the
+  artifact POM omits a license element.
+- `borkdude:graal.locking:0.0.2` from Clojars, EPL-1.0.
+
+The accepted M3-002B dependency tree from
+`mise exec -- mvn -s .mvn/settings.xml -f native/pom.xml dependency:tree
+-Dscope=runtime` is:
+
+```text
+dev.ecritum:ecritum-native:jar:0.1.0-SNAPSHOT
++- org.graalvm.sdk:nativeimage:jar:25.0.2:compile
+|  \- org.graalvm.sdk:word:jar:25.0.2:compile
+\- org.babashka:sci:jar:0.12.51:compile
+   +- org.clojure:clojure:jar:1.10.3:compile
+   |  +- org.clojure:spec.alpha:jar:0.2.194:compile
+   |  \- org.clojure:core.specs.alpha:jar:0.2.56:compile
+   +- borkdude:edamame:jar:1.5.37:compile
+   |  \- org.clojure:tools.reader:jar:1.5.2:compile
+   +- org.babashka:sci.impl.types:jar:0.0.2:compile
+   \- borkdude:graal.locking:jar:0.0.2:compile
+```
 
 ## Reproducibility
 

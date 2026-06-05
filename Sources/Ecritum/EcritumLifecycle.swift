@@ -12,6 +12,43 @@ protocol EcritumLifecycleABI: AnyObject {
     func functionDestroy(_ handle: inout ecritum_function_t) throws
 }
 
+enum EcritumJobState: Int32, Sendable {
+    case pending = 0
+    case running = 1
+    case succeeded = 2
+    case failed = 3
+    case cancelRequested = 4
+    case cancelled = 5
+    case timedOut = 6
+    case poisoned = 7
+
+    var isTerminal: Bool {
+        switch self {
+        case .succeeded, .failed, .cancelled, .timedOut, .poisoned:
+            return true
+        case .pending, .running, .cancelRequested:
+            return false
+        }
+    }
+}
+
+protocol EcritumEvalABI: AnyObject {
+    func evalStart(context: ecritum_context_t, script: EcritumScript) throws -> ecritum_job_t
+    func jobWait(_ job: ecritum_job_t, timeoutNanoseconds: UInt64) throws -> EcritumJobState
+    func jobCancel(_ job: ecritum_job_t) throws
+    func jobResult(_ job: ecritum_job_t) throws -> ecritum_value_t
+    func jobDestroy(_ job: inout ecritum_job_t) throws
+    func copyValue(_ value: ecritum_value_t) throws -> EcritumValue
+    func valueDestroy(_ value: inout ecritum_value_t)
+}
+
+protocol EcritumCallABI: AnyObject {
+    func callArgumentCount(_ call: ecritum_call_t) throws -> Int
+    func callArgument(_ call: ecritum_call_t, index: Int) throws -> ecritum_value_t
+    func copyValue(_ value: ecritum_value_t) throws -> EcritumValue
+    func valueDestroy(_ value: inout ecritum_value_t)
+}
+
 /// Owns a packaged Ecritum runtime instance.
 public final class EcritumRuntime {
     public struct Configuration: Equatable, Sendable {
@@ -102,6 +139,7 @@ public final class EcritumContext {
     private let parent: EcritumRuntime
     private let adapter: EcritumLifecycleABI
     private var handle: ecritum_context_t
+    private static let jobWaitIntervalNanoseconds: UInt64 = 50_000_000
 
     init(parent: EcritumRuntime, handle: ecritum_context_t, adapter: EcritumLifecycleABI) {
         self.parent = parent
@@ -120,9 +158,93 @@ public final class EcritumContext {
 
         try adapter.contextDestroy(&handle)
     }
+
+    public func eval(_ script: EcritumScript) async throws -> EcritumValue {
+        guard handle != 0 else {
+            throw EcritumError.closed(.lifecycle(.closed, operation: "eval"))
+        }
+        guard let evalAdapter = adapter as? EcritumEvalABI else {
+            throw EcritumError.runtimeArtifactMissing
+        }
+
+        let cancellation = EcritumJobCancellationBox()
+        var job: ecritum_job_t = 0
+        return try await withTaskCancellationHandler {
+            job = try evalAdapter.evalStart(context: handle, script: script)
+            cancellation.set(adapter: evalAdapter, job: job)
+            defer {
+                try? evalAdapter.jobDestroy(&job)
+                cancellation.clear()
+            }
+
+            while true {
+                if Task.isCancelled {
+                    try? evalAdapter.jobCancel(job)
+                }
+
+                let state = try evalAdapter.jobWait(job, timeoutNanoseconds: Self.jobWaitIntervalNanoseconds)
+                switch state {
+                case .succeeded:
+                    var nativeValue = try evalAdapter.jobResult(job)
+                    defer { evalAdapter.valueDestroy(&nativeValue) }
+                    return try evalAdapter.copyValue(nativeValue)
+                case .failed, .cancelled, .timedOut, .poisoned:
+                    var nativeValue: ecritum_value_t = 0
+                    do {
+                        nativeValue = try evalAdapter.jobResult(job)
+                    } catch {
+                        throw error
+                    }
+                    evalAdapter.valueDestroy(&nativeValue)
+                    throw EcritumError.internalFailure(.lifecycle(.internalFailure, operation: "eval"))
+                case .pending, .running, .cancelRequested:
+                    do {
+                        try await Task.sleep(nanoseconds: 1_000_000)
+                    } catch is CancellationError {
+                        try? evalAdapter.jobCancel(job)
+                    }
+                }
+            }
+        } onCancel: {
+            cancellation.cancel()
+        }
+    }
 }
 
-private final class EcritumCLifecycleABI: EcritumLifecycleABI {
+private final class EcritumJobCancellationBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private weak var adapter: EcritumEvalABI?
+    private var job: ecritum_job_t = 0
+    private var didCancel = false
+
+    func set(adapter: EcritumEvalABI, job: ecritum_job_t) {
+        lock.lock()
+        self.adapter = adapter
+        self.job = job
+        lock.unlock()
+    }
+
+    func clear() {
+        lock.lock()
+        adapter = nil
+        job = 0
+        lock.unlock()
+    }
+
+    func cancel() {
+        lock.lock()
+        guard !didCancel, let adapter, job != 0 else {
+            lock.unlock()
+            return
+        }
+        didCancel = true
+        let cancelledJob = job
+        lock.unlock()
+        try? adapter.jobCancel(cancelledJob)
+    }
+}
+
+final class EcritumCLifecycleABI: EcritumLifecycleABI, EcritumEvalABI, EcritumCallABI {
     static let shared = EcritumCLifecycleABI()
 
     private init() {}
@@ -249,6 +371,125 @@ private final class EcritumCLifecycleABI: EcritumLifecycleABI {
         #endif
     }
 
+    func evalStart(context: ecritum_context_t, script: EcritumScript) throws -> ecritum_job_t {
+        #if ECRITUM_HAS_RUNTIME_ARTIFACT
+        let sourceData = Data(script.source.utf8)
+        let optionsData = try script.options.abiOptionsData()
+        var language = script.language.rawValue
+        var sourceName = script.sourceName ?? ""
+        var job: ecritum_job_t = 0
+        var error: ecritum_error_t = 0
+        let status = sourceData.withUnsafeBytes { sourceBuffer in
+            optionsData.withUnsafeBytes { optionsBuffer in
+                language.withUTF8 { languageBuffer in
+                    sourceName.withUTF8 { sourceNameBuffer in
+                        ecritum_eval_start(
+                            context,
+                            stringView(languageBuffer),
+                            bytes(sourceBuffer),
+                            stringView(sourceNameBuffer),
+                            bytes(optionsBuffer),
+                            &job,
+                            &error
+                        )
+                    }
+                }
+            }
+        }
+        guard status == ECRITUM_OK else { throw copyError(status: status, error: error) }
+        return job
+        #else
+        throw EcritumError.runtimeArtifactMissing
+        #endif
+    }
+
+    func jobWait(_ job: ecritum_job_t, timeoutNanoseconds: UInt64) throws -> EcritumJobState {
+        #if ECRITUM_HAS_RUNTIME_ARTIFACT
+        var state: Int32 = 0
+        var error: ecritum_error_t = 0
+        let status = ecritum_job_wait(job, timeoutNanoseconds, &state, &error)
+        guard status == ECRITUM_OK else { throw copyError(status: status, error: error) }
+        return EcritumJobState(rawValue: state) ?? .poisoned
+        #else
+        throw EcritumError.runtimeArtifactMissing
+        #endif
+    }
+
+    func jobCancel(_ job: ecritum_job_t) throws {
+        #if ECRITUM_HAS_RUNTIME_ARTIFACT
+        var error: ecritum_error_t = 0
+        let status = ecritum_job_cancel(job, &error)
+        guard status == ECRITUM_OK else { throw copyError(status: status, error: error) }
+        #else
+        _ = job
+        #endif
+    }
+
+    func jobResult(_ job: ecritum_job_t) throws -> ecritum_value_t {
+        #if ECRITUM_HAS_RUNTIME_ARTIFACT
+        var value: ecritum_value_t = 0
+        var error: ecritum_error_t = 0
+        let status = ecritum_job_result(job, &value, &error)
+        guard status == ECRITUM_OK else { throw copyError(status: status, error: error) }
+        return value
+        #else
+        throw EcritumError.runtimeArtifactMissing
+        #endif
+    }
+
+    func jobDestroy(_ job: inout ecritum_job_t) throws {
+        #if ECRITUM_HAS_RUNTIME_ARTIFACT
+        var error: ecritum_error_t = 0
+        let status = ecritum_job_destroy(&job, &error)
+        guard status == ECRITUM_OK else { throw copyError(status: status, error: error) }
+        #else
+        job = 0
+        #endif
+    }
+
+    func copyValue(_ value: ecritum_value_t) throws -> EcritumValue {
+        #if ECRITUM_HAS_RUNTIME_ARTIFACT
+        return try copyNativeValue(value)
+        #else
+        throw EcritumError.runtimeArtifactMissing
+        #endif
+    }
+
+    func valueDestroy(_ value: inout ecritum_value_t) {
+        #if ECRITUM_HAS_RUNTIME_ARTIFACT
+        _ = ecritum_value_destroy(&value)
+        #else
+        value = 0
+        #endif
+    }
+
+    func callArgumentCount(_ call: ecritum_call_t) throws -> Int {
+        #if ECRITUM_HAS_RUNTIME_ARTIFACT
+        var count = 0
+        var error: ecritum_error_t = 0
+        let status = ecritum_call_argument_count(call, &count, &error)
+        guard status == ECRITUM_OK else { throw copyError(status: status, error: error) }
+        return count
+        #else
+        throw EcritumError.runtimeArtifactMissing
+        #endif
+    }
+
+    func callArgument(_ call: ecritum_call_t, index: Int) throws -> ecritum_value_t {
+        guard index >= 0 else {
+            throw EcritumError.invalidArgument(.lifecycle(.invalidArgument, operation: "call_argument"))
+        }
+        #if ECRITUM_HAS_RUNTIME_ARTIFACT
+        var value: ecritum_value_t = 0
+        var error: ecritum_error_t = 0
+        let status = ecritum_call_argument(call, index, &value, &error)
+        guard status == ECRITUM_OK else { throw copyError(status: status, error: error) }
+        return value
+        #else
+        throw EcritumError.runtimeArtifactMissing
+        #endif
+    }
+
     #if ECRITUM_HAS_RUNTIME_ARTIFACT
     private func bytes(_ buffer: UnsafeRawBufferPointer) -> ecritum_bytes_t {
         ecritum_bytes_t(
@@ -283,12 +524,16 @@ private final class EcritumCLifecycleABI: EcritumLifecycleABI {
             ?? .unknown
         let message = copyView(error, using: ecritum_error_message) ?? "Ecritum operation failed"
         let operation = copyView(error, using: ecritum_error_operation)
+        let language = copyView(error, using: ecritum_error_language)
+        let sourceName = copyView(error, using: ecritum_error_source_name)
 
         return EcritumErrorDetails(
             status: status,
             category: category,
             message: message,
-            operation: operation
+            operation: operation,
+            language: language,
+            sourceName: sourceName
         )
     }
 
@@ -304,6 +549,197 @@ private final class EcritumCLifecycleABI: EcritumLifecycleABI {
         let bytes = UnsafeRawPointer(data).assumingMemoryBound(to: UInt8.self)
         let buffer = UnsafeBufferPointer(start: bytes, count: Int(view.len))
         return String(decoding: buffer, as: UTF8.self)
+    }
+
+    private func copyNativeValue(_ value: ecritum_value_t) throws -> EcritumValue {
+        var kind: Int32 = 0
+        let kindStatus = ecritum_value_kind(value, &kind)
+        guard kindStatus == ECRITUM_OK else {
+            throw copyError(status: kindStatus, error: 0)
+        }
+
+        switch kind {
+        case ECRITUM_VALUE_KIND_NULL:
+            return .null
+        case ECRITUM_VALUE_KIND_BOOL:
+            var raw = Int32(0)
+            let status = ecritum_value_get_bool(value, &raw)
+            guard status == ECRITUM_OK else { throw copyError(status: status, error: 0) }
+            return .bool(raw != 0)
+        case ECRITUM_VALUE_KIND_INT:
+            var raw = Int64(0)
+            let status = ecritum_value_get_int(value, &raw)
+            guard status == ECRITUM_OK else { throw copyError(status: status, error: 0) }
+            return .int(raw)
+        case ECRITUM_VALUE_KIND_DOUBLE:
+            var raw = 0.0
+            let status = ecritum_value_get_double(value, &raw)
+            guard status == ECRITUM_OK else { throw copyError(status: status, error: 0) }
+            return .double(raw)
+        case ECRITUM_VALUE_KIND_STRING:
+            var view = ecritum_string_view_t(data: nil, len: 0)
+            let status = ecritum_value_get_string(value, &view)
+            guard status == ECRITUM_OK else { throw copyError(status: status, error: 0) }
+            return .string(copyString(view))
+        case ECRITUM_VALUE_KIND_DATA:
+            var view = ecritum_bytes_t(data: nil, len: 0)
+            let status = ecritum_value_get_data(value, &view)
+            guard status == ECRITUM_OK else { throw copyError(status: status, error: 0) }
+            return .data(copyData(view))
+        case ECRITUM_VALUE_KIND_ARRAY:
+            var count = 0
+            let countStatus = ecritum_value_count(value, &count)
+            guard countStatus == ECRITUM_OK else { throw copyError(status: countStatus, error: 0) }
+            var values: [EcritumValue] = []
+            values.reserveCapacity(count)
+            for index in 0..<count {
+                var child: ecritum_value_t = 0
+                var error: ecritum_error_t = 0
+                let status = ecritum_value_array_get(value, index, &child, &error)
+                guard status == ECRITUM_OK else { throw copyError(status: status, error: error) }
+                defer { var owned = child; _ = ecritum_value_destroy(&owned) }
+                values.append(try copyNativeValue(child))
+            }
+            return .array(values)
+        case ECRITUM_VALUE_KIND_OBJECT:
+            var count = 0
+            let countStatus = ecritum_value_count(value, &count)
+            guard countStatus == ECRITUM_OK else { throw copyError(status: countStatus, error: 0) }
+            var object: [String: EcritumValue] = [:]
+            object.reserveCapacity(count)
+            for index in 0..<count {
+                var key = ecritum_string_view_t(data: nil, len: 0)
+                var child: ecritum_value_t = 0
+                var error: ecritum_error_t = 0
+                let status = ecritum_value_object_entry(value, index, &key, &child, &error)
+                guard status == ECRITUM_OK else { throw copyError(status: status, error: error) }
+                defer { var owned = child; _ = ecritum_value_destroy(&owned) }
+                object[copyString(key)] = try copyNativeValue(child)
+            }
+            return .object(object)
+        default:
+            throw EcritumError.internalFailure(.lifecycle(.internalFailure, operation: "value_copy"))
+        }
+    }
+
+    private func copyString(_ view: ecritum_string_view_t) -> String {
+        guard let data = view.data, view.len > 0 else { return "" }
+        let bytes = UnsafeRawPointer(data).assumingMemoryBound(to: UInt8.self)
+        let buffer = UnsafeBufferPointer(start: bytes, count: Int(view.len))
+        return String(decoding: buffer, as: UTF8.self)
+    }
+
+    private func copyData(_ view: ecritum_bytes_t) -> Data {
+        guard let data = view.data, view.len > 0 else { return Data() }
+        return Data(bytes: data, count: Int(view.len))
+    }
+
+    func makeNativeValue(_ value: EcritumValue) throws -> ecritum_value_t {
+        var result: ecritum_value_t = 0
+        var error: ecritum_error_t = 0
+        let status: Int32
+        switch value {
+        case .null:
+            status = ecritum_value_make_null(&result, &error)
+        case let .bool(raw):
+            status = ecritum_value_make_bool(raw ? 1 : 0, &result, &error)
+        case let .int(raw):
+            status = ecritum_value_make_int(raw, &result, &error)
+        case let .double(raw):
+            status = ecritum_value_make_double(raw, &result, &error)
+        case let .string(raw):
+            var mutable = raw
+            status = mutable.withUTF8 { buffer in
+                ecritum_value_make_string(stringView(buffer), &result, &error)
+            }
+        case let .data(raw):
+            status = raw.withUnsafeBytes { buffer in
+                ecritum_value_make_data(bytes(buffer), &result, &error)
+            }
+        case let .array(values):
+            var handles = try makeNativeValues(values)
+            defer {
+                for index in handles.indices {
+                    _ = ecritum_value_destroy(&handles[index])
+                }
+            }
+            status = handles.withUnsafeBufferPointer { buffer in
+                ecritum_value_make_array(buffer.baseAddress, buffer.count, &result, &error)
+            }
+        case let .object(values):
+            let sorted = values.sorted { $0.key < $1.key }
+            var handles = try makeNativeValues(sorted.map(\.value))
+            defer {
+                for index in handles.indices {
+                    _ = ecritum_value_destroy(&handles[index])
+                }
+            }
+            let keyPointers = try makeKeyPointers(sorted.map(\.key))
+            defer {
+                for pointer in keyPointers {
+                    free(pointer)
+                }
+            }
+            var entries: [ecritum_object_entry_t] = []
+            entries.reserveCapacity(sorted.count)
+            for index in sorted.indices {
+                let pointer = keyPointers[index]
+                entries.append(ecritum_object_entry_t(
+                    key: ecritum_string_view_t(data: pointer, len: sorted[index].key.utf8.count),
+                    value: handles[index]
+                ))
+            }
+            status = entries.withUnsafeBufferPointer { buffer in
+                ecritum_value_make_object(buffer.baseAddress, buffer.count, &result, &error)
+            }
+        }
+        guard status == ECRITUM_OK else { throw copyError(status: status, error: error) }
+        return result
+    }
+
+    private func makeNativeValues(_ values: [EcritumValue]) throws -> [ecritum_value_t] {
+        var handles: [ecritum_value_t] = []
+        handles.reserveCapacity(values.count)
+        do {
+            for value in values {
+                handles.append(try makeNativeValue(value))
+            }
+            return handles
+        } catch {
+            for index in handles.indices {
+                _ = ecritum_value_destroy(&handles[index])
+            }
+            throw error
+        }
+    }
+
+    private func makeKeyPointer(_ key: String) throws -> UnsafeMutablePointer<CChar> {
+        let keyBytes = Array(key.utf8)
+        guard let rawPointer = malloc(max(keyBytes.count, 1)) else {
+            throw EcritumError.outOfMemory(.lifecycle(.outOfMemory, operation: "value_make_object"))
+        }
+        if !keyBytes.isEmpty {
+            keyBytes.withUnsafeBufferPointer { buffer in
+                rawPointer.copyMemory(from: buffer.baseAddress!, byteCount: keyBytes.count)
+            }
+        }
+        return rawPointer.assumingMemoryBound(to: CChar.self)
+    }
+
+    private func makeKeyPointers(_ keys: [String]) throws -> [UnsafeMutablePointer<CChar>] {
+        var pointers: [UnsafeMutablePointer<CChar>] = []
+        pointers.reserveCapacity(keys.count)
+        do {
+            for key in keys {
+                pointers.append(try makeKeyPointer(key))
+            }
+            return pointers
+        } catch {
+            for pointer in pointers {
+                free(pointer)
+            }
+            throw error
+        }
     }
     #endif
 }
@@ -330,7 +766,14 @@ private extension EcritumCLifecycleABI {
 
         let box = Unmanaged<EcritumHostFunctionBox>.fromOpaque(userData).takeUnretainedValue()
         do {
-            _ = try box.callback(EcritumCall(handle: call))
+            let value = try box.callback(EcritumCall(handle: call, adapter: EcritumCLifecycleABI.shared))
+            #if ECRITUM_HAS_RUNTIME_ARTIFACT
+            if let outResult {
+                outResult.pointee = try EcritumCLifecycleABI.shared.makeNativeValue(value)
+            }
+            #else
+            _ = value
+            #endif
             return ECRITUM_OK
         } catch {
             return ECRITUM_ERROR_CALLBACK
@@ -345,7 +788,7 @@ private extension EcritumCLifecycleABI {
     }
 }
 
-private extension EcritumErrorDetails {
+extension EcritumErrorDetails {
     static func lifecycle(_ status: EcritumStatus, operation: String) -> EcritumErrorDetails {
         EcritumErrorDetails(
             status: status,

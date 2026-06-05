@@ -1,0 +1,9 @@
+{
+  "resources": {
+    "includes": [
+      {
+        "pattern": "(clojure|sci|edamame)/.*\\.(clj|cljc)$"
+      }
+    ]
+  }
+}

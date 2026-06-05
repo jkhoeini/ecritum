@@ -48,6 +48,8 @@ check-native:
     test -f {{native_stable_dir}}/libecritum.dylib
     test -f {{native_private_headers_dir}}/libecritum.h
     nm -gU {{native_stable_dir}}/libecritum.dylib | grep -q ' _ecritum_graal_version$'
+    nm -gU {{native_stable_dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_clojure$'
+    nm -gU {{native_stable_dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_clojure_with_host$'
     nm -gU {{native_stable_dir}}/libecritum.dylib | grep -q ' _graal_create_isolate$'
     nm -gU {{native_stable_dir}}/libecritum.dylib | grep -q ' _graal_tear_down_isolate$'
 
@@ -82,11 +84,16 @@ test-swift-auto:
 
 conformance:
     mkdir -p build/conformance
-    python3 -m py_compile scripts/run-conformance.py Tests/Conformance/fixtures/provider.py
+    python3 -m py_compile scripts/run-conformance.py Tests/Conformance/fixtures/provider.py Tests/Conformance/fixtures/clojure_native_provider.py
     python3 -m unittest Tests/Conformance/test_runner.py
     python3 scripts/run-conformance.py --manifest Tests/Conformance/manifest.json --provider python3 Tests/Conformance/fixtures/provider.py --mode scaffold > build/conformance/scaffold.json
 
 test-conformance: conformance
+
+conformance-clojure-native:
+    test -d dist/local/EcritumRuntime.xcframework
+    mkdir -p build/conformance
+    python3 scripts/run-conformance.py --manifest Tests/Conformance/manifest.json --category eval --category host --category error --strict --provider-timeout-seconds 30 --provider python3 Tests/Conformance/fixtures/clojure_native_provider.py > build/conformance/clojure-native.json
 
 security:
     mkdir -p build/security
@@ -134,6 +141,32 @@ test-c-abi-host-registration-asan:
     clang -DECRITUM_TESTING -fsanitize=address,undefined -fno-omit-frame-pointer -I Sources/CEcritum/include -I build/native/macos-arm64/include/private scripts/ecritum_runtime_wrapper.c Tests/C/host_registration_contract.c -o build/c-abi/host_registration_contract_asan
     ASAN_OPTIONS=detect_leaks=0 build/c-abi/host_registration_contract_asan
 
+test-c-abi-eval:
+    mkdir -p build/c-abi
+    clang -DECRITUM_TESTING -I Sources/CEcritum/include -I build/native/macos-arm64/include/private scripts/ecritum_runtime_wrapper.c Tests/C/eval_job_contract.c -o build/c-abi/eval_job_contract
+    build/c-abi/eval_job_contract
+
+test-c-abi-eval-asan:
+    mkdir -p build/c-abi
+    clang -DECRITUM_TESTING -fsanitize=address,undefined -fno-omit-frame-pointer -I Sources/CEcritum/include -I build/native/macos-arm64/include/private scripts/ecritum_runtime_wrapper.c Tests/C/eval_job_contract.c -o build/c-abi/eval_job_contract_asan
+    ASAN_OPTIONS=detect_leaks=0 build/c-abi/eval_job_contract_asan
+
+test-native-eval-smoke:
+    test -f build/native/macos-arm64/libecritum.dylib
+    mkdir -p build/c-abi
+    clang -I Sources/CEcritum/include -I build/native/macos-arm64/include/private scripts/ecritum_runtime_wrapper.c Tests/C/native_eval_smoke.c -L build/native/macos-arm64 -lecritum -o build/c-abi/native_eval_smoke
+    DYLD_LIBRARY_PATH=build/native/macos-arm64 build/c-abi/native_eval_smoke
+
+test-native-eval-smoke-asan:
+    test -f build/native/macos-arm64/libecritum.dylib
+    mkdir -p build/c-abi
+    clang -fsanitize=address,undefined -fno-omit-frame-pointer -I Sources/CEcritum/include -I build/native/macos-arm64/include/private scripts/ecritum_runtime_wrapper.c Tests/C/native_eval_smoke.c -L build/native/macos-arm64 -lecritum -o build/c-abi/native_eval_smoke_asan
+    ASAN_OPTIONS=detect_leaks=0 DYLD_LIBRARY_PATH=build/native/macos-arm64 build/c-abi/native_eval_smoke_asan
+
+test-xcframework-eval-smoke:
+    test -d dist/local/EcritumRuntime.xcframework
+    scripts/swift-test.sh --mode runtime
+
 test-c-abi-policy-config:
     mkdir -p build/c-abi
     clang -DECRITUM_TESTING -I Sources/CEcritum/include -I build/native/macos-arm64/include/private scripts/ecritum_runtime_wrapper.c Tests/C/policy_config_contract.c -o build/c-abi/policy_config_contract
@@ -152,7 +185,11 @@ test-lifecycle-leak-smoke:
         binary="dist/local/EcritumRuntime.xcframework/$slice/EcritumRuntime.framework/EcritumRuntime"; \
         leaks --atExit -- build/c-abi/framework_lifecycle_smoke "$binary"
 
-test: plan-check conformance security test-swift-auto test-java test-c-abi-lifecycle test-c-abi-asan test-c-abi-host-registration test-c-abi-host-registration-asan test-c-abi-policy-config test-c-abi-policy-config-asan test-examples-auto
+test: plan-check conformance security test-swift-auto test-java test-c-abi-lifecycle test-c-abi-asan test-c-abi-host-registration test-c-abi-host-registration-asan test-c-abi-eval test-c-abi-eval-asan test-native-eval-smoke test-native-eval-smoke-asan test-xcframework-eval-smoke test-c-abi-policy-config test-c-abi-policy-config-asan check-abi license-report check-dep-delta test-examples-auto
+
+test-m3-002b: native test-native-eval-smoke test-native-eval-smoke-asan xcframework test-xcframework-eval-smoke check-abi license-report check-dep-delta
+
+test-m3-002c: native test-java test-c-abi-eval test-c-abi-eval-asan test-native-eval-smoke test-native-eval-smoke-asan xcframework test-xcframework-eval-smoke conformance-clojure-native security check-abi license-report check-dep-delta
 
 example-swift:
     @test -d dist/local/EcritumRuntime.xcframework || { echo "missing dist/local/EcritumRuntime.xcframework; run mise exec -- just xcframework first" >&2; exit 1; }

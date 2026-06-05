@@ -11,6 +11,8 @@ ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / "scripts" / "run-conformance.py"
 MANIFEST = ROOT / "Tests" / "Conformance" / "manifest.json"
 FIXTURE_PROVIDER = ROOT / "Tests" / "Conformance" / "fixtures" / "provider.py"
+CLOJURE_NATIVE_PROVIDER = ROOT / "Tests" / "Conformance" / "fixtures" / "clojure_native_provider.py"
+CLOJURE_NATIVE_ARTIFACT = ROOT / "dist" / "local" / "EcritumRuntime.xcframework"
 
 
 REQUIRED_CASE_IDS = {
@@ -168,6 +170,26 @@ class ConformanceRunnerTests(unittest.TestCase):
         self.assertEqual(cases["model.swift.value_kinds"]["status"], "pass")
         self.assertEqual(cases["model.swift.structured_errors"]["status"], "pass")
         self.assertEqual(cases["model.swift.policy_config_serialization"]["status"], "pass")
+
+    @unittest.skipUnless(CLOJURE_NATIVE_ARTIFACT.exists(), "requires local runtime artifact")
+    def test_clojure_native_provider_passes_eval_host_and_error_strict(self):
+        result = run_conformance(
+            "--category", "eval",
+            "--category", "host",
+            "--category", "error",
+            "--strict",
+            "--provider-timeout-seconds", "30",
+            "--provider",
+            sys.executable,
+            str(CLOJURE_NATIVE_PROVIDER),
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertTrue(payload["ok"])
+        self.assertTrue(payload["conformant"])
+        self.assertEqual(payload["provider"]["id"], "clojure-native-xcframework")
+        self.assertEqual(payload["summary"]["pending"], 0)
 
     def test_malformed_provider_output_is_runner_error(self):
         tempdir, provider = provider_script(

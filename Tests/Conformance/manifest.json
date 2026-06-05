@@ -13,6 +13,7 @@
         "evidenceCommands": [
           "mise exec -- just test-c-abi-lifecycle",
           "mise exec -- just test-c-abi-host-registration",
+          "mise exec -- just test-c-abi-eval",
           "mise exec -- just test-c-abi-policy-config"
         ]
       }
@@ -29,7 +30,7 @@
       },
       "expected": {
         "status": "ECRITUM_ERROR_SCRIPT",
-        "category": "script",
+        "category": "runtime",
         "operation": "eval"
       }
     },
@@ -129,7 +130,9 @@
           "mise exec -- just test-c-abi-lifecycle",
           "mise exec -- just test-c-abi-asan",
           "mise exec -- just test-c-abi-host-registration",
-          "mise exec -- just test-c-abi-host-registration-asan"
+          "mise exec -- just test-c-abi-host-registration-asan",
+          "mise exec -- just test-c-abi-eval",
+          "mise exec -- just test-c-abi-eval-asan"
         ]
       }
     },

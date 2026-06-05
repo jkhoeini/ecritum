@@ -38,7 +38,7 @@ if find "$headers" -type f \( -name 'graal*.h' -o -name 'libecritum*.h' \) | gre
 fi
 
 nm -gU "$binary" | grep -q ' _ecritum_version$'
-if nm -gU "$binary" | grep -E ' (_ecritum_graal_version|_graal_create_isolate|_graal_tear_down_isolate)$'; then
+if nm -gU "$binary" | grep -E ' (_ecritum_graal_version|_ecritum_graal_eval_clojure|_ecritum_graal_eval_clojure_with_host|_graal_create_isolate|_graal_tear_down_isolate)$'; then
   echo "private Graal symbols leaked from public wrapper binary" >&2
   exit 1
 fi

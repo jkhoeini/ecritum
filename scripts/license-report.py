@@ -30,6 +30,7 @@ def pom_license(path):
 def spdx_license_expression(license_name):
     mapping = {
         "Universal Permissive License, Version 1.0": "UPL-1.0",
+        "Eclipse Public License 1.0": "EPL-1.0",
         "Eclipse Public License 2.0": "EPL-2.0",
     }
     if license_name in (None, "NOASSERTION", "UNKNOWN"):
@@ -75,6 +76,13 @@ if native_pom.exists():
 
 nativeimage_license = pom_license(m2 / "org" / "graalvm" / "sdk" / "nativeimage" / graal_version / f"nativeimage-{graal_version}.pom")
 word_license = pom_license(m2 / "org" / "graalvm" / "sdk" / "word" / graal_version / f"word-{graal_version}.pom")
+sci_license = pom_license(m2 / "org" / "babashka" / "sci" / "0.12.51" / "sci-0.12.51.pom")
+clojure_license = pom_license(m2 / "org" / "clojure" / "clojure" / "1.10.3" / "clojure-1.10.3.pom")
+spec_alpha_license = pom_license(m2 / "org" / "clojure" / "spec.alpha" / "0.2.194" / "spec.alpha-0.2.194.pom")
+core_specs_alpha_license = pom_license(m2 / "org" / "clojure" / "core.specs.alpha" / "0.2.56" / "core.specs.alpha-0.2.56.pom")
+edamame_license = pom_license(m2 / "borkdude" / "edamame" / "1.5.37" / "edamame-1.5.37.pom")
+tools_reader_license = pom_license(m2 / "org" / "clojure" / "tools.reader" / "1.5.2" / "tools.reader-1.5.2.pom")
+graal_locking_license = pom_license(m2 / "borkdude" / "graal.locking" / "0.0.2" / "graal.locking-0.0.2.pom")
 if "SOURCE_DATE_EPOCH" in os.environ:
     created_at = dt.datetime.fromtimestamp(int(os.environ["SOURCE_DATE_EPOCH"]), dt.timezone.utc)
 else:
@@ -107,6 +115,78 @@ packages = [
         nativeimage_license["name"] if nativeimage_license else None,
         created,
         "https://github.com/oracle/graal",
+    ),
+    package(
+        "SPDXRef-Package-SCI",
+        "org.babashka:sci",
+        "0.12.51",
+        "shipped",
+        sci_license["name"] if sci_license else None,
+        created,
+        "https://github.com/babashka/SCI",
+    ),
+    package(
+        "SPDXRef-Package-Clojure",
+        "org.clojure:clojure",
+        "1.10.3",
+        "shipped",
+        clojure_license["name"] if clojure_license else None,
+        created,
+        "https://github.com/clojure/clojure",
+    ),
+    package(
+        "SPDXRef-Package-Clojure-SpecAlpha",
+        "org.clojure:spec.alpha",
+        "0.2.194",
+        "shipped",
+        spec_alpha_license["name"] if spec_alpha_license else None,
+        created,
+        "https://github.com/clojure/spec.alpha",
+    ),
+    package(
+        "SPDXRef-Package-Clojure-CoreSpecsAlpha",
+        "org.clojure:core.specs.alpha",
+        "0.2.56",
+        "shipped",
+        core_specs_alpha_license["name"] if core_specs_alpha_license else None,
+        created,
+        "https://github.com/clojure/core.specs.alpha",
+    ),
+    package(
+        "SPDXRef-Package-Edamame",
+        "borkdude:edamame",
+        "1.5.37",
+        "shipped",
+        edamame_license["name"] if edamame_license else None,
+        created,
+        "https://github.com/borkdude/edamame",
+    ),
+    package(
+        "SPDXRef-Package-Clojure-ToolsReader",
+        "org.clojure:tools.reader",
+        "1.5.2",
+        "shipped",
+        tools_reader_license["name"] if tools_reader_license else None,
+        created,
+        "https://github.com/clojure/tools.reader",
+    ),
+    package(
+        "SPDXRef-Package-SCI-ImplTypes",
+        "org.babashka:sci.impl.types",
+        "0.0.2",
+        "shipped",
+        "Eclipse Public License 1.0",
+        created,
+        "https://clojars.org/org.babashka/sci.impl.types",
+    ),
+    package(
+        "SPDXRef-Package-GraalLocking",
+        "borkdude:graal.locking",
+        "0.0.2",
+        "shipped",
+        graal_locking_license["name"] if graal_locking_license else None,
+        created,
+        "https://github.com/borkdude/graal.locking",
     ),
     package(
         "SPDXRef-Package-GraalVM-Word-SDK",
