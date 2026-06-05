@@ -2946,12 +2946,34 @@ Definition of done:
 - ThreadSanitizer, leak checks, and lifecycle stress tests pass where practical.
 - A packaged macOS app smoke test loads the runtime without external runtimes.
 
-*** TODO M4.5-001 ADR for ABI versioning and freeze policy
+*** DONE M4.5-001 ADR for ABI versioning and freeze policy
 
 Lead persona: Architecture Expert.
 Reviewer personas: Swift DX, Release, Tests.
 Depends on: M3-002, M4-002.
 Write scope: docs/adr/.
+
+Assigned sub-agents:
+
+- Architecture Expert: Wegener the 2nd.
+- Swift DX / Release: Pasteur the 2nd.
+- Tests/TDD: Bernoulli the 2nd.
+
+Planning status:
+
+- 2026-06-05: Started M4.5-001 in stacked jj child change `sxrokoqp`
+  (`docs: plan ABI freeze policy`) on top of completed M4-002.
+- 2026-06-05: Claude plan consult invoked directly with `claude -p` and no
+  auth-check step. The bounded compact prompt timed out with no output; do not
+  count Claude as plan signoff.
+- 2026-06-05: Drafted `docs/adr/0012-abi-versioning-and-compatibility-policy.md`
+  as Proposed. The draft treats `docs/abi/ecritum-c-abi.json` as the freeze
+  ledger, allows additive runtime behavior behind existing symbols, blocks
+  optional new public C symbols until an ABI query path exists, and assigns
+  manifest-schema expansion to the M4.5 freeze follow-up.
+- 2026-06-05: Accepted ADR-012. The ADR is policy-complete, not
+  freeze-complete: freeze-grade manifest/checker hardening is split into
+  M4.5-001A before packaged app smoke begins.
 
 Definition of done:
 
@@ -2959,11 +2981,74 @@ Definition of done:
   and breaking-change process.
 - `just check-abi` is the verification path.
 
+Review:
+
+- Architecture review: PASS for policy acceptance. Required follow-up: manifest
+  must cover typedefs, structs, callbacks, value kinds, job states, private
+  symbol patterns, ABI query policy, extra-export checks, release docs, and
+  Mach-O compatibility metadata before ABI freeze is claimed.
+- Tests/TDD review: PASS for ADR acceptance only if `ecritum_version` remains a
+  product version and manifest/check hardening is required before freeze.
+  `mise exec -- just check-abi` passed, but current coverage is not
+  freeze-grade.
+- Swift DX / Release review: PASS for policy acceptance. Release blocker before
+  M4.5-002: harden `check-abi`; Swift currently checks artifact presence and
+  `ecritum_version`, not ABI compatibility, so typed old-artifact failure is
+  deferred to the freeze-hardening follow-up.
+- Claude plan consult: initial bounded prompt timed out. Final compact ADR
+  status review returned PASS: no blocker to marking ADR-012 accepted as policy
+  with freeze hardening tracked separately.
+
+#+begin_src markdown
+## Verification
+
+Layers tested: Contract, Release
+Commands run:
+- `mise exec -- just check-abi` -> exit 0
+- `mise exec -- just plan-check` -> exit 0
+New tests added:
+- None; this task accepts policy only.
+Negative paths tested:
+- None; negative ABI checker fixtures are required by M4.5-001A.
+Size impact:
+- N/A
+Sanitizers:
+- not run: docs-only ADR task.
+Not verified:
+- Freeze-grade ABI enforcement, ABI query implementation, typed old-artifact
+  Swift compatibility failure, and sanitizer/leak/stress gates are owned by
+  M4.5-001A/M4.5-002.
+#+end_src
+
+*** TODO M4.5-001A Harden ABI manifest and check-abi for freeze
+
+Lead persona: Tests/TDD.
+Reviewer personas: Architecture, Swift DX, Release, Security.
+Depends on: M4.5-001.
+Write scope: docs/abi/, scripts/, Tests/, Sources/CEcritum/include/ecritum.h,
+Sources/Ecritum/.
+
+Definition of done:
+
+- `docs/abi/ecritum-c-abi.json` covers public functions, status constants,
+  value kinds, job states, public typedefs, public structs, callback types,
+  buffer constants, private-symbol patterns, and packaged-slice expectations.
+- `just check-abi` rejects extra public exports, missing declarations,
+  renumbered constants, header drift, private symbol leaks, and manifest/header/
+  Java/Swift status divergence.
+- Packaged header equality and all shipped slices are checked.
+- The release pipeline's Mach-O `current_version` and `compatibility_version`
+  policy is tied to ADR-012 or explicitly documented as pre-release metadata.
+- Swift has either a typed runtime-artifact ABI mismatch failure path or an
+  accepted deferral that blocks external release candidates.
+- Verification includes negative checker fixtures, C/C++ header smoke, packaged
+  `check-abi`, Swift status mapping tests, and reviewer signoff.
+
 *** TODO M4.5-002 Build packaged macOS smoke app
 
 Lead persona: Swift DX.
 Reviewer personas: Release, Tests, Security.
-Depends on: M4.5-001.
+Depends on: M4.5-001A.
 Write scope: Examples/, Tests/, scripts/.
 
 Definition of done:
@@ -3116,7 +3201,7 @@ Output of: M6-002.
 Output of: M7-001.
 ** TODO ADR-011 License inventory and redistribution policy
 Output of: M7-003.
-** TODO ADR-012 ABI versioning and compatibility policy
+** DONE ADR-012 ABI versioning and compatibility policy
 Output of: M4.5-001.
 ** DONE ADR-013 Java and host interop exposure policy
 Output of: M2.5-001.
