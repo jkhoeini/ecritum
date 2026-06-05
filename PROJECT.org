@@ -2728,17 +2728,77 @@ Definition of done:
 - Size and startup deltas are recorded.
 - The shared conformance suite passes for JavaScript.
 
-*** TODO M4-001 ADR for JavaScript support scope
+*** DONE M4-001 ADR for JavaScript support scope
 
 Lead persona: GraalVM Runtime.
 Reviewer personas: Architecture, Security, Swift DX, Release.
 Write scope: docs/adr/.
+
+Assigned sub-agents:
+
+- GraalVM Runtime: Feynman the 2nd.
+- Architecture: Ohm the 2nd.
+- Security: Newton the 2nd.
+- Swift DX: Zeno the 2nd.
+- Release: Darwin the 2nd.
+- Tests/TDD: Hume the 2nd.
+
+Planning status:
+
+- 2026-06-05: Engineering manager started M4-001 in a fresh `jj` change on top
+  of completed M3-003.
+- 2026-06-05: Assigned fresh M4-001 persona agents for GraalVM Runtime,
+  Architecture, Security, Swift DX, Release, and Tests/TDD. Their scope is
+  read-only plan review and ADR acceptance criteria; implementation stays
+  blocked until ADR-006 is accepted.
+- 2026-06-05: Local research confirmed current Swift policy already models
+  `javascript` as a language, while the native eval worker is currently
+  Clojure-only. M4-002 must add a JavaScript adapter behind the existing
+  eval/job/value/host-call ABI rather than widening the public C ABI.
+- 2026-06-05: Official GraalVM documentation reviewed for GraalJS embedding,
+  Java/Node separation, CommonJS behavior, and Polyglot `Context.Builder`
+  access controls.
+- 2026-06-05: Drafted
+  `docs/adr/0006-javascript-support-scope-and-nodejs-non-goals.md` as Proposed.
+  First review found blockers from Architecture, Swift DX, Tests/TDD, Release,
+  and Claude: missing alternatives, projection collisions, JavaScript value/
+  status mapping, Promise/top-level-await semantics, concrete JS abuse probes,
+  JavaScript-specific benchmark gates, dependency/license tree evidence,
+  Native Image metadata review, and Core/Full artifact rules.
+- 2026-06-05: Patched ADR-006 to resolve the first-round blockers. Evidence
+  added includes the exact Maven runtime dependency tree for `js-community`
+  25.0.2, expected shipped/build/POM scopes, expected license expressions,
+  denial semantics, strict conformance/security gates, and the Release decision
+  to prefer `js-community` over `js` unless compile/license evidence forces a
+  revised ADR.
+- 2026-06-05: Second review passed. Claude returned PASS. Architecture, Security,
+  Swift DX, Release, and Tests/TDD returned PASS. GraalVM Runtime confirmed the
+  technical blockers were resolved and only required recording the second-pass
+  review evidence before acceptance.
+- 2026-06-05: Marked ADR-006 Accepted. M4-002 remains blocked until it implements
+  the accepted ADR gates, including JavaScript-specific conformance/security
+  providers, Native Image shared-library proof, dependency/license updates,
+  size/startup evidence, and no public C ABI widening.
+
+Verification evidence:
+
+- `mise exec -- just plan-check` -> PASS.
+- Temporary Maven dependency tree for `org.graalvm.polyglot:polyglot:25.0.2`
+  and `org.graalvm.polyglot:js-community:25.0.2` using
+  `.mvn/settings.xml` -> PASS; tree recorded in ADR-006.
+- Local POM license metadata inspection for the expected GraalJS dependency
+  tree -> PASS; expected license expressions recorded in ADR-006.
+- Claude second review -> PASS; no blockers.
+- Persona second reviews -> PASS or bookkeeping-only; bookkeeping was resolved
+  by this acceptance record.
 
 Definition of done:
 
 - Modern ECMAScript target is stated.
 - Node compatibility and native npm modules are non-goals for v0.
 - fetch/filesystem behavior is permission-gated through Ecritum APIs.
+- Host calls, values, structured errors, size/startup measurement, security
+  abuse cases, and strict JavaScript conformance verification are specified.
 
 *** TODO M4-002 Implement GraalJS smoke path
 
@@ -2928,7 +2988,7 @@ Output of: M2-007.
 Output of: M2.5-001.
 ** DONE ADR-005 SCI/Babashka compatibility scope
 Output of: M3-001.
-** TODO ADR-006 JavaScript support scope and Node.js non-goals
+** DONE ADR-006 JavaScript support scope and Node.js non-goals
 Output of: M4-001.
 ** TODO ADR-007 Lua runtime choice and default artifact policy
 Output of: M5-001.
