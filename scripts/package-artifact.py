@@ -48,6 +48,20 @@ def should_skip(path):
     return path.name == ".DS_Store" or "__MACOSX" in parts or path.name.startswith("._")
 
 
+def artifact_release_lane(artifact):
+    metadata_path = artifact / "macos-arm64" / "EcritumRuntime.framework" / "Resources" / "ecritum-runtime-lane.json"
+    if not metadata_path.exists():
+        raise SystemExit(f"missing artifact lane metadata: {metadata_path}")
+    try:
+        payload = json.loads(metadata_path.read_text())
+    except json.JSONDecodeError as error:
+        raise SystemExit(f"invalid artifact lane metadata: {metadata_path}: {error}") from error
+    lane = payload.get("releaseLane")
+    if lane not in ("core", "full"):
+        raise SystemExit(f"invalid artifact release lane metadata: {lane!r}")
+    return lane
+
+
 parser = argparse.ArgumentParser(description="Create a deterministic SwiftPM release zip for EcritumRuntime.")
 parser.add_argument("--artifact", default="dist/local/EcritumRuntime.xcframework")
 parser.add_argument("--output", default="dist/release/EcritumRuntime.xcframework.zip")
@@ -62,6 +76,9 @@ manifest = Path(args.manifest) if args.manifest else Path(str(output) + ".json")
 checksum_output = Path(args.checksum_output) if args.checksum_output else Path(str(output) + ".checksum")
 if not artifact.is_dir():
     raise SystemExit(f"missing artifact directory: {artifact}")
+actual_lane = artifact_release_lane(artifact)
+if actual_lane != args.release_lane:
+    raise SystemExit(f"artifact release lane {actual_lane!r} does not match requested lane {args.release_lane!r}")
 
 output.parent.mkdir(parents=True, exist_ok=True)
 manifest.parent.mkdir(parents=True, exist_ok=True)
@@ -97,6 +114,7 @@ payload = {
     "output": str(output),
     "manifest": str(manifest),
     "releaseLane": args.release_lane,
+    "artifactReleaseLane": actual_lane,
     "sha256": checksum,
     "swiftPackageChecksum": checksum,
     "entries": len(files),

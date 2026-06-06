@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 import ctypes
 import json
+import os
 import tempfile
 import sys
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[3]
-FRAMEWORK = ROOT / "dist/local/EcritumRuntime.xcframework/macos-arm64/EcritumRuntime.framework/EcritumRuntime"
+FRAMEWORK = Path(os.environ.get(
+    "ECRITUM_NATIVE_FRAMEWORK",
+    ROOT / "dist/local/EcritumRuntime.xcframework/macos-arm64/EcritumRuntime.framework/EcritumRuntime",
+))
 
 ECRITUM_OK = 0
 ECRITUM_ERROR_CALLBACK = 18

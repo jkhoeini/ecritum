@@ -7,7 +7,11 @@ maven_settings := ".mvn/settings.xml"
 maven_project := "native/pom.xml"
 native_output := "native/target/libecritum.dylib"
 native_stable_dir := "build/native/macos-arm64"
+native_core_stable_dir := "build/native/core/macos-arm64"
+native_full_stable_dir := "build/native/full/macos-arm64"
 native_private_headers_dir := "build/native/macos-arm64/include/private"
+native_core_private_headers_dir := "build/native/core/macos-arm64/include/private"
+native_full_private_headers_dir := "build/native/full/macos-arm64/include/private"
 
 default:
     @just --list
@@ -32,21 +36,66 @@ build-java:
 
 test-java:
     test -f {{maven_project}}
-    mvn -s {{maven_settings}} -f {{maven_project}} test
+    mvn -s {{maven_settings}} -f {{maven_project}} -Pfull test
 
 test-javascript-java: test-java
 
 native:
+    just native-full
+
+native-core:
     test -f {{maven_project}}
-    MACOSX_DEPLOYMENT_TARGET={{min_macos}} mvn -s {{maven_settings}} -f {{maven_project}} -Pnative -DskipTests package
+    MACOSX_DEPLOYMENT_TARGET={{min_macos}} mvn -s {{maven_settings}} -f {{maven_project}} clean package -Pnative,core -Decritum.native.mainClass=ecritum.NativeCoreEntrypoints -Dmaven.test.skip=true
     test -f {{native_output}}
+    mkdir -p {{native_core_stable_dir}}
+    mkdir -p {{native_core_private_headers_dir}}
+    cp {{native_output}} {{native_core_stable_dir}}/libecritum.dylib
+    cp native/target/graal_isolate.h native/target/graal_isolate_dynamic.h native/target/libecritum.h native/target/libecritum_dynamic.h {{native_core_private_headers_dir}}/
+    just check-native-core
+
+native-full:
+    test -f {{maven_project}}
+    MACOSX_DEPLOYMENT_TARGET={{min_macos}} mvn -s {{maven_settings}} -f {{maven_project}} clean package -Pnative,full -Decritum.native.mainClass=ecritum.NativeEntrypoints -Dmaven.test.skip=true
+    test -f {{native_output}}
+    mkdir -p {{native_full_stable_dir}}
+    mkdir -p {{native_full_private_headers_dir}}
+    cp {{native_output}} {{native_full_stable_dir}}/libecritum.dylib
+    cp native/target/graal_isolate.h native/target/graal_isolate_dynamic.h native/target/libecritum.h native/target/libecritum_dynamic.h {{native_full_private_headers_dir}}/
     mkdir -p {{native_stable_dir}}
     mkdir -p {{native_private_headers_dir}}
     cp {{native_output}} {{native_stable_dir}}/libecritum.dylib
     cp native/target/graal_isolate.h native/target/graal_isolate_dynamic.h native/target/libecritum.h native/target/libecritum_dynamic.h {{native_private_headers_dir}}/
+    just check-native-full
     just check-native
 
 check-native:
+    just check-native-full {{native_stable_dir}}
+
+check-native-core dir="build/native/core/macos-arm64":
+    test -f {{dir}}/libecritum.dylib
+    test -f {{dir}}/include/private/libecritum.h
+    nm -gU {{dir}}/libecritum.dylib | grep -q ' _ecritum_graal_version$'
+    nm -gU {{dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_clojure$'
+    nm -gU {{dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_clojure_with_host$'
+    nm -gU {{dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_clojure_with_stdlib$'
+    ! nm -gU {{dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_javascript_with_stdlib$'
+    ! nm -gU {{dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_lua_with_stdlib$'
+    nm -gU {{dir}}/libecritum.dylib | grep -q ' _graal_create_isolate$'
+    nm -gU {{dir}}/libecritum.dylib | grep -q ' _graal_tear_down_isolate$'
+
+check-native-full dir="build/native/full/macos-arm64":
+    test -f {{dir}}/libecritum.dylib
+    test -f {{dir}}/include/private/libecritum.h
+    nm -gU {{dir}}/libecritum.dylib | grep -q ' _ecritum_graal_version$'
+    nm -gU {{dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_clojure$'
+    nm -gU {{dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_clojure_with_host$'
+    nm -gU {{dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_clojure_with_stdlib$'
+    nm -gU {{dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_javascript_with_stdlib$'
+    nm -gU {{dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_lua_with_stdlib$'
+    nm -gU {{dir}}/libecritum.dylib | grep -q ' _graal_create_isolate$'
+    nm -gU {{dir}}/libecritum.dylib | grep -q ' _graal_tear_down_isolate$'
+
+check-native-legacy:
     test -f {{native_stable_dir}}/libecritum.dylib
     test -f {{native_private_headers_dir}}/libecritum.h
     nm -gU {{native_stable_dir}}/libecritum.dylib | grep -q ' _ecritum_graal_version$'
@@ -60,7 +109,17 @@ check-native:
 
 xcframework output="dist/local/EcritumRuntime.xcframework":
     test -d build/native
-    scripts/build-xcframework.sh --output "{{output}}"
+    scripts/build-xcframework.sh --native-dir "{{native_stable_dir}}" --lane full --output "{{output}}"
+    just check-xcframework "{{output}}"
+
+xcframework-core output="dist/core/EcritumRuntime.xcframework":
+    test -d {{native_core_stable_dir}}
+    scripts/build-xcframework.sh --native-dir "{{native_core_stable_dir}}" --lane core --work-dir "build/xcframework/core" --output "{{output}}"
+    just check-xcframework "{{output}}"
+
+xcframework-full output="dist/full/EcritumRuntime.xcframework":
+    test -d {{native_full_stable_dir}}
+    scripts/build-xcframework.sh --native-dir "{{native_full_stable_dir}}" --lane full --work-dir "build/xcframework/full" --output "{{output}}"
     just check-xcframework "{{output}}"
 
 check-xcframework artifact="dist/local/EcritumRuntime.xcframework":
@@ -191,6 +250,11 @@ test-c-abi-eval:
     mkdir -p build/c-abi
     clang -DECRITUM_TESTING -I Sources/CEcritum/include -I build/native/macos-arm64/include/private scripts/ecritum_runtime_wrapper.c Tests/C/eval_job_contract.c -o build/c-abi/eval_job_contract
     build/c-abi/eval_job_contract
+
+test-c-abi-eval-core-lane:
+    mkdir -p build/c-abi
+    clang -DECRITUM_TESTING -DECRITUM_RUNTIME_LANE_CORE -I Sources/CEcritum/include -I build/native/macos-arm64/include/private scripts/ecritum_runtime_wrapper.c Tests/C/eval_job_contract.c -o build/c-abi/eval_job_contract_core_lane
+    build/c-abi/eval_job_contract_core_lane
 
 test-c-abi-eval-asan:
     mkdir -p build/c-abi
@@ -340,8 +404,8 @@ bench-first-eval:
 bench-javascript-first-eval:
     @python3 scripts/measure-first-eval.py --name javascript-first-eval --language javascript --source "40 + 2" --source-name bench-first-eval.js
 
-check-dep-delta:
-    @python3 scripts/check-dep-delta.py
+check-dep-delta lane="full":
+    @python3 scripts/check-dep-delta.py --lane "{{lane}}"
 
 check-license-texts artifact="dist/local/EcritumRuntime.xcframework" license_report="":
     @args=(--artifact "{{artifact}}"); \
@@ -364,17 +428,17 @@ perf-baseline: size bench-cold-start bench-swift-cold-start bench-idle-rss bench
 
 perf: perf-baseline
 
-license-report:
-    @python3 scripts/license-report.py
+license-report lane="full":
+    @python3 scripts/license-report.py --lane "{{lane}}"
 
-sbom output="dist/release/EcritumRuntime.xcframework.zip.spdx.json":
-    @python3 scripts/license-report.py > "{{output}}"
+sbom output="dist/release/EcritumRuntime.xcframework.zip.spdx.json" lane="full":
+    @python3 scripts/license-report.py --lane "{{lane}}" > "{{output}}"
 
-license-report-strict:
-    @python3 scripts/license-report.py --strict
+license-report-strict lane="full":
+    @python3 scripts/license-report.py --strict --lane "{{lane}}"
 
-third-party-notices output="THIRD_PARTY_NOTICES.md":
-    @SOURCE_DATE_EPOCH=0 python3 scripts/license-report.py --notices > "{{output}}"
+third-party-notices output="THIRD_PARTY_NOTICES.md" lane="full":
+    @SOURCE_DATE_EPOCH=0 python3 scripts/license-report.py --notices --lane "{{lane}}" > "{{output}}"
 
 release-check lane="":
     @args=(); \

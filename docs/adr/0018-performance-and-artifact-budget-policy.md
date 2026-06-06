@@ -19,13 +19,13 @@ Ruby, Node, or Clojure install at runtime. Full is allowed to carry heavier
 language runtimes once licensing, packaging, and performance data justify it.
 The Full lane is explicit; it is never the default artifact by accident.
 
-Initial Core gates:
+Current Core gates:
 
-- artifact directory size: 25,000,000 bytes
-- artifact size warning: above 15,000,000 bytes or above 10% growth from the
-  current baseline
+- artifact directory size: 35,000,000 bytes
+- artifact size warning: above 33,000,000 bytes or above 10% growth from the
+  current Core baseline
 - public wrapper binary size: 262,144 bytes
-- private native runtime size: 20,000,000 bytes
+- private native runtime size: 33,000,000 bytes
 - C host fresh-process cold start: p50 250 ms, p95 500 ms
 - `dlopen + dlsym`: p95 250 ms
 - first wrapper call, including Graal isolate create/call/teardown: p95 750 ms
@@ -59,16 +59,20 @@ SCI/GraalJS/Lua candidate artifact:
 - private native runtime size: 190,000,000 bytes
 - Full-lane artifact baseline: 151,941,677 bytes
 
-The current combined SCI/GraalJS/Lua artifact is a Full candidate, not a
-release-ready Core artifact. A true Core artifact still requires Native Image
-build profiles, matching wrapper symbols, lane-aware dependency/SBOM baselines,
-and either Core budget compliance or a follow-up ADR rebaseline. Python and Ruby
-remain future Full candidates and are not included in this M7 Full candidate.
+M8 adds a true SCI-only Core artifact lane. The Core Native Image profile exports
+only the private Clojure entrypoints, the wrapper is compiled with Core language
+guards, and Core dependency/SBOM evidence excludes GraalJS, Truffle, and LuaJ.
+The first measured Core artifact exceeds the original M1 tripwires, so this ADR
+accepts a new default-lane budget based on the measured SCI-only artifact:
+
+- Core artifact baseline: 31,144,742 bytes
+- Core private native runtime baseline: 30,511,744 bytes
+- Core public wrapper baseline: 147,280 bytes
 
 Python and Ruby are Full-only until GraalPy and TruffleRuby measurements prove
 they satisfy Core gates with known licenses and without separate runtime
-installation. SCI/Clojure, JavaScript, and Lua may remain Core only while their
-measured deltas stay within Core gates.
+installation. SCI/Clojure is the default Core language. JavaScript and Lua are
+Full-only unless later measurements and security work justify promoting them.
 
 ## Measurement Commands
 
@@ -87,7 +91,7 @@ measured deltas stay within Core gates.
 
 ## M1 Baseline
 
-Current M1 artifact measurements:
+Historical M1 artifact measurements:
 
 - artifact directory: 12,967,170 bytes
 - public wrapper binary: 33,568 bytes

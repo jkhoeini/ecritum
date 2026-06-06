@@ -12,6 +12,14 @@
 #include <time.h>
 #include <unistd.h>
 
+#ifdef ECRITUM_RUNTIME_LANE_CORE
+#define ECRITUM_RUNTIME_HAS_JAVASCRIPT 0
+#define ECRITUM_RUNTIME_HAS_LUA 0
+#else
+#define ECRITUM_RUNTIME_HAS_JAVASCRIPT 1
+#define ECRITUM_RUNTIME_HAS_LUA 1
+#endif
+
 #ifdef ECRITUM_TESTING
 typedef struct __graal_isolate_t {
     int marker;
@@ -4454,7 +4462,27 @@ static void *eval_worker_main(void *raw_work) {
     uint8_t backend_buffer[ECRITUM_BACKEND_RESULT_MAX_BYTES] = {0};
     long long backend_bytes_written = 0;
 
-    if (backend_status == ECRITUM_OK && work->language != NULL && strcmp(work->language, "javascript") == 0) {
+    if (backend_status == ECRITUM_OK && work->language != NULL && strcmp(work->language, "clojure") == 0) {
+        backend_status = ecritum_graal_eval_clojure_with_stdlib(
+            thread,
+            (char *)work->source,
+            work->source_len,
+            work->source_name,
+            work->source_name_len,
+            work->host_manifest,
+            work->host_manifest_len,
+            host_call_bridge_from_graal,
+            (size_t)work->runtime,
+            work->standard_library_manifest,
+            work->standard_library_manifest_len,
+            standard_library_bridge_from_graal,
+            (size_t)work->context,
+            (char *)backend_buffer,
+            sizeof(backend_buffer),
+            &backend_bytes_written
+        );
+#if ECRITUM_RUNTIME_HAS_JAVASCRIPT
+    } else if (backend_status == ECRITUM_OK && work->language != NULL && strcmp(work->language, "javascript") == 0) {
         backend_status = ecritum_graal_eval_javascript_with_stdlib(
             thread,
             (char *)work->source,
@@ -4473,6 +4501,8 @@ static void *eval_worker_main(void *raw_work) {
             sizeof(backend_buffer),
             &backend_bytes_written
         );
+#endif
+#if ECRITUM_RUNTIME_HAS_LUA
     } else if (backend_status == ECRITUM_OK && work->language != NULL && strcmp(work->language, "lua") == 0) {
         backend_status = ecritum_graal_eval_lua_with_stdlib(
             thread,
@@ -4492,25 +4522,7 @@ static void *eval_worker_main(void *raw_work) {
             sizeof(backend_buffer),
             &backend_bytes_written
         );
-    } else if (backend_status == ECRITUM_OK && work->language != NULL && strcmp(work->language, "clojure") == 0) {
-        backend_status = ecritum_graal_eval_clojure_with_stdlib(
-            thread,
-            (char *)work->source,
-            work->source_len,
-            work->source_name,
-            work->source_name_len,
-            work->host_manifest,
-            work->host_manifest_len,
-            host_call_bridge_from_graal,
-            (size_t)work->runtime,
-            work->standard_library_manifest,
-            work->standard_library_manifest_len,
-            standard_library_bridge_from_graal,
-            (size_t)work->context,
-            (char *)backend_buffer,
-            sizeof(backend_buffer),
-            &backend_bytes_written
-        );
+#endif
     } else if (backend_status == ECRITUM_OK) {
         backend_status = ECRITUM_ERROR_RUNTIME_UNAVAILABLE;
     }
@@ -4567,7 +4579,14 @@ __attribute__((visibility("default"))) int ecritum_eval_start(
     if (validation != ECRITUM_OK) {
         return fail_with_error(validation, "eval_start", "invalid eval input", out_error);
     }
-    if (!view_equals(language, "clojure") && !view_equals(language, "javascript") && !view_equals(language, "lua")) {
+    if (!view_equals(language, "clojure")
+#if ECRITUM_RUNTIME_HAS_JAVASCRIPT
+        && !view_equals(language, "javascript")
+#endif
+#if ECRITUM_RUNTIME_HAS_LUA
+        && !view_equals(language, "lua")
+#endif
+    ) {
         return fail_with_error(ECRITUM_ERROR_RUNTIME_UNAVAILABLE, "eval_start", "language is not available in this artifact", out_error);
     }
     if (options_json.len != 0) {

@@ -17,7 +17,7 @@ import org.graalvm.word.UnsignedWord;
 import org.graalvm.word.WordFactory;
 
 public final class NativeEntrypoints {
-    public static final String VERSION = "0.1.0-dev";
+    public static final String VERSION = EcritumVersion.VALUE;
     private static final byte[] VERSION_BYTES = VERSION.getBytes(StandardCharsets.UTF_8);
 
     private NativeEntrypoints() {

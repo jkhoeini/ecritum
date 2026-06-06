@@ -28,7 +28,9 @@ class SizeArtifactTest(unittest.TestCase):
         self.private_runtime = framework / "Resources" / "libecritum_graal.dylib"
         make_file(self.wrapper, 64 * 1024)
         self.wrapper.chmod(self.wrapper.stat().st_mode | stat.S_IXUSR)
-        make_file(self.private_runtime, 30_000_000)
+        make_file(self.private_runtime, 151_000_000)
+        self.metadata = framework / "Resources" / "ecritum-runtime-lane.json"
+        self.write_release_lane("full")
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -41,14 +43,26 @@ class SizeArtifactTest(unittest.TestCase):
         core_payload = json.loads(core.stdout)
         self.assertEqual(core_payload["lane"], "core")
         self.assertFalse(core_payload["ok"])
+        self.assertEqual(core_payload["artifact_release_lane"], "full")
+        self.assertIn("artifact release lane 'full' does not match requested lane 'core'", core_payload["violations"])
         self.assertTrue(any("artifact_bytes" in violation for violation in core_payload["violations"]))
         self.assertTrue(any("private_runtime_bytes" in violation for violation in core_payload["violations"]))
 
         self.assertEqual(full.returncode, 0, full.stdout + full.stderr)
         full_payload = json.loads(full.stdout)
         self.assertEqual(full_payload["lane"], "full")
+        self.assertEqual(full_payload["artifact_release_lane"], "full")
         self.assertTrue(full_payload["ok"])
         self.assertEqual(full_payload["violations"], [])
+
+    def test_lane_metadata_mismatch_is_a_violation_even_when_size_fits(self):
+        self.write_release_lane("core")
+
+        completed = self.run_size("full")
+
+        self.assertEqual(completed.returncode, 1)
+        payload = json.loads(completed.stdout)
+        self.assertIn("artifact release lane 'core' does not match requested lane 'full'", payload["violations"])
 
     def test_missing_private_runtime_is_a_violation(self):
         self.private_runtime.unlink()
@@ -82,6 +96,9 @@ class SizeArtifactTest(unittest.TestCase):
             stderr=subprocess.PIPE,
             check=False,
         )
+
+    def write_release_lane(self, lane):
+        self.metadata.write_text(json.dumps({"formatVersion": 1, "releaseLane": lane}) + "\n")
 
 
 if __name__ == "__main__":

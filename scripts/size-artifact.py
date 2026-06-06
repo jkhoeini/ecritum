@@ -6,11 +6,11 @@ from pathlib import Path
 
 
 CORE_BUDGETS = {
-    "max_artifact_bytes": 25_000_000,
+    "max_artifact_bytes": 35_000_000,
     "max_wrapper_bytes": 262_144,
-    "max_private_runtime_bytes": 20_000_000,
-    "warn_artifact_bytes": 15_000_000,
-    "baseline_artifact_bytes": 12_967_170,
+    "max_private_runtime_bytes": 33_000_000,
+    "warn_artifact_bytes": 33_000_000,
+    "baseline_artifact_bytes": 31_144_742,
 }
 
 FULL_BUDGETS = {
@@ -32,6 +32,17 @@ def directory_size(path):
         for filename in filenames:
             total += (Path(root) / filename).stat().st_size
     return total
+
+
+def artifact_release_lane(artifact):
+    metadata_path = artifact / "macos-arm64" / "EcritumRuntime.framework" / "Resources" / "ecritum-runtime-lane.json"
+    if not metadata_path.exists():
+        return None
+    try:
+        payload = json.loads(metadata_path.read_text())
+    except json.JSONDecodeError:
+        return "invalid"
+    return payload.get("releaseLane")
 
 
 parser = argparse.ArgumentParser(description="Emit the Ecritum runtime artifact size baseline as JSON.")
@@ -68,6 +79,7 @@ private_runtime = framework / "Resources" / "libecritum_graal.dylib"
 payload = {
     "artifact": str(artifact),
     "lane": args.lane,
+    "artifact_release_lane": artifact_release_lane(artifact) if artifact.exists() else None,
     "exists": artifact.exists(),
     "budgets": {
         "artifact_bytes": max_artifact_bytes,
@@ -87,6 +99,8 @@ if args.require_artifact and not artifact.exists():
     payload["violations"].append("artifact missing")
 
 if artifact.exists():
+    if payload["artifact_release_lane"] != args.lane:
+        payload["violations"].append(f"artifact release lane {payload['artifact_release_lane']!r} does not match requested lane {args.lane!r}")
     checks = [
         ("artifact_bytes", max_artifact_bytes),
         ("wrapper_bytes", max_wrapper_bytes),

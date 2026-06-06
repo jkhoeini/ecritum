@@ -14,6 +14,7 @@ USAGE
 lane="core"
 output_dir=""
 artifact="dist/local/EcritumRuntime.xcframework"
+artifact_was_set="0"
 release_zip=""
 just_bin="${JUST:-just}"
 
@@ -28,7 +29,7 @@ while [ "$#" -gt 0 ]; do
       case "$1" in
         --lane) lane="$2" ;;
         --output-dir) output_dir="$2" ;;
-        --artifact) artifact="$2" ;;
+        --artifact) artifact="$2"; artifact_was_set="1" ;;
         --release-zip) release_zip="$2" ;;
       esac
       shift 2
@@ -44,6 +45,9 @@ if [ "$lane" != "core" ] && [ "$lane" != "full" ]; then
 fi
 if [ -z "$output_dir" ]; then
   output_dir="build/release/$lane"
+fi
+if [ "$artifact_was_set" = "0" ]; then
+  artifact="dist/$lane/EcritumRuntime.xcframework"
 fi
 if [ -z "$release_zip" ]; then
   release_zip="dist/release/$lane/EcritumRuntime.xcframework.zip"
@@ -61,7 +65,7 @@ sbom_file="$release_zip.spdx.json"
 "$just_bin" bench-cold-start > "$output_dir/cold-start.json"
 "$just_bin" bench-first-eval > "$output_dir/first-eval.json"
 "$just_bin" bench-idle-rss > "$output_dir/idle-rss.json"
-"$just_bin" check-dep-delta > "$output_dir/dependency-delta.json"
+"$just_bin" check-dep-delta "$lane" > "$output_dir/dependency-delta.json"
 "$just_bin" package-artifact "$artifact" "$release_zip" "$lane" > "$output_dir/package.json"
 cmp "$output_dir/package.json" "$package_manifest"
 "$just_bin" package-artifact-verify "$artifact" "$lane" > "$output_dir/package-reproducibility.json"
@@ -88,12 +92,12 @@ elif [ -n "${ECRITUM_CONSUMER_ARTIFACT_CHECKSUM:-}" ]; then
 else
   printf '%s\n' '{"ok":false,"skipped":true,"reason":"ECRITUM_CONSUMER_ARTIFACT_URL is not set; SwiftPM binary target URLs require https"}' > "$output_dir/clean-consumer.json"
 fi
-"$just_bin" sbom "$output_dir/licenses.spdx.json"
+"$just_bin" sbom "$output_dir/licenses.spdx.json" "$lane"
 cp "$output_dir/licenses.spdx.json" "$sbom_file"
-"$just_bin" third-party-notices "$output_dir/THIRD_PARTY_NOTICES.md"
+"$just_bin" third-party-notices "$output_dir/THIRD_PARTY_NOTICES.md" full
 cmp "$output_dir/THIRD_PARTY_NOTICES.md" THIRD_PARTY_NOTICES.md
 "$just_bin" check-license-texts "$artifact" "$output_dir/licenses.spdx.json" > "$output_dir/license-texts.json"
 "$just_bin" check-license-texts-zip "$release_zip" "$output_dir/licenses.spdx.json" > "$output_dir/license-texts-zip.json"
 "$just_bin" check-vulnerability-response "$release_zip" "$output_dir/licenses.spdx.json" "${ECRITUM_CONSUMER_ARTIFACT_URL:-}" > "$output_dir/vulnerability-response.json"
 python3 scripts/size-artifact.py --artifact "$artifact" --lane "$lane" --require-artifact > "$output_dir/size.json"
-"$just_bin" license-report-strict > "$output_dir/licenses-strict.spdx.json"
+"$just_bin" license-report-strict "$lane" > "$output_dir/licenses-strict.spdx.json"

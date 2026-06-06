@@ -27,7 +27,9 @@ class ReleaseCheckTest(unittest.TestCase):
         self.artifact = self.root / "EcritumRuntime.xcframework"
         framework = self.artifact / "macos-arm64" / "EcritumRuntime.framework"
         make_file(framework / "EcritumRuntime", 64 * 1024)
-        make_file(framework / "Resources" / "libecritum_graal.dylib", 30_000_000)
+        resources = framework / "Resources"
+        make_file(resources / "libecritum_graal.dylib", 30_000_000)
+        (resources / "ecritum-runtime-lane.json").write_text('{"formatVersion":1,"releaseLane":"full"}\n')
         self.output_dir = self.root / "release-output"
         self.release_zip = self.root / "release" / "full" / "EcritumRuntime.xcframework.zip"
         self.fake_bin = self.root / "bin"
@@ -178,7 +180,7 @@ class ReleaseCheckTest(unittest.TestCase):
         package_payload = json.loads((self.output_dir / "package.json").read_text())
         self.assertEqual(size_payload["lane"], "core")
         self.assertEqual(package_payload["releaseLane"], "core")
-        self.assertIn("artifact_bytes", " ".join(size_payload["violations"]))
+        self.assertIn("artifact release lane 'full' does not match requested lane 'core'", size_payload["violations"])
 
     def test_invalid_lane_exits_before_running_gates(self):
         completed = subprocess.run(

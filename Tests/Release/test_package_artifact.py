@@ -47,6 +47,7 @@ class PackageArtifactTest(unittest.TestCase):
         runtime.write_text("runtime\n")
         runtime.chmod(runtime.stat().st_mode | stat.S_IXUSR)
         (resources / "libecritum_graal.dylib").write_text("graal\n")
+        (resources / "ecritum-runtime-lane.json").write_text('{"formatVersion":1,"releaseLane":"core"}\n')
         (license_resources / "manifest.json").write_text('{"formatVersion":1,"licenseTexts":[]}\n')
         (license_resources / "MIT.txt").write_text("license\n")
         (framework / ".DS_Store").write_text("skip\n")
@@ -113,11 +114,35 @@ class PackageArtifactTest(unittest.TestCase):
         self.assertEqual(payload["releaseLane"], "core")
 
     def test_writes_full_release_lane_to_package_manifest(self):
+        self.write_release_lane("full")
         result = self.run_package("full-lane", release_lane="full")
 
         payload = json.loads(result["manifest"].read_text())
 
         self.assertEqual(payload["releaseLane"], "full")
+        self.assertEqual(payload["artifactReleaseLane"], "full")
+
+    def test_rejects_release_lane_that_does_not_match_artifact_metadata(self):
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(PACKAGE_ARTIFACT),
+                "--artifact",
+                str(self.artifact),
+                "--output",
+                str(self.root / "mismatch.zip"),
+                "--release-lane",
+                "full",
+            ],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("artifact release lane 'core' does not match requested lane 'full'", completed.stderr)
 
     def test_release_lane_environment_does_not_relabel_package(self):
         env = os.environ.copy()
@@ -147,6 +172,7 @@ class PackageArtifactTest(unittest.TestCase):
         self.assertEqual(json.loads(manifest.read_text())["releaseLane"], "core")
 
     def test_reproducibility_checker_propagates_full_release_lane(self):
+        self.write_release_lane("full")
         completed = subprocess.run(
             [
                 sys.executable,
@@ -169,6 +195,10 @@ class PackageArtifactTest(unittest.TestCase):
         payload = json.loads(completed.stdout)
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["releaseLane"], "full")
+
+    def write_release_lane(self, lane):
+        metadata = self.artifact / "macos-arm64" / "EcritumRuntime.framework" / "Resources" / "ecritum-runtime-lane.json"
+        metadata.write_text(json.dumps({"formatVersion": 1, "releaseLane": lane}) + "\n")
 
     def test_release_manifest_requires_url_and_checksum_together(self):
         completed = self.describe_package({"ECRITUM_RUNTIME_URL": "https://example.invalid/EcritumRuntime.xcframework.zip"})

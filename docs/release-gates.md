@@ -26,15 +26,17 @@ unit tests.
 The release gate is:
 
 ```sh
-mise exec -- just native
-mise exec -- just xcframework
+mise exec -- just native-core
+mise exec -- just xcframework-core
 mise exec -- just release-check
 ```
 
-The default release lane is Core. To validate the current combined
-SCI/GraalJS/Lua candidate as Full, run:
+The default release lane is Core. To validate the combined SCI/GraalJS/Lua
+candidate as Full, run:
 
 ```sh
+mise exec -- just native-full
+mise exec -- just xcframework-full
 mise exec -- just release-check full
 ```
 
@@ -75,12 +77,11 @@ because it is a host-example benchmark rather than a release blocker while the C
 ABI packaging gates cover the artifact runtime path. First-eval is part of
 `release-check` once the eval ABI exists.
 
-The current combined SCI/GraalJS/Lua local artifact exceeds ADR-018 Core size
-budgets and is classified as a Full candidate. `just release-check` still
-defaults to Core and is expected to fail at the size gate for this artifact
-until a true Core build exists or ADR-018 is rebaselined. `just release-check
-full` applies Full size gates; after those pass, the strict license step remains
-a publication blocker until the project owner chooses and commits a top-level
+The default Core lane is a SCI/Clojure-only artifact. The combined
+SCI/GraalJS/Lua artifact is classified as a Full candidate and must be selected
+explicitly with `full`; ambient `ECRITUM_RELEASE_LANE` does not promote it.
+After Core or Full lane size gates pass, the strict license step remains a
+publication blocker until the project owner chooses and commits a top-level
 Ecritum license.
 
 SwiftPM requires remote binary target URLs to use `https`. Local `http://` and
@@ -152,14 +153,15 @@ truth. The ABI gate prevents drift until M2 replaces that duplication.
 install names, bundled resources, code-signing status, architectures, minimum
 macOS version, checksums, and embedded runtime list.
 
-`just size` prints JSON and applies Core regression budgets by default:
+`just size dist/core/EcritumRuntime.xcframework core` prints JSON and applies
+Core regression budgets:
 
-- artifact directory: 25,000,000 bytes
-- artifact warning: above 15,000,000 bytes or above 10% growth from baseline
+- artifact directory: 35,000,000 bytes
+- artifact warning: above 33,000,000 bytes or above 10% growth from baseline
 - public wrapper binary: 262,144 bytes
-- private Graal runtime: 20,000,000 bytes
+- private Graal runtime: 33,000,000 bytes
 
-`just size dist/local/EcritumRuntime.xcframework full` applies Full candidate
+`just size dist/full/EcritumRuntime.xcframework full` applies Full candidate
 budgets:
 
 - artifact directory: 200,000,000 bytes

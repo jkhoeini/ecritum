@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'USAGE'
-Usage: build-xcframework.sh [--native-dir PATH] [--public-headers PATH] [--license-texts-dir PATH] [--output PATH] [--work-dir PATH] [--min-macos VERSION] [--sign-identity ID] [--skip-sign]
+Usage: build-xcframework.sh [--lane core|full] [--native-dir PATH] [--public-headers PATH] [--license-texts-dir PATH] [--output PATH] [--work-dir PATH] [--min-macos VERSION] [--sign-identity ID] [--skip-sign]
 
 Build dist/local/EcritumRuntime.xcframework from the M1 native output.
 Diagnostics go to stderr. The output path is printed to stdout.
@@ -18,9 +18,11 @@ work_dir="build/xcframework"
 min_macos="14.0"
 sign_identity="${ECRITUM_CODESIGN_IDENTITY:--}"
 skip_sign="0"
+lane="full"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
+    --lane) lane="$2"; shift 2 ;;
     --native-dir) native_dir="$2"; shift 2 ;;
     --public-headers) public_headers="$2"; shift 2 ;;
     --license-texts-dir) license_texts_dir="$2"; shift 2 ;;
@@ -33,6 +35,12 @@ while [ "$#" -gt 0 ]; do
     *) echo "unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
+
+if [ "$lane" != "core" ] && [ "$lane" != "full" ]; then
+  echo "invalid lane: $lane" >&2
+  usage >&2
+  exit 2
+fi
 
 native_lib="$native_dir/libecritum.dylib"
 private_headers="$native_dir/include/private"
@@ -58,7 +66,13 @@ mkdir -p "$framework_dir/Headers" "$modules_dir" "$resources_dir" "$(dirname "$o
 cp "$public_headers/ecritum.h" "$framework_dir/Headers/ecritum.h"
 cp "$native_lib" "$resources_dir/libecritum_graal.dylib"
 cp -R "$license_texts_dir" "$resources_dir/Licenses"
+printf '{"formatVersion":1,"releaseLane":"%s"}\n' "$lane" > "$resources_dir/ecritum-runtime-lane.json"
 install_name_tool -id "@loader_path/Resources/libecritum_graal.dylib" "$resources_dir/libecritum_graal.dylib"
+
+clang_defines=()
+if [ "$lane" = "core" ]; then
+  clang_defines+=("-DECRITUM_RUNTIME_LANE_CORE=1")
+fi
 
 MACOSX_DEPLOYMENT_TARGET="$min_macos" clang \
   -dynamiclib \
@@ -70,6 +84,7 @@ MACOSX_DEPLOYMENT_TARGET="$min_macos" clang \
   -compatibility_version 0.1.0 \
   -I "$public_headers" \
   -I "$private_headers" \
+  "${clang_defines[@]}" \
   scripts/ecritum_runtime_wrapper.c \
   "$resources_dir/libecritum_graal.dylib" \
   -o "$framework_dir/EcritumRuntime"

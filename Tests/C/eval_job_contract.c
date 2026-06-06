@@ -89,6 +89,21 @@ static void assert_data_value(ecritum_value_t value, const uint8_t *expected, si
     CHECK(memcmp(actual.data, expected, expected_len) == 0);
 }
 
+typedef int (*error_view_fn_t)(ecritum_error_t, ecritum_string_view_t *);
+
+static void assert_view(ecritum_string_view_t actual, const char *expected) {
+    size_t expected_len = strlen(expected);
+    CHECK(actual.len == expected_len);
+    CHECK(actual.data != NULL);
+    CHECK(memcmp(actual.data, expected, expected_len) == 0);
+}
+
+static void assert_error_field(ecritum_error_t error, error_view_fn_t accessor, const char *expected) {
+    ecritum_string_view_t actual = {0};
+    CHECK(accessor(error, &actual) == ECRITUM_OK);
+    assert_view(actual, expected);
+}
+
 static void create_runtime_and_context(ecritum_runtime_t *runtime, ecritum_context_t *context) {
     ecritum_error_t error = 0;
     CHECK(ecritum_runtime_create(empty_config(), runtime, &error) == ECRITUM_OK);
@@ -256,6 +271,35 @@ static void test_eval_job_success_single_drain_and_busy_context(void) {
     CHECK(ecritum_context_destroy(&context, &error) == ECRITUM_OK);
     CHECK(ecritum_runtime_destroy(&runtime, &error) == ECRITUM_OK);
 }
+
+#ifdef ECRITUM_RUNTIME_LANE_CORE
+static void test_core_lane_rejects_full_only_languages_before_job_creation(void) {
+    ecritum_runtime_t runtime = 0;
+    ecritum_context_t context = 0;
+    ecritum_job_t job = 123;
+    ecritum_error_t error = 0;
+
+    create_runtime_and_context(&runtime, &context);
+
+    CHECK(ecritum_eval_start(context, view("javascript"), bytes("fixture:int:42"), view("core.js"), empty_config(), &job, &error) == ECRITUM_ERROR_RUNTIME_UNAVAILABLE);
+    CHECK(job == 0);
+    CHECK(error != 0);
+    assert_error_field(error, ecritum_error_operation, "eval_start");
+    assert_error_field(error, ecritum_error_category, "runtime_unavailable");
+    CHECK(ecritum_error_destroy(&error) == ECRITUM_OK);
+
+    job = 123;
+    CHECK(ecritum_eval_start(context, view("lua"), bytes("fixture:int:42"), view("core.lua"), empty_config(), &job, &error) == ECRITUM_ERROR_RUNTIME_UNAVAILABLE);
+    CHECK(job == 0);
+    CHECK(error != 0);
+    assert_error_field(error, ecritum_error_operation, "eval_start");
+    assert_error_field(error, ecritum_error_category, "runtime_unavailable");
+    CHECK(ecritum_error_destroy(&error) == ECRITUM_OK);
+
+    CHECK(ecritum_context_destroy(&context, &error) == ECRITUM_OK);
+    CHECK(ecritum_runtime_destroy(&runtime, &error) == ECRITUM_OK);
+}
+#endif
 
 static void test_job_cancel_wait_destroy_and_invalid_handles(void) {
     ecritum_runtime_t runtime = 0;
@@ -541,6 +585,9 @@ int main(void) {
     test_value_scalar_array_and_object_accessors();
     test_value_invalid_inputs_and_wrong_kind_paths();
     test_eval_job_success_single_drain_and_busy_context();
+#ifdef ECRITUM_RUNTIME_LANE_CORE
+    test_core_lane_rejects_full_only_languages_before_job_creation();
+#endif
     test_job_cancel_wait_destroy_and_invalid_handles();
     test_undrained_result_destroy_releases_context();
     test_callback_arguments_result_precedence_and_active_cleanup();

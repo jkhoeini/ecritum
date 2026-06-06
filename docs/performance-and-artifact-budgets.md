@@ -6,27 +6,28 @@ budget policy. This page is the operator-facing checklist.
 ## Current Commands
 
 ```sh
-mise exec -- just size
-mise exec -- just size dist/local/EcritumRuntime.xcframework full
+mise exec -- just size dist/core/EcritumRuntime.xcframework core
+mise exec -- just size dist/full/EcritumRuntime.xcframework full
 mise exec -- just bench-cold-start
 mise exec -- just bench-swift-cold-start
 mise exec -- just bench-idle-rss
 mise exec -- just bench-first-eval
-mise exec -- just check-dep-delta
+mise exec -- just check-dep-delta core
+mise exec -- just check-dep-delta full
 ```
 
 `bench-first-eval` compiles a tiny C host against the packaged XCFramework and
 measures `eval_start` through `job_result` for SCI Clojure. It exits nonzero when
 the packaged artifact is missing or when first-eval latency exceeds budget.
 
-## Initial Core Gates
+## Current Core Gates
 
-| Gate | Command | Budget | M1 baseline |
+| Gate | Command | Budget | Current baseline |
 | --- | --- | ---: | ---: |
-| Artifact directory | `just size` | 25,000,000 bytes | 12,967,170 bytes |
-| Artifact warning | `just size` | 15,000,000 bytes or >10% growth | 12,967,170 bytes |
-| Public wrapper | `just size` | 262,144 bytes | 33,568 bytes |
-| Private runtime | `just size` | 20,000,000 bytes | 12,931,448 bytes |
+| Artifact directory | `just size ... core` | 35,000,000 bytes | 31,144,742 bytes |
+| Artifact warning | `just size ... core` | 33,000,000 bytes or >10% growth | 31,144,742 bytes |
+| Public wrapper | `just size ... core` | 262,144 bytes | 147,280 bytes |
+| Private runtime | `just size ... core` | 33,000,000 bytes | 30,511,744 bytes |
 | C host cold start | `just bench-cold-start` | p50 250 ms, p95 500 ms | measured per run |
 | `dlopen+dlsym` | `just bench-cold-start` | p95 250 ms | measured per run |
 | First wrapper call | `just bench-cold-start` | p95 750 ms | measured per run |
@@ -41,9 +42,9 @@ Core is the default SwiftPM artifact. Full is the heavier artifact reserved for
 runtime combinations that exceed Core gates. `just size` defaults to Core;
 Full checks must be requested explicitly with the `full` lane.
 
-The current combined SCI/GraalJS/Lua local artifact is a Full candidate. It is
-not a release-ready Core artifact, and the default Core lane remains blocked
-until a smaller Core build exists or ADR-018 is rebaselined.
+The Core artifact is a SCI/Clojure-only Native Image build. The combined
+SCI/GraalJS/Lua artifact is a Full candidate and must use explicit Full paths
+and release-lane metadata.
 
 Initial M7 Full-lane size gates for that candidate are:
 
@@ -64,5 +65,5 @@ Python and Ruby remain Full-only until measurements prove:
 - the conformance suite passes
 - no host or end user installs a separate language runtime
 
-SCI/Clojure, JavaScript, and Lua may stay Core only while their measured deltas
-remain inside the Core gates.
+SCI/Clojure is the default Core language. JavaScript and Lua remain Full-only
+unless later measurements and security work justify promoting them.

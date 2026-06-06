@@ -4727,7 +4727,7 @@ Verification:
 - Support-claim scan removed stale v0 line/column and stack-frame claims from
   ADR-002, ADR-005, ADR-016, and ADR-021.
 
-*** TODO M8-002 Produce true Core artifact or rebaseline ADR-018
+*** DONE M8-002 Produce true Core artifact or rebaseline ADR-018
 
 Lead persona: Release.
 Reviewer personas: GraalVM Runtime, Architecture, Tests, Security.
@@ -4750,6 +4750,113 @@ Verification plan:
 - `mise exec -- just size dist/local/EcritumRuntime.xcframework full`
 - `mise exec -- just test-release-tools`
 - `mise exec -- just check-dep-delta`
+
+Decision:
+
+- Implemented a true SCI/Clojure-only Core artifact lane and kept the combined
+  SCI/GraalJS/Lua artifact as explicit Full.
+- ADR-018 now accepts the measured SCI-only Core baseline because the original
+  M1 Core size tripwires were below a real embedded SCI runtime.
+- Core remains the default release lane. Full must be selected explicitly and
+  cannot be selected through ambient `ECRITUM_RELEASE_LANE`.
+
+Implementation:
+
+- Added Maven `core` and `full` source profiles. Shared SCI/value/stdlib support
+  remains in `native/src/main/java/ecritum`.
+- Moved Core private entrypoints to `native/src/core/java/ecritum`.
+- Moved Full private entrypoints plus JavaScript and Lua adapters/tests to
+  `native/src/full/...`.
+- `native-core` builds with `-Pnative,core` and exports only Clojure private
+  entrypoints.
+- `native-full` builds with `-Pnative,full`, exports Clojure, JavaScript, and
+  Lua private entrypoints, and still refreshes the legacy `build/native` path.
+- The C wrapper now compiles with Core language guards and has a C contract test
+  proving JavaScript/Lua eval start returns runtime-unavailable for Core.
+- `xcframework-core` and `xcframework-full` write lane metadata into
+  `Resources/ecritum-runtime-lane.json`.
+- Package, size, dependency-delta, SBOM, and release-check tools validate and
+  propagate selected lanes.
+- Clojure native conformance provider accepts `ECRITUM_NATIVE_FRAMEWORK` so Core
+  and Full artifacts can be tested without swapping `dist/local`.
+
+ADR-018 rebaseline:
+
+- Core artifact budget: 35,000,000 bytes.
+- Core private runtime budget: 33,000,000 bytes.
+- Core wrapper budget: 262,144 bytes.
+- Core artifact baseline: 31,144,742 bytes.
+- Core private runtime baseline: 30,511,744 bytes.
+- Core wrapper baseline: 147,280 bytes.
+
+Review:
+
+- Release/TDD reviewer required true Core first, package/release metadata that
+  cannot relabel artifacts, default release remaining Core, and tests for lane
+  metadata and Full-gate behavior. Implemented.
+- GraalVM Runtime reviewer required SCI-only Core classpath, Core-only private
+  entrypoints, Full-only GraalJS/LuaJ dependencies, wrapper compile guards, and
+  an ADR-018 rebaseline if the measured SCI-only Core exceeded old M1 numbers.
+  Implemented.
+- Claude plan review was invoked directly with `claude -p` and no auth check.
+  It timed out after 90 seconds with no output (`CLAUDE_STATUS=124`), so it is
+  not counted as signoff.
+- Claude post-change review was invoked directly with `claude -p` and no auth
+  check. It timed out after 120 seconds with no output (`CLAUDE_STATUS=124`),
+  so it is not counted as signoff.
+
+Verification:
+
+- `python3 -m py_compile scripts/package-artifact.py scripts/size-artifact.py
+  scripts/check-dep-delta.py scripts/license-report.py
+  Tests/Release/test_package_artifact.py Tests/Release/test_size_artifact.py
+  Tests/Release/test_release_check.py Tests/Release/test_check_dep_delta.py
+  Tests/Release/test_license_report.py` -> exit 0.
+- `bash -n scripts/release-check.sh scripts/build-xcframework.sh` -> exit 0.
+- `mise exec -- mvn -s .mvn/settings.xml -f native/pom.xml test` -> exit 0,
+  27 tests.
+- `mise exec -- mvn -s .mvn/settings.xml -f native/pom.xml -Pcore test` ->
+  exit 0, 27 tests.
+- `mise exec -- just test-java` -> exit 0, 56 tests.
+- `mise exec -- just test-c-abi-eval` -> exit 0.
+- `mise exec -- just test-c-abi-eval-core-lane` -> exit 0.
+- `mise exec -- just native-core` -> exit 0. Native Image classpath contains
+  Native Image SDK, SCI, Clojure, edamame, tools.reader, sci.impl.types, and
+  graal.locking only; no GraalJS, Truffle, or LuaJ. Image size: 30.67 MB.
+- `mise exec -- just xcframework-core` -> exit 0.
+- `mise exec -- just size dist/core/EcritumRuntime.xcframework core` -> exit
+  0; artifact 31,144,742 bytes, private runtime 30,511,744 bytes, wrapper
+  147,280 bytes, no warnings or violations.
+- `mise exec -- just check-abi dist/core/EcritumRuntime.xcframework` -> exit 0.
+- `mise exec -- just check-dep-delta core` -> exit 0; Core shipped inventory
+  excludes GraalJS, Truffle, and LuaJ.
+- `mise exec -- just package-artifact-verify
+  dist/core/EcritumRuntime.xcframework core` -> exit 0; deterministic package
+  checksum `2a1b65bc3d4ba1b306adbecf1b46ba195bd1b41164e75d10874307ee023e3fcb`.
+- `ECRITUM_NATIVE_FRAMEWORK=dist/core/EcritumRuntime.xcframework/.../EcritumRuntime
+  python3 scripts/run-conformance.py ... clojure_native_provider.py` -> exit 0,
+  6/6 strict Clojure eval/host/error cases passed.
+- `nm -u dist/core/.../EcritumRuntime.framework/EcritumRuntime` -> exit 0 and
+  shows Clojure private references only, with no JavaScript or Lua private
+  references.
+- `mise exec -- just native-full` -> exit 0. Native Image classpath includes
+  expected GraalJS/Truffle/LuaJ dependencies. Image size: 152.19 MB.
+- `mise exec -- just xcframework-full` -> exit 0.
+- `mise exec -- just xcframework` -> exit 0 and refreshes `dist/local` as Full.
+- `mise exec -- just size dist/full/EcritumRuntime.xcframework full` -> exit
+  0; artifact 151,958,390 bytes, private runtime 151,325,168 bytes, wrapper
+  147,504 bytes, no warnings or violations.
+- `mise exec -- just check-abi dist/full/EcritumRuntime.xcframework` -> exit 0.
+- `mise exec -- just test-native-eval-smoke` -> exit 0.
+- `mise exec -- just conformance-clojure-native` -> exit 0.
+- `mise exec -- just conformance-javascript-native` -> exit 0.
+- `mise exec -- just conformance-lua-native` -> exit 0.
+- `mise exec -- just test-swift` -> exit 0, 65 tests.
+- `mise exec -- just test-release-tools` -> exit 0, 62 tests.
+- `mise exec -- just check-dep-delta full` -> exit 0.
+- `mise exec -- just package-artifact-verify
+  dist/full/EcritumRuntime.xcframework full` -> exit 0; deterministic package
+  checksum `f0c208b9d7f138543fc4055dc3e108a637e4efb7506dcde91851dfee8d639ce9`.
 
 *** TODO M8-003 Choose first-party Ecritum license
 

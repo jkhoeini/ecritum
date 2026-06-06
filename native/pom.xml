@@ -14,9 +14,11 @@
     <graalvm.version>25.0.2</graalvm.version>
     <junit.version>5.14.1</junit.version>
     <native.maven.plugin.version>1.1.1</native.maven.plugin.version>
+    <build-helper.maven.plugin.version>3.6.1</build-helper.maven.plugin.version>
     <sci.version>0.12.51</sci.version>
     <graaljs.version>${graalvm.version}</graaljs.version>
     <luaj.version>3.0.1</luaj.version>
+    <ecritum.native.mainClass>ecritum.NativeCoreEntrypoints</ecritum.native.mainClass>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
 
@@ -40,25 +42,9 @@
       <version>${graalvm.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.graalvm.polyglot</groupId>
-      <artifactId>polyglot</artifactId>
-      <version>${graaljs.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.graalvm.polyglot</groupId>
-      <artifactId>js-community</artifactId>
-      <version>${graaljs.version}</version>
-      <type>pom</type>
-    </dependency>
-    <dependency>
       <groupId>org.babashka</groupId>
       <artifactId>sci</artifactId>
       <version>${sci.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.luaj</groupId>
-      <artifactId>luaj-jme</artifactId>
-      <version>${luaj.version}</version>
     </dependency>
     <dependency>
       <groupId>org.junit.jupiter</groupId>
@@ -85,6 +71,88 @@
 
   <profiles>
     <profile>
+      <id>core</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>build-helper-maven-plugin</artifactId>
+            <version>${build-helper.maven.plugin.version}</version>
+            <executions>
+              <execution>
+                <id>add-core-sources</id>
+                <phase>generate-sources</phase>
+                <goals>
+                  <goal>add-source</goal>
+                </goals>
+                <configuration>
+                  <sources>
+                    <source>src/core/java</source>
+                  </sources>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <profile>
+      <id>full</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.graalvm.polyglot</groupId>
+          <artifactId>polyglot</artifactId>
+          <version>${graaljs.version}</version>
+        </dependency>
+        <dependency>
+          <groupId>org.graalvm.polyglot</groupId>
+          <artifactId>js-community</artifactId>
+          <version>${graaljs.version}</version>
+          <type>pom</type>
+        </dependency>
+        <dependency>
+          <groupId>org.luaj</groupId>
+          <artifactId>luaj-jme</artifactId>
+          <version>${luaj.version}</version>
+        </dependency>
+      </dependencies>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>build-helper-maven-plugin</artifactId>
+            <version>${build-helper.maven.plugin.version}</version>
+            <executions>
+              <execution>
+                <id>add-full-sources</id>
+                <phase>generate-sources</phase>
+                <goals>
+                  <goal>add-source</goal>
+                </goals>
+                <configuration>
+                  <sources>
+                    <source>src/full/java</source>
+                  </sources>
+                </configuration>
+              </execution>
+              <execution>
+                <id>add-full-test-sources</id>
+                <phase>generate-test-sources</phase>
+                <goals>
+                  <goal>add-test-source</goal>
+                </goals>
+                <configuration>
+                  <sources>
+                    <source>src/full/test/java</source>
+                  </sources>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <profile>
       <id>native</id>
       <build>
         <plugins>
@@ -94,7 +162,7 @@
             <version>${native.maven.plugin.version}</version>
             <extensions>true</extensions>
             <configuration>
-              <mainClass>ecritum.NativeEntrypoints</mainClass>
+              <mainClass>${ecritum.native.mainClass}</mainClass>
               <imageName>libecritum</imageName>
               <buildArgs>
                 <buildArg>--shared</buildArg>
