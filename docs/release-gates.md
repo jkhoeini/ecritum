@@ -46,6 +46,9 @@ mise exec -- just release-check
 - `just checksum`
 - release-mode `swift package describe --type json` with
   `ECRITUM_RELEASE_RUNTIME_REQUIRED=1`
+- `just test-release-consumer-smoke` when `ECRITUM_CONSUMER_ARTIFACT_URL` is
+  set; otherwise `build/release/clean-consumer.json` records a skipped HTTPS
+  artifact gate
 - `just license-report`
 - `scripts/size-artifact.py --require-artifact`
 - `scripts/license-report.py --strict`
@@ -61,6 +64,28 @@ size budgets. `release-check` is therefore expected to exit nonzero at the size
 gate until the Core/Full artifact split or size policy is resolved. After size
 passes, the strict license step remains a publication blocker while shipped
 licenses are unknown.
+
+SwiftPM requires remote binary target URLs to use `https`. Local `http://` and
+`file://` URLs are not accepted as release proof. Self-signed loopback HTTPS
+with a locally trusted certificate is development evidence only; M7-002 release
+acceptance requires a real hosted HTTPS artifact URL and matching checksum. To
+run the clean-consumer release gate, publish the current
+`dist/release/EcritumRuntime.xcframework.zip` to an HTTPS URL, then run:
+
+```sh
+ECRITUM_CONSUMER_ARTIFACT_URL=https://.../EcritumRuntime.xcframework.zip \
+ECRITUM_CONSUMER_ARTIFACT_CHECKSUM=$(cat dist/release/EcritumRuntime.xcframework.zip.checksum) \
+mise exec -- just test-release-consumer-smoke
+```
+
+The clean-consumer smoke creates a temporary SwiftPM executable package outside
+the repo, forces `ECRITUM_RELEASE_RUNTIME_REQUIRED=1`, verifies Ecritum's
+release-mode manifest selects the remote `EcritumRuntime` binary target, rejects
+stale local zip metadata, builds with an isolated SwiftPM HOME/TMPDIR/build
+directory, confirms SwiftPM downloaded `EcritumRuntime.framework` into the build
+directory instead of using `dist/local` by inspecting `workspace-state.json`,
+runs the consumer executable with an empty `PATH`, and checks linked Mach-O paths
+for GraalVM/JDK/native-build leaks.
 
 The M2.5 security baseline adds these CI gates:
 
@@ -231,6 +256,8 @@ M7 uses rebuildable provenance plus deterministic archive metadata:
 - `just checksum` prints the SwiftPM checksum for the release zip
 - `just inspect` records slice, symbol, resource, install-name, and checksum
   metadata
+- `just test-release-consumer-smoke` records HTTPS binary-target consumer
+  evidence when a real HTTPS artifact URL is supplied
 
 Public release signing requires a Developer ID identity, hardened runtime,
 notarization with `notarytool`, and retained notarization evidence. Hosted

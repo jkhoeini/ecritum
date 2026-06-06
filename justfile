@@ -285,6 +285,12 @@ packaged-app-smoke:
 
 test-packaged-app-smoke: packaged-app-smoke
 
+test-release-consumer-smoke artifact_url="" checksum="":
+    @args=(); \
+    if [ -n "{{artifact_url}}" ]; then args+=(--artifact-url "{{artifact_url}}"); fi; \
+    if [ -n "{{checksum}}" ]; then args+=(--checksum "{{checksum}}"); fi; \
+    python3 scripts/test-release-consumer-smoke.py "${args[@]}"
+
 examples: example-swift example-c packaged-app-smoke
 
 test-examples-auto:

@@ -3745,7 +3745,7 @@ Remaining M7 blockers, not M7-001 blockers:
 - The current combined local artifact remains above Core size budgets until the
   Core/Full artifact split or budget policy is resolved.
 
-*** TODO M7-002 Clean-machine consumer validation
+*** IN-PROGRESS M7-002 Clean-machine consumer validation
 
 Lead persona: Tests.
 Reviewer personas: Release, Swift DX, Security.
@@ -3756,6 +3756,139 @@ Definition of done:
 - Consumer app builds and runs on a clean macOS environment.
 - No GraalVM/JDK/language runtime install is required.
 - Failures produce actionable diagnostics.
+
+Execution plan:
+
+- Engineering Manager started M7-002 in jj child change
+  =test: validate clean SwiftPM consumer= on top of completed M7-001.
+- Lead persona: TDD, Testability, and Verification Engineer.
+- Reviewer personas: Release, Swift DX, Security, Unix, and Architecture.
+- Scope: prove a clean external SwiftPM consumer can resolve Ecritum with
+  =.binaryTarget(url:checksum:)= instead of the local path artifact, then run a
+  small program without GraalVM/JDK/language runtime installation in the
+  consumer project.
+- Research checklist:
+  - Read ADR-001, ADR-010, ADR-017, Package.swift, existing
+    =Examples/MacSmokeApp=, =scripts/test-packaged-app-smoke.sh=,
+    =scripts/package-artifact.py=, =scripts/release-check.sh=, and SwiftPM
+    binary target behavior around URL/checksum artifacts.
+  - Determine whether a local HTTP server, file URL, or generated consumer
+    fixture is the safest reusable proof for CI.
+  - Identify exact diagnostics for missing release zip, missing checksum,
+    failed server startup, failed SwiftPM resolution, and runtime load failure.
+- Verification plan:
+  - =mise exec -- just plan-check=
+  - focused script/unit checks for the new clean-consumer tooling
+  - =mise exec -- just package-artifact=
+  - new clean-consumer SwiftPM release-artifact smoke task
+  - =mise exec -- just release-check= or documented expected release blockers
+- Claude review plan: run a scoped plan consult after research, implement after
+  feedback, then run a diff review and iterate once.
+
+Implementation progress:
+
+- Added =scripts/test-release-consumer-smoke.py=, a reusable clean-consumer
+  harness that requires an HTTPS artifact URL and checksum, generates a
+  temporary SwiftPM executable consumer outside the repo, forces
+  =ECRITUM_RELEASE_RUNTIME_REQUIRED=1=, verifies Ecritum's release-mode manifest
+  selects the remote =EcritumRuntime= binary target, rejects stale local release
+  zip/checksum/manifest evidence, builds with isolated SwiftPM =HOME=, =TMPDIR=,
+  and build paths, confirms SwiftPM downloaded =EcritumRuntime.framework= under
+  the build directory instead of using =dist/local=, runs the executable with an
+  empty =PATH=, and checks linked Mach-O paths for GraalVM/JDK/native-build
+  leaks.
+- Added a manifest-only script mode for cheap release-manifest validation tests;
+  the full clean-consumer smoke still requires a positive HTTPS artifact
+  download, build, and runtime execution.
+- Added SwiftPM =workspace-state.json= validation after build: exactly one
+  =EcritumRuntime= artifact for package identity =ecritum=, remote source type
+  reported by SwiftPM, artifact path under the isolated SwiftPM build
+  directory, no =dist/local= fallback, and the expected macOS framework slice.
+- Added =just test-release-consumer-smoke= with optional URL/checksum
+  arguments and environment fallback.
+- Tightened =release-check.sh= so =ECRITUM_CONSUMER_ARTIFACT_CHECKSUM= without
+  =ECRITUM_CONSUMER_ARTIFACT_URL= fails explicitly instead of entering the smoke
+  with an incomplete hosted-artifact configuration.
+- Added negative release-tool tests for non-HTTPS artifact URLs, invalid
+  checksum shape, stale local release zip detection, and release-manifest
+  target selection, checksum sidecar mismatch, package-manifest checksum
+  mismatch, and =workspace-state.json= local/missing/duplicate/missing-source
+  artifact shapes.
+- Integrated optional clean-consumer evidence into =release-check.sh=:
+  =build/release/clean-consumer.json= records either the positive HTTPS
+  consumer result or a skipped gate explaining that SwiftPM binary target URLs
+  require HTTPS and no artifact URL was supplied.
+- Updated =docs/release-gates.md= with the HTTPS requirement, command example,
+  and exact validation behavior.
+
+Review evidence:
+
+- Tests, Release, Swift DX, and Security/Unix personas all agreed that the
+  existing =MacSmokeApp= path-dependency smoke does not prove M7-002. They
+  required a generated external consumer, release-required manifest mode,
+  no-local-fallback assertions, isolated build/runtime environments, stale
+  artifact protection, and clear diagnostics.
+- Local spike showed SwiftPM rejects =http://127.0.0.1= binary target URLs with
+  =invalid URL scheme for binary target 'EcritumRuntime'; valid schemes are:
+  'https'=, so M7-002 cannot honestly use a loopback HTTP server as acceptance
+  evidence.
+- Local loopback HTTPS with =SSL_CERT_FILE= and =REQUESTS_CA_BUNDLE= reached the
+  artifact download path, but SwiftPM still rejected the self-signed certificate
+  via macOS trust evaluation. A temporary-keychain spike was abandoned after
+  Release/Security review because locally trusted loopback HTTPS would be
+  development evidence only, not clean release evidence.
+- Release/Security reviewer decision: M7-002 DONE requires a real hosted HTTPS
+  artifact URL and matching checksum. If temporary loopback HTTPS is ever added
+  as a developer convenience, it must use a disposable keychain, restore the
+  original keychain search list on every exit path, delete all cert/key/keychain
+  temp files, bind only to loopback, kill the server, and fail closed if cleanup
+  cannot be verified.
+- Claude plan consult recommended requiring caller-provided HTTPS URL/checksum
+  instead of self-signed local HTTPS or =file://= workarounds. It also called out
+  local-path masking, artifact provenance assertions, and the boundary between
+  M7-002 validation plumbing and later public hosting/signing automation.
+- Claude diff review after the workspace-state iteration completed successfully.
+  Findings acted on: tighten =release-check.sh= partial env handling, require
+  =source.type == "remote"= instead of allowing a missing source type, add
+  sidecar/manifest/missing-state/missing-source tests, and make missing Mach-O
+  file diagnostics explicit before =otool=.
+- Claude findings accepted without code change: the =DYLD_*= isolation concern
+  does not apply because the runtime subprocess receives an explicit three-key
+  environment instead of inheriting the parent environment; the justfile uses
+  positional task parameters intentionally and converts them to script flags.
+
+Verification evidence:
+
+- =python3 -m py_compile scripts/test-release-consumer-smoke.py scripts/package-artifact.py scripts/check-package-reproducible.py Tests/Release/test_package_artifact.py= -> exit 0.
+- =bash -n scripts/release-check.sh= -> exit 0.
+- =mise exec -- just plan-check= -> exit 0.
+- =mise exec -- just test-release-tools= -> exit 0; 15 tests cover package
+  determinism, manifest release-mode failures/success, reproducibility checker,
+  non-HTTPS URL rejection, invalid checksum rejection, stale release zip
+  rejection, checksum sidecar mismatch, package-manifest checksum mismatch,
+  manifest-only release binary target validation, and SwiftPM
+  =workspace-state.json= remote/local/missing/duplicate/missing-source artifact
+  validation.
+- =python3 scripts/test-release-consumer-smoke.py --artifact-url https://example.invalid/EcritumRuntime.xcframework.zip --checksum 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef --release-zip /tmp/ecritum-missing-release.zip --manifest-only= -> exit 0; release manifest selects =remote/archive/EcritumRuntime.xcframework.zip=.
+- Local loopback HTTPS with temporary self-signed cert plus =SSL_CERT_FILE= /
+  =REQUESTS_CA_BUNDLE= -> expected exit 1 after SwiftPM attempted download;
+  error: =The certificate for this server is invalid=.
+- =mise exec -- just test-release-consumer-smoke= without URL/checksum ->
+  expected exit 1 with =missing artifact URL: pass --artifact-url or set
+  ECRITUM_CONSUMER_ARTIFACT_URL=.
+- =mise exec -- just release-check= -> expected exit 1 after the normal release
+  evidence; =build/release/clean-consumer.json= records
+  ={"ok":false,"skipped":true,"reason":"ECRITUM_CONSUMER_ARTIFACT_URL is not set; SwiftPM binary target URLs require https"}= and
+  =build/release/size.json= still blocks on ADR-018 size:
+  =artifact_bytes 151470866 exceeds budget 25000000= and
+  =private_runtime_bytes 151308752 exceeds budget 20000000=.
+
+Not done yet:
+
+- Positive clean-consumer validation still needs a real HTTPS URL serving the
+  current =dist/release/EcritumRuntime.xcframework.zip= and matching checksum.
+  M7-002 cannot move to DONE until that command succeeds and the output JSON is
+  recorded.
 
 *** TODO M7-003 License inventory and notices
 

@@ -56,6 +56,14 @@ ECRITUM_RELEASE_RUNTIME_REQUIRED=1 \
   ECRITUM_RUNTIME_URL="https://example.invalid/EcritumRuntime.xcframework.zip" \
   ECRITUM_RUNTIME_CHECKSUM="$release_checksum" \
   swift package describe --type json > "$output_dir/release-manifest.json"
+if [ -n "${ECRITUM_CONSUMER_ARTIFACT_URL:-}" ]; then
+  "$just_bin" test-release-consumer-smoke "$ECRITUM_CONSUMER_ARTIFACT_URL" "${ECRITUM_CONSUMER_ARTIFACT_CHECKSUM:-$release_checksum}" > "$output_dir/clean-consumer.json"
+elif [ -n "${ECRITUM_CONSUMER_ARTIFACT_CHECKSUM:-}" ]; then
+  echo "ECRITUM_CONSUMER_ARTIFACT_CHECKSUM requires ECRITUM_CONSUMER_ARTIFACT_URL" >&2
+  exit 1
+else
+  printf '%s\n' '{"ok":false,"skipped":true,"reason":"ECRITUM_CONSUMER_ARTIFACT_URL is not set; SwiftPM binary target URLs require https"}' > "$output_dir/clean-consumer.json"
+fi
 "$just_bin" license-report > "$output_dir/licenses.spdx.json"
 python3 scripts/size-artifact.py --artifact "$artifact" --require-artifact > "$output_dir/size.json"
 python3 scripts/license-report.py --strict > "$output_dir/licenses-strict.spdx.json"

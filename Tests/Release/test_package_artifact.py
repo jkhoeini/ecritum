@@ -2,6 +2,7 @@
 import hashlib
 import json
 import os
+import platform
 import shutil
 import stat
 import subprocess
@@ -15,6 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 PACKAGE_ARTIFACT = ROOT / "scripts" / "package-artifact.py"
 CHECK_PACKAGE_REPRODUCIBLE = ROOT / "scripts" / "check-package-reproducible.py"
+RELEASE_CONSUMER_SMOKE = ROOT / "scripts" / "test-release-consumer-smoke.py"
 NORMALIZED_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 
 
@@ -143,6 +145,172 @@ class PackageArtifactTest(unittest.TestCase):
         self.assertNotEqual(completed.returncode, 0)
         self.assertIn("missing artifact directory", completed.stderr)
 
+    def test_release_consumer_smoke_requires_https_url(self):
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(RELEASE_CONSUMER_SMOKE),
+                "--artifact-url",
+                "http://127.0.0.1/EcritumRuntime.xcframework.zip",
+                "--checksum",
+                "0" * 64,
+            ],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("must use https", completed.stderr)
+
+    def test_release_consumer_smoke_requires_checksum_shape(self):
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(RELEASE_CONSUMER_SMOKE),
+                "--artifact-url",
+                "https://example.invalid/EcritumRuntime.xcframework.zip",
+                "--checksum",
+                "not-a-checksum",
+            ],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("64-character lowercase", completed.stderr)
+
+    def test_release_consumer_smoke_rejects_stale_local_release_zip(self):
+        release_zip = self.root / "release.zip"
+        release_zip.write_text("stale")
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(RELEASE_CONSUMER_SMOKE),
+                "--artifact-url",
+                "https://example.invalid/EcritumRuntime.xcframework.zip",
+                "--checksum",
+                "0" * 64,
+                "--release-zip",
+                str(release_zip),
+            ],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("does not match requested checksum", completed.stderr)
+
+    def test_release_consumer_smoke_rejects_checksum_sidecar_mismatch(self):
+        release_zip = self.root / "release.zip"
+        release_zip.write_text("artifact")
+        checksum = sha256(release_zip)
+        Path(str(release_zip) + ".checksum").write_text("0" * 64)
+
+        completed = self.run_release_consumer_smoke_preflight(release_zip, checksum)
+
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("checksum sidecar does not match", completed.stderr)
+
+    def test_release_consumer_smoke_rejects_package_manifest_mismatch(self):
+        release_zip = self.root / "release.zip"
+        release_zip.write_text("artifact")
+        checksum = sha256(release_zip)
+        Path(str(release_zip) + ".json").write_text(json.dumps({
+            "sha256": checksum,
+            "swiftPackageChecksum": "0" * 64,
+        }))
+
+        completed = self.run_release_consumer_smoke_preflight(release_zip, checksum)
+
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("package manifest checksum does not match", completed.stderr)
+
+    def test_release_consumer_smoke_manifest_only_validates_release_binary_target(self):
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(RELEASE_CONSUMER_SMOKE),
+                "--artifact-url",
+                "https://example.invalid/EcritumRuntime.xcframework.zip",
+                "--checksum",
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "--release-zip",
+                str(self.root / "missing-release.zip"),
+                "--manifest-only",
+            ],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        payload = json.loads(completed.stdout)
+        self.assertTrue(payload["ok"])
+        self.assertTrue(payload["manifestOnly"])
+        self.assertEqual(payload["binaryTargetPath"], "remote/archive/EcritumRuntime.xcframework.zip")
+
+    def test_release_consumer_smoke_workspace_state_accepts_remote_artifact(self):
+        swift_build = self.root / "swift-build"
+        artifact = self.remote_workspace_artifact(swift_build)
+        self.write_workspace_state(swift_build, [artifact])
+
+        completed = self.run_workspace_state_validation(swift_build)
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        payload = json.loads(completed.stdout)
+        self.assertTrue(payload["ok"])
+        expected_framework = (Path(artifact["path"]) / f"macos-{platform.machine()}" / "EcritumRuntime.framework").resolve()
+        self.assertEqual(payload["downloadedFramework"], str(expected_framework))
+
+    def test_release_consumer_smoke_workspace_state_rejects_bad_artifacts(self):
+        cases = [
+            (
+                "local",
+                [self.local_workspace_artifact()],
+                "source type is local",
+            ),
+            (
+                "missing",
+                [],
+                "expected one EcritumRuntime artifact",
+            ),
+            (
+                "duplicate",
+                [
+                    self.remote_workspace_artifact(self.root / "duplicate-swift-build", "one"),
+                    self.remote_workspace_artifact(self.root / "duplicate-swift-build", "two"),
+                ],
+                "expected one EcritumRuntime artifact",
+            ),
+            (
+                "missing-source",
+                [self.remote_workspace_artifact(self.root / "missing-source-swift-build", source=None)],
+                "source type is None",
+            ),
+        ]
+        for name, artifacts, expected_error in cases:
+            with self.subTest(name=name):
+                swift_build = self.root / f"{name}-swift-build"
+                self.write_workspace_state(swift_build, artifacts)
+
+                completed = self.run_workspace_state_validation(swift_build)
+
+                self.assertNotEqual(completed.returncode, 0)
+                self.assertIn(expected_error, completed.stderr)
+
+    def test_release_consumer_smoke_workspace_state_rejects_missing_state_file(self):
+        completed = self.run_workspace_state_validation(self.root / "missing-state-swift-build")
+
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("missing SwiftPM workspace state", completed.stderr)
+
     def describe_package(self, extra_env):
         env = os.environ.copy()
         for key in [
@@ -190,6 +358,96 @@ class PackageArtifactTest(unittest.TestCase):
         self.assertEqual(completed.returncode, 0, completed.stderr)
         json.loads(completed.stdout)
         return {"zip": output, "manifest": manifest, "checksum": checksum}
+
+    def run_workspace_state_validation(self, swift_build):
+        return subprocess.run(
+            [
+                sys.executable,
+                str(RELEASE_CONSUMER_SMOKE),
+                "--artifact-url",
+                "https://example.invalid/EcritumRuntime.xcframework.zip",
+                "--checksum",
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "--release-zip",
+                str(self.root / "missing-release.zip"),
+                "--build-dir",
+                str(self.root / "unused-build-env"),
+                "--validate-workspace-state",
+                str(swift_build),
+            ],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+
+    def run_release_consumer_smoke_preflight(self, release_zip, checksum):
+        return subprocess.run(
+            [
+                sys.executable,
+                str(RELEASE_CONSUMER_SMOKE),
+                "--artifact-url",
+                "https://example.invalid/EcritumRuntime.xcframework.zip",
+                "--checksum",
+                checksum,
+                "--release-zip",
+                str(release_zip),
+            ],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+
+    def write_workspace_state(self, swift_build, artifacts):
+        swift_build.mkdir(parents=True, exist_ok=True)
+        (swift_build / "workspace-state.json").write_text(json.dumps({
+            "object": {
+                "artifacts": artifacts,
+                "dependencies": [],
+                "prebuilts": [],
+            },
+            "version": 7,
+        }))
+
+    def remote_workspace_artifact(self, swift_build, name="EcritumRuntime", source="remote"):
+        artifact_root = swift_build / "artifacts" / "ecritum" / name / "EcritumRuntime.xcframework"
+        (artifact_root / f"macos-{platform.machine()}" / "EcritumRuntime.framework").mkdir(parents=True, exist_ok=True)
+        artifact = {
+            "kind": {"xcframework": {}},
+            "packageRef": {
+                "identity": "ecritum",
+                "kind": "fileSystem",
+                "location": str(ROOT),
+                "name": "Ecritum",
+            },
+            "path": str(artifact_root),
+            "source": {
+                "type": source,
+            },
+            "targetName": "EcritumRuntime",
+        }
+        if source is None:
+            artifact.pop("source")
+        return artifact
+
+    def local_workspace_artifact(self):
+        return {
+            "kind": {"xcframework": {}},
+            "packageRef": {
+                "identity": "ecritum",
+                "kind": "fileSystem",
+                "location": str(ROOT),
+                "name": "Ecritum",
+            },
+            "path": str(ROOT / "dist" / "local" / "EcritumRuntime.xcframework"),
+            "source": {
+                "type": "local",
+            },
+            "targetName": "EcritumRuntime",
+        }
 
 
 if __name__ == "__main__":
