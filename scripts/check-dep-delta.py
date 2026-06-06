@@ -8,7 +8,7 @@ BASELINE = {
     "shipped": [
         {"name": "borkdude:edamame", "version": "1.5.37", "spdx": "EPL-1.0"},
         {"name": "borkdude:graal.locking", "version": "0.0.2", "spdx": "EPL-1.0"},
-        {"name": "EcritumRuntime.xcframework", "version": "0.1.0-dev", "spdx": "NOASSERTION"},
+        {"name": "EcritumRuntime.xcframework", "version": "0.1.0-dev", "spdx": "MIT"},
         {"name": "GraalVM Native Image embedded runtime code", "version": "25.0.2", "spdx": "GPL-2.0-only WITH Classpath-exception-2.0"},
         {"name": "org.babashka:sci", "version": "0.12.51", "spdx": "EPL-1.0"},
         {"name": "org.babashka:sci.impl.types", "version": "0.0.2", "spdx": "EPL-1.0"},

@@ -43,6 +43,16 @@ def purls(package):
     ]
 
 
+def annotation_value(package, key):
+    prefix = f"{key}="
+    comment = package["annotations"][0]["comment"]
+    for part in comment.split(";"):
+        part = part.strip()
+        if part.startswith(prefix):
+            return part[len(prefix):]
+    return None
+
+
 class LicenseReportTest(unittest.TestCase):
     def test_graalvm_native_image_runtime_license_is_resolved_from_adr_011_evidence(self):
         completed = run_license_report()
@@ -57,12 +67,45 @@ class LicenseReportTest(unittest.TestCase):
         self.assertIn("GraalVM Community 25.0.2 LICENSE_NATIVEIMAGE.txt", comment)
         self.assertIn("sha256=11a8fe0c63dcff8bd8674b89a5895dfbcf5f7e5453cf0a33566c4b3fb64e404c", comment)
 
-    def test_strict_mode_blocks_only_the_unlicensed_first_party_runtime(self):
+    def test_strict_mode_accepts_first_party_mit_license(self):
         completed = run_license_report("--strict")
 
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        report = json.loads(completed.stdout)
+        first_party = package_named(report, "EcritumRuntime.xcframework")
+
+        self.assertEqual(first_party["licenseConcluded"], "MIT")
+        self.assertEqual(first_party["licenseDeclared"], "MIT")
+        self.assertEqual(first_party["copyrightText"], "Copyright (c) 2026 Ecritum contributors")
+        self.assertEqual(annotation_value(first_party, "license-source"), "LICENSE")
+        self.assertIn("release-blocker=false", first_party["annotations"][0]["comment"])
+        self.assertNotIn("has unknown shipped license", completed.stderr)
+
+    def test_core_lane_strict_mode_accepts_first_party_mit_license(self):
+        completed = run_license_report("--strict", "--lane", "core")
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        report = json.loads(completed.stdout)
+        first_party = package_named(report, "EcritumRuntime.xcframework")
+
+        self.assertEqual(first_party["licenseConcluded"], "MIT")
+        self.assertEqual(annotation_value(first_party, "license-source"), "LICENSE")
+
+    def test_strict_mode_rejects_missing_first_party_license_file(self):
+        with tempfile.TemporaryDirectory(prefix="ecritum-missing-license-") as tmp:
+            completed = run_license_report("--strict", "--first-party-license-file", str(Path(tmp) / "LICENSE"))
+
         self.assertEqual(completed.returncode, 1)
-        self.assertIn("EcritumRuntime.xcframework has unknown shipped license", completed.stderr)
-        self.assertNotIn("GraalVM Native Image embedded runtime code has unknown shipped license", completed.stderr)
+        self.assertIn("missing first-party LICENSE file", completed.stderr)
+
+    def test_strict_mode_rejects_stale_first_party_license_text(self):
+        with tempfile.TemporaryDirectory(prefix="ecritum-stale-license-") as tmp:
+            stale_license = Path(tmp) / "LICENSE"
+            stale_license.write_text("MIT License\n\nCopyright (c) 2026 Someone Else\n")
+            completed = run_license_report("--strict", "--first-party-license-file", str(stale_license))
+
+        self.assertEqual(completed.returncode, 1)
+        self.assertIn("first-party LICENSE hash mismatch", completed.stderr)
 
     def test_multi_license_pom_metadata_is_conserved_as_combined_spdx_expression(self):
         completed = run_license_report()
@@ -105,7 +148,9 @@ class LicenseReportTest(unittest.TestCase):
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("# Ecritum Third Party Notices", completed.stdout)
-        self.assertIn("EcritumRuntime.xcframework has unknown shipped license", completed.stdout)
+        self.assertIn("- None", completed.stdout)
+        self.assertNotIn("EcritumRuntime.xcframework has unknown shipped license", completed.stdout)
+        self.assertIn("| EcritumRuntime.xcframework | 0.1.0-dev | MIT | LICENSE |", completed.stdout)
         self.assertIn("| GraalVM Native Image embedded runtime code | 25.0.2 | GPL-2.0-only WITH Classpath-exception-2.0 |", completed.stdout)
         self.assertIn("public release packaging must carry the required upstream license texts", completed.stdout)
 

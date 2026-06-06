@@ -4255,9 +4255,8 @@ Review:
 Closed with follow-ups:
 
 - M7-004 owns full license-text packaging and build-tool/POM-only notice policy.
-- The intentional first-party =EcritumRuntime.xcframework= license blocker
-  remains until the project owner chooses and commits a top-level Ecritum
-  license.
+- The intentional first-party =EcritumRuntime.xcframework= license blocker was
+  resolved by the M8-003 MIT license decision and top-level =LICENSE=.
 
 Definition of done:
 
@@ -4660,8 +4659,12 @@ Definition of done:
   or explicitly dropped from the support claim.
 - A publishable release lane is selected and passes its gates with no hidden
   local path, signing, license, or hosting dependency.
-- Public release artifacts are signed, notarized or have an accepted archive
-  exception, hosted over HTTPS, and verified by a clean SwiftPM consumer.
+- First public release artifacts use the Community release tier: hosted over
+  HTTPS, checksummed for SwiftPM, verified by a clean SwiftPM consumer, and
+  documented as not Developer ID signed, notarized, or stapled.
+- Trusted macOS release artifacts remain an optional later tier requiring
+  Developer ID signing, notarization, and stapling evidence or an accepted
+  archive exception.
 
 *** DONE M8-001 Decide public diagnostic stack-frame ABI
 
@@ -4858,7 +4861,7 @@ Verification:
   dist/full/EcritumRuntime.xcframework full` -> exit 0; deterministic package
   checksum `f0c208b9d7f138543fc4055dc3e108a637e4efb7506dcde91851dfee8d639ce9`.
 
-*** TODO M8-003 Choose first-party Ecritum license
+*** DONE M8-003 Choose first-party Ecritum license
 
 Lead persona: Release.
 Reviewer personas: Security, Swift DX, Architecture.
@@ -4877,6 +4880,131 @@ Verification plan:
 - `mise exec -- just check-license-texts`
 - `mise exec -- just check-license-texts-zip`
 - `mise exec -- just test-release-tools`
+
+Assignment:
+
+- Lead persona: Release, Licensing, and Distribution Engineer.
+- Reviewer personas: Security, Swift DX, Architecture, Tests/TDD.
+- Write scope after owner decision: top-level `LICENSE`,
+  `scripts/license-report.py`, `scripts/check-license-texts.py`,
+  `scripts/check-dep-delta.py`, `scripts/build-xcframework.sh`,
+  `Tests/Release/`, `THIRD_PARTY_NOTICES.md`, ADR-011, release docs, and
+  README license notes.
+- Research checklist completed: ADR-011, current license reporter, release-tool
+  tests, checked notices, README license notes, top-level license-file search,
+  SPDX license identifiers, and Apache-2.0 application guidance.
+- ADR requirement: ADR-011 must be updated after the owner chooses because this
+  changes the first-party distribution and release-license policy.
+
+Decision:
+
+- 2026-06-06: project owner chose MIT for first-party Ecritum code.
+- Copyright line: `Copyright (c) 2026 Ecritum contributors`.
+- Top-level `LICENSE` SHA-256:
+  `41d9a76b60d9da5bb4b77b00ed219efff21ac9cee12f764aa9e8200f252f9f87`.
+- `NOTICE` is not required for the selected MIT policy.
+
+Implementation:
+
+- Added the top-level MIT `LICENSE`.
+- Updated `scripts/license-report.py` so the first-party
+  `EcritumRuntime.xcframework` package reports SPDX `MIT`,
+  `license-source=LICENSE`, and the accepted copyright line.
+- Strict license reporting now validates the top-level `LICENSE` hash and fails
+  if the first-party license file is missing or stale.
+- Regenerated `THIRD_PARTY_NOTICES.md`; release blockers now show `None`.
+- Updated ADR-011, README, and release docs to record that the first-party
+  license is no longer unresolved.
+- Updated dependency/license delta baselines so Core and Full expect MIT for
+  `EcritumRuntime.xcframework`.
+- Preserved separate GraalVM, SCI, Clojure, GraalJS, LuaJ, ICU, UPL, EPL, and
+  GPL+Classpath Exception inventory entries; the aggregate artifact is not
+  relabeled as only MIT.
+- Added packaged first-party license verification: `just xcframework` copies the
+  real top-level `LICENSE` as `Resources/Licenses/Ecritum-LICENSE.txt`, and
+  `check-license-texts` verifies that copy in both XCFramework and release zip.
+  The generic `THIRD_PARTY_LICENSES/MIT.txt` remains only the third-party MIT
+  text.
+
+Review:
+
+- Claude plan consult was invoked directly with `claude -p` and no auth check.
+  It timed out after 120 seconds with no output (`CLAUDE_STATUS=124`), so it is
+  not counted as signoff.
+- Swift DX/Tests persona review confirmed no `Package.swift` or Swift API/test
+  changes are needed. It required tests for strict-mode success, no release
+  blockers, first-party SPDX/source resolution from the committed `LICENSE`,
+  missing/stale `LICENSE` strict-mode failures, artifact and zip license-text
+  gates, and the verification commands listed above.
+- Security/Architecture persona review confirmed the owner license choice is the
+  blocker and required preserving the separate GraalVM/SCI/GraalJS/LuaJ
+  inventory instead of relabeling the aggregate binary as only Ecritum's
+  first-party license.
+- Release persona review required an exact owner license choice plus copyright
+  holder/year; `LICENSE`; optional `NOTICE`; first-party `license_source`
+  recorded as `LICENSE`; generated notices with blockers `None`; license-text
+  bundle/manifest updates when needed; strict Core and Full license gates; and
+  evidence for `LICENSE` hash and notice/package changes.
+- Test/DX post-review required `Ecritum-LICENSE.txt` as a real first-party
+  packaged license copy rather than relying on the generic
+  `THIRD_PARTY_LICENSES/MIT.txt`; implemented.
+- Claude post-change review was invoked directly with `claude -p` and no auth
+  check. It timed out after 120 seconds with no output (`CLAUDE_STATUS=124`),
+  so it is not counted as signoff.
+- Claude second-pass post-change review was invoked directly with `claude -p`
+  and no auth check. It timed out after 60 seconds with no output
+  (`CLAUDE_STATUS=124`), so it is not counted as signoff.
+- Engineering-manager review: DONE. The owner decision is implemented, strict
+  license blockers are clear in Core and Full, first-party license packaging is
+  verified separately from third-party MIT text, and persona review blockers are
+  resolved.
+
+Verification:
+
+- `python3 -B -m unittest Tests/Release/test_license_report.py` -> PASS, 12
+  tests, after an expected red run that failed on `NOASSERTION`, stale notices,
+  and unsupported `--first-party-license-file`.
+- `python3 -B -m unittest Tests/Release/test_license_texts.py` -> PASS, 10
+  tests, after an expected red run for missing first-party packaged-license
+  validation.
+- `python3 -B -m unittest Tests/Release/test_check_dep_delta.py` -> PASS, 2
+  tests.
+- `python3 -B -m unittest Tests/Release/test_license_report.py
+  Tests/Release/test_license_texts.py Tests/Release/test_package_artifact.py`
+  -> PASS, 44 tests.
+- `python3 -m py_compile scripts/license-report.py
+  scripts/check-license-texts.py scripts/check-dep-delta.py
+  Tests/Release/test_license_report.py Tests/Release/test_license_texts.py
+  Tests/Release/test_check_dep_delta.py Tests/Release/test_package_artifact.py`
+  -> PASS.
+- `bash -n scripts/build-xcframework.sh` -> PASS.
+- `mise exec -- just license-report-strict core` -> PASS; SPDX report
+  annotation includes `blockers=[]`.
+- `mise exec -- just license-report-strict full` -> PASS; SPDX report
+  annotation includes `blockers=[]`.
+- `mise exec -- just third-party-notices` and
+  `SOURCE_DATE_EPOCH=0 python3 scripts/license-report.py --notices --lane full
+  | cmp - THIRD_PARTY_NOTICES.md` -> PASS.
+- `scripts/build-xcframework.sh --native-dir build/native/macos-arm64 --lane
+  full --output dist/local/EcritumRuntime.xcframework --skip-sign` -> PASS and
+  refreshed the local artifact with `Ecritum-LICENSE.txt`.
+- `mise exec -- just xcframework` -> exit 137 from the local signing path before
+  a structured error. This is not counted as M8-003 verification because the
+  license-content build path passed with `--skip-sign`; public signing remains
+  covered by M8-004 and release operations.
+- `mise exec -- just package-artifact
+  dist/local/EcritumRuntime.xcframework
+  dist/release/EcritumRuntime.xcframework.zip full` -> PASS and refreshed the
+  default release zip used by `check-license-texts-zip`.
+- `mise exec -- just check-license-texts` -> PASS; `ok=true`,
+  `firstPartyLicenseRequired=true`, `firstPartyLicenseFile=Ecritum-LICENSE.txt`.
+- `mise exec -- just check-license-texts-zip` -> PASS; `ok=true`,
+  `firstPartyLicenseRequired=true`, `firstPartyLicenseFile=Ecritum-LICENSE.txt`.
+- `mise exec -- just test-release-tools` -> PASS, 82 tests.
+- `mise exec -- just check-dep-delta core` -> PASS; `ok=true`,
+  `violations=[]`.
+- `mise exec -- just check-dep-delta full` -> PASS; `ok=true`,
+  `violations=[]`.
 
 *** DONE M8-004 Public release signing and notarization gate
 
@@ -5016,6 +5144,132 @@ Not verified:
   validation, and hosted HTTPS artifact download were not run in this developer
   workspace. Owner: Release; these are required release-operation inputs and
   public mode fails closed without their evidence.
+
+*** DONE M8-005 Adopt GitHub-hosted Community release path
+
+Lead persona: Release.
+Reviewer personas: Security, Swift DX, Tests, Unix.
+
+Definition of done:
+
+- ADR-010 distinguishes Community release from optional Trusted macOS release.
+- Community release requires GitHub Releases or equivalent immutable HTTPS
+  hosting, a SwiftPM checksum, clean SwiftPM consumer validation, package
+  reproducibility, ABI, size, SBOM, license, dependency-delta, vulnerability,
+  and artifact-inspection gates.
+- Community release records explicit skipped signing evidence saying the
+  artifact does not claim Developer ID signing, notarization, or stapling.
+- `release-check-community` fails if hosted SwiftPM consumer validation would be
+  skipped.
+- `release-check-public` remains available for the later Trusted macOS tier and
+  still requires Developer ID/notary/stapling evidence.
+- Security intake is user-owned and accepted by owner attestation on
+  2026-06-07; the project still documents GitHub private vulnerability
+  reporting as the intended intake path.
+
+Verification plan:
+
+- `bash -n scripts/release-check.sh`
+- `python3 -B -m unittest Tests/Release/test_release_check.py
+  Tests/Release/test_public_signing.py`
+- `mise exec -- just --dry-run release-check-community core`
+- `ECRITUM_CONSUMER_ARTIFACT_URL=https://github.com/OWNER/ecritum/releases/download/v0.1.0/EcritumRuntime.xcframework.zip
+  ECRITUM_CONSUMER_ARTIFACT_CHECKSUM=...
+  mise exec -- just release-check-community core`
+
+Review:
+
+- Claude plan review was invoked directly with `claude -p` and no auth check.
+  It timed out after 90 seconds with no output (`CLAUDE_STATUS=124`), so it is
+  not counted as signoff.
+- Release persona review recommended updating ADR-010, M8/M8-005, and release
+  docs so `release-check-community` is the M8 release gate, while keeping
+  `release-check-public` as the future optional Trusted macOS path. Claude
+  timed out after 60 seconds with no output.
+- Tests/Unix persona review recommended keeping one `release-check.sh` script
+  with a `--community` mode, adding the `just release-check-community` wrapper,
+  adding tests for missing hosted URL, checksum override, and explicit
+  machine-readable community signing skip evidence. Implemented.
+- Claude post-change review was invoked directly with `claude -p` and no auth
+  check. It timed out after 90 seconds with no output (`CLAUDE_STATUS=124`), so
+  it is not counted as signoff.
+
+Implementation:
+
+- Updated ADR-010 to define two publication trust tiers:
+  Community release first, optional Trusted macOS release later.
+- Updated `docs/release-gates.md`, `README.md`, and `SECURITY.md` so the first
+  public release no longer requires a paid Apple Developer ID account and does
+  not claim notarization.
+- Added `scripts/release-check.sh --community`, which requires
+  `ECRITUM_CONSUMER_ARTIFACT_URL`, runs hosted SwiftPM consumer validation, and
+  writes `public-signing.json` with `mode=community` and an explicit skipped
+  Developer ID/notarization/stapling reason.
+- Added `just release-check-community`.
+- Preserved `release-check-public` and `check-public-signing` as the optional
+  Trusted macOS gate requiring Developer ID/notary/stapling evidence.
+- Split actual GitHub publication into M8-006 because it requires explicit
+  authorization to create/push a remote release.
+
+Verification:
+
+- `bash -n scripts/release-check.sh` -> PASS.
+- `python3 -B -m unittest Tests/Release/test_release_check.py
+  Tests/Release/test_public_signing.py` -> PASS, 19 tests.
+- `mise exec -- just --dry-run release-check-community core` -> PASS; expands
+  to `scripts/release-check.sh --lane "core" --community`.
+- `mise exec -- just --summary` -> PASS and lists
+  `release-check-community`.
+- `mise exec -- just test-release-tools` -> PASS, 85 tests.
+
+Not verified:
+
+- Hosted GitHub Releases consumer validation was not run because no final
+  tag-specific GitHub release URL exists yet. Owner: Release; tracked by M8-006.
+
+*** BLOCKED M8-006 Publish GitHub-hosted Community release
+
+Lead persona: Release.
+Reviewer personas: Security, Swift DX, Tests, Unix.
+
+Definition of done:
+
+- The selected Core release zip is uploaded to a tag-specific GitHub Releases
+  asset URL.
+- The SwiftPM checksum sidecar matches the uploaded zip bytes.
+- `ECRITUM_CONSUMER_ARTIFACT_URL` uses the immutable tag-specific GitHub
+  Releases URL, not `/latest/`.
+- `ECRITUM_CONSUMER_ARTIFACT_CHECKSUM` uses the checked sidecar checksum.
+- `mise exec -- just release-check-community core` passes with no skipped hosted
+  consumer, package, license, SBOM, vulnerability, ABI, or size gates.
+- Release notes clearly state that the Community artifact is not Developer ID
+  signed, notarized, or stapled.
+
+Current blocker:
+
+- Publishing a GitHub Release or tag may push remote state and therefore
+  requires explicit user authorization under AGENTS.md.
+- The final GitHub owner/repository, release tag, and release notes are not
+  recorded in this workspace.
+- Local preflight on 2026-06-07 found `jj git remote list` returned no
+  configured remotes, and `gh repo view --json nameWithOwner,url,defaultBranchRef`
+  failed because the `gh` wrapper could not find the real GitHub CLI
+  (`gh: command not found`).
+
+Verification plan:
+
+- `jj status`
+- `mise exec -- just native-core`
+- `mise exec -- just xcframework-core`
+- `mise exec -- just package-artifact dist/core/EcritumRuntime.xcframework
+  dist/release/core/EcritumRuntime.xcframework.zip core`
+- `gh release create <tag> dist/release/core/EcritumRuntime.xcframework.zip
+  dist/release/core/EcritumRuntime.xcframework.zip.checksum
+  dist/release/core/EcritumRuntime.xcframework.zip.spdx.json --repo OWNER/ecritum
+  --title <tag> --notes-file <notes>`
+- `ECRITUM_CONSUMER_ARTIFACT_URL=https://github.com/OWNER/ecritum/releases/download/<tag>/EcritumRuntime.xcframework.zip
+  ECRITUM_CONSUMER_ARTIFACT_CHECKSUM=$(cat dist/release/core/EcritumRuntime.xcframework.zip.checksum)
+  mise exec -- just release-check-community core`
 
 * ADR Backlog
 

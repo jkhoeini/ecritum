@@ -19,6 +19,10 @@ ACCEPTED_GRAALVM_VERSION_SNIPPETS = [
     "GraalVM Runtime Environment GraalVM CE 25.0.2+10.1",
     "Substrate VM GraalVM CE 25.0.2+10.1",
 ]
+FIRST_PARTY_LICENSE_ID = "MIT"
+FIRST_PARTY_LICENSE_FILE = "LICENSE"
+FIRST_PARTY_LICENSE_SHA256 = "41d9a76b60d9da5bb4b77b00ed219efff21ac9cee12f764aa9e8200f252f9f87"
+FIRST_PARTY_COPYRIGHT = "Copyright (c) 2026 Ecritum contributors"
 POM_METADATA_ERRORS = []
 
 
@@ -137,6 +141,19 @@ def graalvm_evidence_errors(graalvm_home_arg, graal_version):
     return errors
 
 
+def first_party_license_errors(license_file_arg):
+    license_path = Path(license_file_arg)
+    if not license_path.is_file():
+        return [f"missing first-party LICENSE file: {license_path}"]
+    actual_sha256 = sha256_file(license_path)
+    if actual_sha256 != FIRST_PARTY_LICENSE_SHA256:
+        return [
+            "first-party LICENSE hash mismatch: "
+            + f"{license_path} sha256={actual_sha256}, expected {FIRST_PARTY_LICENSE_SHA256}"
+        ]
+    return []
+
+
 def spdx_license_expression(license_name):
     mapping = {
         "Universal Permissive License, Version 1.0": "UPL-1.0",
@@ -202,6 +219,7 @@ def package(
     download_location="NOASSERTION",
     license_source=None,
     external_refs=None,
+    copyright_text="NOASSERTION",
 ):
     license_expression = spdx_license_expression(license_name)
     blocker = scope == "shipped" and license_expression == "NOASSERTION"
@@ -219,7 +237,7 @@ def package(
         "filesAnalyzed": False,
         "licenseConcluded": license_expression,
         "licenseDeclared": license_expression,
-        "copyrightText": "NOASSERTION",
+        "copyrightText": copyright_text,
         "annotations": [
             {
                 "annotationType": "OTHER",
@@ -301,6 +319,7 @@ parser.add_argument("--notices", action="store_true", help="Emit generated THIRD
 parser.add_argument("--native-pom", default="native/pom.xml")
 parser.add_argument("--m2", default=str(Path.home() / ".m2" / "repository"))
 parser.add_argument("--graalvm-home", default=None, help="GraalVM home used to verify Native Image license evidence in strict mode.")
+parser.add_argument("--first-party-license-file", default=FIRST_PARTY_LICENSE_FILE, help="First-party Ecritum license file to validate in strict mode.")
 parser.add_argument("--lane", choices=["core", "full"], default="full")
 args = parser.parse_args()
 
@@ -343,9 +362,11 @@ packages = [
         "EcritumRuntime.xcframework",
         "0.1.0-dev",
         "shipped",
-        "NOASSERTION",
+        FIRST_PARTY_LICENSE_ID,
         created,
+        license_source=Path(args.first_party_license_file).name,
         external_refs=[purl_ref("pkg:generic/ecritum/EcritumRuntime.xcframework@0.1.0-dev")],
+        copyright_text=FIRST_PARTY_COPYRIGHT,
     ),
     package(
         "SPDXRef-Package-GraalVM-NativeImage-EmbeddedRuntime",
@@ -604,6 +625,7 @@ blockers = [
 ]
 strict_blockers = blockers + POM_METADATA_ERRORS
 if args.strict:
+    strict_blockers.extend(first_party_license_errors(args.first_party_license_file))
     strict_blockers.extend(graalvm_evidence_errors(args.graalvm_home, graal_version))
 
 document = {

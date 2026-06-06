@@ -13,6 +13,21 @@ LICENSE_REPORT = ROOT / "scripts" / "license-report.py"
 
 
 class CheckDepDeltaTest(unittest.TestCase):
+    def test_dependency_delta_accepts_first_party_mit_baseline(self):
+        completed = subprocess.run(
+            [sys.executable, str(CHECK_DEP_DELTA)],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        payload = json.loads(completed.stdout)
+        first_party = next(item for item in payload["current"]["shipped"] if item["name"] == "EcritumRuntime.xcframework")
+        self.assertEqual(first_party["spdx"], "MIT")
+
     def test_dependency_delta_fails_on_spdx_change(self):
         env = os.environ.copy()
         env["SOURCE_DATE_EPOCH"] = "0"

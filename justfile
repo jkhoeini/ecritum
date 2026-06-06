@@ -452,6 +452,9 @@ release-check lane="":
     if [ -n "{{lane}}" ]; then args+=(--lane "{{lane}}"); fi; \
     scripts/release-check.sh "${args[@]}"
 
+release-check-community lane="core":
+    @scripts/release-check.sh --lane "{{lane}}" --community
+
 release-check-public lane="core" notary_submit_json="" notary_log_json="" stapling_exception_json="" stapler_evidence_json="":
     @test -n "{{notary_submit_json}}" || { echo "release-check-public requires notary_submit_json" >&2; exit 2; }; \
     test -n "{{notary_log_json}}" || { echo "release-check-public requires notary_log_json" >&2; exit 2; }; \

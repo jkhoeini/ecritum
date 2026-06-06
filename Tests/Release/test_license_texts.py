@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CHECK_LICENSE_TEXTS = ROOT / "scripts" / "check-license-texts.py"
 LICENSE_REPORT = ROOT / "scripts" / "license-report.py"
 LICENSE_BUNDLE = ROOT / "THIRD_PARTY_LICENSES"
+FIRST_PARTY_PACKAGED_LICENSE = "Ecritum-LICENSE.txt"
 
 
 def annotation(scope):
@@ -42,6 +43,14 @@ def package(name, scope, license_expression):
     }
 
 
+def first_party_package():
+    item = package("EcritumRuntime.xcframework", "shipped", "MIT")
+    item["SPDXID"] = "SPDXRef-Package-EcritumRuntime"
+    item["copyrightText"] = "Copyright (c) 2026 Ecritum contributors"
+    item["annotations"][0]["comment"] += "; license-source=LICENSE"
+    return item
+
+
 class LicenseTextsTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(prefix="ecritum-license-texts-test-")
@@ -60,6 +69,7 @@ class LicenseTextsTest(unittest.TestCase):
         self.assertTrue(payload["ok"])
         self.assertIn("GPL-2.0-only WITH Classpath-exception-2.0", payload["requiredLicenseIds"])
         self.assertIn("MIT", payload["requiredLicenseIds"])
+        self.assertTrue(payload["firstPartyLicenseRequired"])
 
     def test_fails_when_required_license_text_file_is_missing(self):
         (self.bundle / "MIT.txt").unlink()
@@ -78,6 +88,26 @@ class LicenseTextsTest(unittest.TestCase):
 
         self.assertEqual(completed.returncode, 1)
         self.assertIn("artifact: license text hash mismatch for MIT", completed.stdout)
+
+    def test_artifact_requires_first_party_license_copy_when_report_sources_license(self):
+        artifact = self.artifact_with_bundle()
+        next(artifact.glob(f"*/EcritumRuntime.framework/Resources/Licenses/{FIRST_PARTY_PACKAGED_LICENSE}")).unlink()
+        report = report_for([first_party_package()])
+
+        completed = self.run_check_with_report(report, "--artifact", str(artifact))
+
+        self.assertEqual(completed.returncode, 1)
+        self.assertIn("artifact: missing first-party Ecritum license text", completed.stdout)
+
+    def test_artifact_rejects_stale_first_party_license_copy(self):
+        artifact = self.artifact_with_bundle()
+        next(artifact.glob(f"*/EcritumRuntime.framework/Resources/Licenses/{FIRST_PARTY_PACKAGED_LICENSE}")).write_text("stale\n")
+        report = report_for([first_party_package()])
+
+        completed = self.run_check_with_report(report, "--artifact", str(artifact))
+
+        self.assertEqual(completed.returncode, 1)
+        self.assertIn("artifact: first-party Ecritum license hash mismatch", completed.stdout)
 
     def test_fails_when_shipped_spdx_expression_has_no_full_text_rule(self):
         report = report_for([package("example:runtime", "shipped", "Apache-2.0")])
@@ -105,6 +135,16 @@ class LicenseTextsTest(unittest.TestCase):
         self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
         payload = json.loads(completed.stdout)
         self.assertTrue(payload["ok"])
+
+    def test_zip_mode_requires_first_party_license_copy_when_report_sources_license(self):
+        release_zip = self.root / "release.zip"
+        self.write_zip_with_bundle(release_zip, self.bundle, include_first_party_license=False)
+        report = report_for([first_party_package()])
+
+        completed = self.run_check_with_report(report, "--release-zip", str(release_zip))
+
+        self.assertEqual(completed.returncode, 1)
+        self.assertIn("release zip: missing first-party Ecritum license text", completed.stdout)
 
     def test_build_and_test_scopes_do_not_force_runtime_license_texts(self):
         report = report_for([
@@ -137,14 +177,17 @@ class LicenseTextsTest(unittest.TestCase):
         artifact = self.root / "EcritumRuntime.xcframework"
         license_dir = artifact / "macos-arm64" / "EcritumRuntime.framework" / "Resources" / "Licenses"
         shutil.copytree(self.bundle, license_dir)
+        shutil.copyfile(ROOT / "LICENSE", license_dir / FIRST_PARTY_PACKAGED_LICENSE)
         return artifact
 
-    def write_zip_with_bundle(self, release_zip, bundle):
+    def write_zip_with_bundle(self, release_zip, bundle, include_first_party_license=True):
         prefix = "EcritumRuntime.xcframework/macos-arm64/EcritumRuntime.framework/Resources/Licenses/"
         with zipfile.ZipFile(release_zip, "w", compression=zipfile.ZIP_DEFLATED) as archive:
             for path in sorted(bundle.iterdir()):
                 if path.is_file():
                     archive.write(path, prefix + path.name)
+            if include_first_party_license:
+                archive.write(ROOT / "LICENSE", prefix + FIRST_PARTY_PACKAGED_LICENSE)
 
 
 if __name__ == "__main__":

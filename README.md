@@ -157,7 +157,7 @@ Release gate baselines are documented in
 - No C++ ABI in the public interface.
 - Explicit host capability model.
 - Measured binary size and startup cost.
-- Clear license inventory before public release.
+- MIT first-party license with clear third-party runtime inventory.
 - macOS first; other platforms later.
 
 ## Open Questions
@@ -167,4 +167,5 @@ Release gate baselines are documented in
 - Whether GraalPy and TruffleRuby are practical in the same native library.
 - Async host callback and executor behavior.
 - Full sandbox threat model for user-provided scripts.
-- Final license and third-party notice strategy.
+- Optional Trusted macOS release operations with Developer ID signing and
+  notarization.

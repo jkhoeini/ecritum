@@ -1,8 +1,8 @@
 # Ecritum Release Gates
 
 This document defines the commands a CI job can run today and the stricter
-release checks that block publication until size, license, signing,
-notarization, and clean-consumer distribution work is complete.
+release checks that block publication until size, license, hosted
+clean-consumer distribution, and the selected signing trust tier are complete.
 
 ## CI Smoke
 
@@ -46,7 +46,19 @@ unless overridden, prepares the deterministic zip at
 The release lane is selected only by command arguments; ambient
 `ECRITUM_RELEASE_LANE` does not make release-check or direct packaging run Full.
 Local release-check mode validates developer artifacts and records
-`public-signing.json` as skipped. Public release mode is explicit:
+`public-signing.json` as skipped.
+
+Community release mode is the first public open-source release tier. It requires
+the final artifact to be hosted at an HTTPS SwiftPM binary-target URL, but it
+does not claim Developer ID signing, notarization, or stapling:
+
+```sh
+export ECRITUM_CONSUMER_ARTIFACT_URL=https://github.com/OWNER/ecritum/releases/download/v0.1.0/EcritumRuntime.xcframework.zip
+export ECRITUM_CONSUMER_ARTIFACT_CHECKSUM=$(cat dist/release/core/EcritumRuntime.xcframework.zip.checksum)
+mise exec -- just release-check-community core
+```
+
+Trusted macOS release mode is explicit:
 
 ```sh
 export ECRITUM_CONSUMER_ARTIFACT_URL=https://.../EcritumRuntime.xcframework.zip
@@ -57,7 +69,7 @@ mise exec -- just release-check-public core \
   build/release/stapling-exception.json
 ```
 
-Public mode requires hosted HTTPS SwiftPM consumer validation and the public
+Trusted mode requires hosted HTTPS SwiftPM consumer validation and the Trusted
 signing/notarization gate. It fails if clean-consumer evidence would be skipped.
 
 `just release-check` runs:
@@ -82,8 +94,10 @@ signing/notarization gate. It fails if clean-consumer evidence would be skipped.
 - `just check-license-texts`
 - `just check-license-texts-zip`
 - `just check-vulnerability-response`
-- `just check-public-signing` in explicit public mode; otherwise
-  `public-signing.json` records a skipped local gate
+- `just check-public-signing` in explicit Trusted macOS mode; Community mode
+  records a skipped signing gate with the reason that the artifact does not
+  claim Developer ID signing, notarization, or stapling; local mode records a
+  skipped local gate
 - `scripts/size-artifact.py --require-artifact` with the selected release lane
 - `scripts/license-report.py --strict`
 
@@ -96,9 +110,9 @@ ABI packaging gates cover the artifact runtime path. First-eval is part of
 The default Core lane is a SCI/Clojure-only artifact. The combined
 SCI/GraalJS/Lua artifact is classified as a Full candidate and must be selected
 explicitly with `full`; ambient `ECRITUM_RELEASE_LANE` does not promote it.
-After Core or Full lane size gates pass, the strict license step remains a
-publication blocker until the project owner chooses and commits a top-level
-Ecritum license.
+After Core or Full lane size gates pass, the strict license step validates the
+top-level MIT `LICENSE` evidence for first-party Ecritum code and still blocks
+any unresolved shipped third-party license.
 
 SwiftPM requires remote binary target URLs to use `https`. Local `http://` and
 `file://` URLs are not accepted as release proof. Self-signed loopback HTTPS
@@ -140,9 +154,11 @@ Java lookup, raw host access, raw C handle access, and classpath mutation.
 config, lifecycle, and host-registration coverage and records blocked eval,
 source, value, error, and callback parser surfaces until those public APIs exist.
 
-Release publication also requires public Developer ID signing, hardened runtime,
-notarization, stapling validation or an accepted zip exception, hosted SwiftPM
-consumer evidence, and dependency digest locks. ADR-015 owns SBOM publication,
+Community release publication requires hosted SwiftPM consumer evidence,
+dependency digest locks, clear no-notarization wording, and no skipped license,
+SBOM, vulnerability, size, ABI, or package gates. Trusted macOS publication
+additionally requires Developer ID signing, hardened runtime, notarization, and
+stapling validation or an accepted zip exception. ADR-015 owns SBOM publication,
 CVE tracking, vulnerability response, and revocation policy. The offline gate is
 `just check-vulnerability-response`, which verifies SPDX SBOM shape,
 package-url identity coverage, monitoring-source coverage, advisory blockers,
@@ -150,14 +166,14 @@ accepted-risk expiry, and revoked artifact checksums. Live OSV/NVD/CISA/vendor
 queries are scheduled release-operations work and are intentionally not part of
 the deterministic local `release-check` yet.
 
-## Public Signing And Notarization
+## Trusted Signing And Notarization
 
 `just check-public-signing` validates the prepared XCFramework and the unpacked
-SwiftPM release zip. For each framework executable and nested dylib it runs
-`codesign --verify --deep --strict --verbose=2`, parses `codesign -dv
---verbose=4`, and rejects ad-hoc signatures, non-Developer ID Application
-authority chains, missing TeamIdentifier, missing hardened runtime, missing
-secure timestamp, and `get-task-allow=true`.
+SwiftPM release zip for the Trusted macOS tier. For each framework executable
+and nested dylib it runs `codesign --verify --deep --strict --verbose=2`, parses
+`codesign -dv --verbose=4`, and rejects ad-hoc signatures, non-Developer ID
+Application authority chains, missing TeamIdentifier, missing hardened runtime,
+missing secure timestamp, and `get-task-allow=true`.
 
 The public signing JSON evidence is also bound to the release zip:
 
@@ -169,10 +185,11 @@ The public signing JSON evidence is also bound to the release zip:
 - staple-capable future formats must provide stapler validation evidence instead
   of the zip exception
 
-`scripts/build-xcframework.sh --public-release` is a build guardrail: it rejects
-`--skip-sign` and ad-hoc identity `-`. The release gate still proves the final
-certificate chain and hardened-runtime state through `check-public-signing`
-because signing identities may be passed as names or certificate hashes.
+`scripts/build-xcframework.sh --public-release` is a Trusted macOS build
+guardrail: it rejects `--skip-sign` and ad-hoc identity `-`. The release gate
+still proves the final certificate chain and hardened-runtime state through
+`check-public-signing` because signing identities may be passed as names or
+certificate hashes.
 
 ## ABI Gate
 
@@ -242,17 +259,19 @@ expressions unless a runtime ADR accepts a narrower upstream interpretation.
 `just check-dep-delta` compares scope, component name, exact version, and SPDX
 expression against the reviewed release baseline.
 
-ADR-011 resolves GraalVM Community 25.0.2 Native Image output as
-`GPL-2.0-only WITH Classpath-exception-2.0` when the local GraalVM CE
+ADR-011 resolves first-party Ecritum code as MIT through the top-level
+`LICENSE`, while preserving separate SPDX entries for embedded third-party
+runtime material. It also resolves GraalVM Community 25.0.2 Native Image output
+as `GPL-2.0-only WITH Classpath-exception-2.0` when the local GraalVM CE
 `LICENSE_NATIVEIMAGE.txt` evidence and `native-image --version` output match the
-recorded policy. The strict gate still blocks on `EcritumRuntime.xcframework`
-until the project owner chooses and commits a top-level Ecritum license.
+recorded policy.
 
 `THIRD_PARTY_NOTICES.md` is an inventory index, not a full license-text bundle.
 M7-004 adds `THIRD_PARTY_LICENSES/` as the checked-in full-text bundle and
 `just check-license-texts` / `just check-license-texts-zip` as the artifact and
 release-zip gates. `just xcframework` copies the bundle into
-`EcritumRuntime.framework/Resources/Licenses` before codesigning, and
+`EcritumRuntime.framework/Resources/Licenses` before codesigning, copies the
+top-level Ecritum `LICENSE` as `Resources/Licenses/Ecritum-LICENSE.txt`, and
 `release-check` verifies both the XCFramework artifact and deterministic zip
 against the SPDX license report generated in the same release run.
 POM-only resolver artifacts such as `org.graalvm.polyglot:js-community` and
@@ -383,9 +402,11 @@ M7 uses rebuildable provenance plus deterministic archive metadata:
 - `just test-release-consumer-smoke` records HTTPS binary-target consumer
   evidence when a real HTTPS artifact URL is supplied
 
-Public release signing requires a Developer ID identity, hardened runtime,
-notarization with `notarytool`, and retained notarization evidence. Hosted
-SwiftPM URL resolution remains M7-002. Dependency digest locks, SBOM/CVE
+Community release signing may remain local or ad-hoc and must be described as
+not Developer ID signed, notarized, or stapled. Trusted macOS release signing
+requires a Developer ID identity, hardened runtime, notarization with
+`notarytool`, and retained notarization evidence. Hosted SwiftPM URL resolution
+is required for both publication tiers. Dependency digest locks, SBOM/CVE
 policy, and vulnerability response policy are owned by ADR-011 and ADR-015.
 
 ## Smoke Test Representation

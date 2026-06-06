@@ -49,6 +49,7 @@ class PackageArtifactTest(unittest.TestCase):
         (resources / "libecritum_graal.dylib").write_text("graal\n")
         (resources / "ecritum-runtime-lane.json").write_text('{"formatVersion":1,"releaseLane":"core"}\n')
         (license_resources / "manifest.json").write_text('{"formatVersion":1,"licenseTexts":[]}\n')
+        (license_resources / "Ecritum-LICENSE.txt").write_text("first party license\n")
         (license_resources / "MIT.txt").write_text("license\n")
         (framework / ".DS_Store").write_text("skip\n")
         (framework / "._EcritumRuntime").write_text("skip\n")
@@ -86,6 +87,7 @@ class PackageArtifactTest(unittest.TestCase):
             self.assertNotIn("EcritumRuntime.xcframework/macos-arm64/EcritumRuntime.framework/._EcritumRuntime", names)
             self.assertNotIn("EcritumRuntime.xcframework/__MACOSX/ignored", names)
             self.assertIn("EcritumRuntime.xcframework/macos-arm64/EcritumRuntime.framework/Resources/Licenses/manifest.json", names)
+            self.assertIn("EcritumRuntime.xcframework/macos-arm64/EcritumRuntime.framework/Resources/Licenses/Ecritum-LICENSE.txt", names)
             self.assertIn("EcritumRuntime.xcframework/macos-arm64/EcritumRuntime.framework/Resources/Licenses/MIT.txt", names)
             for info in infos:
                 self.assertEqual(info.date_time, NORMALIZED_TIMESTAMP)

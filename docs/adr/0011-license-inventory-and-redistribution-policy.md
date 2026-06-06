@@ -4,6 +4,8 @@ Status: Accepted
 
 Reviewers: Release, Technical Debt, Security, GraalVM Runtime. Claude CLI plan
 feedback was incorporated; final diff-review attempts timed out with no output.
+M8-003 MIT plan consult was invoked directly with `claude -p` and timed out
+with no output.
 
 ## Context
 
@@ -35,8 +37,11 @@ GraalVM Community `LICENSE_NATIVEIMAGE.txt` evidence plus the current GraalVM
 FAQ:
 https://www.graalvm.org/22.2/reference-manual/native-image/FAQ/
 
-The current repository has no top-level `LICENSE`, `NOTICE`, or equivalent
-first-party licensing document. The release tooling must not invent one.
+Before M8-003 the repository had no top-level `LICENSE`, `NOTICE`, or
+equivalent first-party licensing document, so the release tooling kept
+Ecritum's first-party package as `NOASSERTION`. In M8-003 the project owner
+chose MIT for first-party Ecritum code and accepted
+`Copyright (c) 2026 Ecritum contributors` as the copyright line.
 
 The local `LICENSE_NATIVEIMAGE.txt` evidence used for this decision has SHA-256
 `11a8fe0c63dcff8bd8674b89a5895dfbcf5f7e5453cf0a33566c4b3fb64e404c`.
@@ -58,9 +63,22 @@ Every shipped package must have a known SPDX license expression or the strict
 release gate fails. Build and test packages are inventoried but do not block a
 runtime release unless a future policy makes them publication inputs.
 
-The current first-party `EcritumRuntime.xcframework` entry remains
-`NOASSERTION` and release-blocking until the project owner chooses and commits a
-top-level Ecritum license. This ADR does not grant a project license.
+The first-party Ecritum code is licensed under MIT through the top-level
+`LICENSE` file. The first-party `EcritumRuntime.xcframework` SPDX package is
+reported as:
+
+- package: `EcritumRuntime.xcframework`
+- version: `0.1.0-dev`
+- scope: `shipped`
+- license: `MIT`
+- license source: `LICENSE`
+- copyright: `Copyright (c) 2026 Ecritum contributors`
+
+This first-party license entry does not relicense GraalVM, SCI, Clojure,
+GraalJS, LuaJ, ICU, UPL, EPL, GPL+Classpath Exception, or other third-party
+runtime material. Those components remain separately inventoried with their own
+SPDX expressions, license sources, full-text packaging gates, and notice
+obligations.
 
 The current GraalVM Community Native Image output is inventoried as:
 
@@ -121,6 +139,11 @@ source URLs. It intentionally does not include full license text.
 `THIRD_PARTY_LICENSES/` is the checked-in full-text bundle for shipped runtime
 license obligations. M7-004 adds release gates that verify this bundle, the
 packaged XCFramework resources, and the release zip against the SPDX report.
+The bundle's generic `MIT.txt` satisfies third-party MIT obligations only. When
+the first-party Ecritum package reports `license-source=LICENSE`,
+`scripts/build-xcframework.sh` copies the real top-level license to
+`Resources/Licenses/Ecritum-LICENSE.txt`, and `scripts/check-license-texts.py`
+verifies that copy by SHA-256 in both the XCFramework and release zip.
 
 ADR-015 still owns vulnerability response, SBOM/CVE tracking, revocation, and
 public artifact withdrawal policy. ADR-011 only owns license inventory and
@@ -129,12 +152,13 @@ notice generation.
 ## Consequences
 
 Strict license release checks now fail only for genuinely unresolved shipped
-licenses. For the current tree that means Ecritum's own artifact license, not
-GraalVM Community Native Image.
+licenses or stale first-party license evidence. For the current tree, the
+first-party Ecritum package and GraalVM Community Native Image package both have
+accepted license evidence.
 
-The project cannot publish Ecritum until a first-party license is chosen and the
-SPDX inventory is updated. That is an intentional release blocker, not a tooling
-failure.
+The first-party license blocker is resolved. Public release can still be blocked
+by signing, notarization, hosted SwiftPM consumer evidence, vulnerability
+response, size, or future unresolved shipped-license changes.
 
 Future runtime additions cannot hide behind the aggregate Native Image output.
 Each shipped Maven/runtime component must appear in the inventory and
@@ -149,9 +173,9 @@ dependency-delta baseline.
 - Classify GraalVM Native Image output as `UPL-1.0`.
   Rejected. Several GraalVM Maven components are UPL-1.0, but that does not
   establish the license for the Native Image generated runtime output.
-- Choose a project license in this task.
-  Rejected. The repository has no license file, and choosing one is a product
-  and ownership decision outside the engineering-manager role.
+- Apache-2.0 or BSD-3-Clause for first-party Ecritum code.
+  Rejected by owner decision in M8-003. MIT is the smallest permissive option
+  for the current SwiftPM/C ABI runtime distribution model.
 - Generate notices only into `build/release`.
   Rejected. M7 requires a checked-in notice artifact so release reviews can diff
   notice changes alongside dependency and license changes.
@@ -160,10 +184,12 @@ dependency-delta baseline.
 
 - `python3 -m py_compile scripts/license-report.py`
 - `mise exec -- just license-report`
-- `mise exec -- just license-report-strict`, expected exit 1 until a project
-  license is chosen
+- `mise exec -- just license-report-strict core`
+- `mise exec -- just license-report-strict full`
+- focused tests proving missing or stale first-party `LICENSE` fails strict mode
 - `mise exec -- just third-party-notices`
 - `mise exec -- just test-release-tools`
 - `mise exec -- just check-dep-delta`
-- `mise exec -- just release-check`, or recorded expected failures for size,
-  clean-consumer hosting, and remaining strict license blockers
+- `mise exec -- just release-check`, or recorded expected failures for signing,
+  notarization, hosted clean-consumer evidence, size, or unrelated release
+  operations

@@ -12,6 +12,10 @@ consumer distribution shape. SwiftPM remote binary targets require a URL and
 checksum in `Package.swift`, and Swift documents `swift package
 compute-checksum` as the command for binary artifact checksums:
 https://docs.swift.org/swiftpm/documentation/packagemanagerdocs/packagecomputechecksum/
+Swift's package description API defines remote binary targets as
+`binaryTarget(name:url:checksum:)`, where the URL points to an archive file that
+contains the binary artifact:
+https://docs.swift.org/swiftpm/documentation/packagedescription/target/binarytarget%28name%3Aurl%3Achecksum%3A%29/
 
 Apple's macOS distribution guidance requires Developer ID signing and
 notarization for software distributed outside the Mac App Store. Apple documents
@@ -20,6 +24,12 @@ current command-line notarization uses `notarytool`, not the retired `altool`:
 https://developer.apple.com/documentation/security/notarizing_macos_software_before_distribution
 and
 https://developer.apple.com/documentation/technotes/tn3147-migrating-to-the-latest-notarization-tool
+
+The project owner chose not to pay for an Apple Developer Program account for
+the first open-source release. The first public artifact therefore has to be
+honest about its trust tier: it can be a SwiftPM-compatible community release,
+but it cannot claim Developer ID signing, notarization, stapling, or the reduced
+Gatekeeper friction those provide.
 
 The current repo can assemble and zip a local macOS arm64 XCFramework, but before
 M7-001 it did not force release-manifest URL/checksum mode, did not persist
@@ -61,7 +71,19 @@ It may use ad-hoc signing for local smoke tests. `just xcframework` signs the
 nested private runtime dylib first and the framework bundle second, then
 `just check-xcframework` verifies both.
 
-Public release artifacts require:
+Ecritum has two publication trust tiers:
+
+- Community release: the first open-source release tier. It is hosted as an
+  immutable SwiftPM binary-target zip over HTTPS, preferably as a tag-specific
+  GitHub Releases asset. It requires the checksum, package, license, SBOM,
+  vulnerability-response, size, ABI, artifact-inspection, and hosted clean
+  SwiftPM consumer gates. It may use local or ad-hoc signing and must clearly
+  state that it is not Developer ID signed, notarized, or stapled.
+- Trusted macOS release: an optional later tier for users who need reduced
+  Gatekeeper friction. It includes every Community release gate plus Apple's
+  Developer ID and notarization evidence below.
+
+Trusted macOS release artifacts require:
 
 - Developer ID signing with a non-ad-hoc identity.
 - Hardened runtime options unless a later signing ADR documents a specific
@@ -73,8 +95,8 @@ Public release artifacts require:
 - `codesign --verify --verbose=2` on every shipped framework slice and nested
   dylib after signing and after packaging/unpacking.
 
-`scripts/check-public-signing.py` is the public signing/notarization gate. It
-validates every shipped `EcritumRuntime.framework/EcritumRuntime` executable and
+`scripts/check-public-signing.py` is the Trusted macOS signing/notarization
+gate. It validates every shipped `EcritumRuntime.framework/EcritumRuntime` executable and
 nested `Resources/*.dylib` with `codesign --verify --deep --strict
 --verbose=2`, then reads `codesign -dv --verbose=4` evidence to reject ad-hoc
 signatures, non-Developer ID authority chains, missing team identifiers, missing
@@ -94,11 +116,16 @@ release format can be stapled directly, the gate must use stapler validation
 evidence instead of the zip exception.
 
 Local `release-check` remains contributor-friendly and may validate ad-hoc
-signed development artifacts. Public release mode is explicit:
-`release-check.sh --public` or `just release-check-public`. Public mode requires
-the signing/notarization evidence above and a hosted HTTPS
-`.binaryTarget(url:checksum:)` consumer smoke; skipped clean-consumer evidence
-cannot satisfy publication.
+signed development artifacts. Community release mode is explicit:
+`release-check.sh --community` or `just release-check-community`. Community mode
+requires a hosted HTTPS `.binaryTarget(url:checksum:)` consumer smoke and writes
+explicit skipped signing evidence saying the artifact does not claim Developer
+ID signing, notarization, or stapling.
+
+Trusted macOS release mode is explicit: `release-check.sh --public` or
+`just release-check-public`. Trusted mode requires the signing/notarization
+evidence above and the hosted HTTPS `.binaryTarget(url:checksum:)` consumer
+smoke; skipped clean-consumer or signing evidence cannot satisfy that tier.
 
 `just checksum` prints the SwiftPM checksum for the current release zip.
 `just package-artifact` writes the zip, a JSON package manifest, and a `.checksum`
@@ -121,16 +148,17 @@ or document why the artifact remains development-only.
 
 Release checks can prove that local artifacts are shaped, signed, checksummed,
 and manifest-selectable as remote binary targets without uploading a real public
-zip. They do not prove hosted SwiftPM resolution from a clean consumer project;
-that remains M7-002.
+zip. Community and Trusted publication modes additionally prove hosted SwiftPM
+resolution from a clean consumer project.
 
 The current artifact is not publishable as Core until the ADR-018 size blocker
 is resolved or a new ADR reclassifies it into a Full lane with separate naming
 and expectations.
 
-Developer ID credentials are intentionally not required for contributor builds.
-The public release job must provide signing identity, notarization credentials,
-artifact URL, and checksum from trusted release metadata.
+Developer ID credentials are intentionally not required for contributor or
+Community release builds. The Trusted macOS release job must provide signing
+identity, notarization credentials, artifact URL, and checksum from trusted
+release metadata.
 
 ## Verification Plan
 
@@ -149,6 +177,8 @@ M7-001 verifies this ADR with:
 
 M7-002 must add a hosted or local HTTP-style clean-consumer SwiftPM resolution
 test that actually consumes `.binaryTarget(url:checksum:)`.
-M8-004 adds the public Developer ID signing, notarization, zip-stapling
+M8-004 adds the Trusted macOS Developer ID signing, notarization, zip-stapling
 exception, post-unpack signature verification, and mandatory hosted consumer
-gate.
+gate. M8-005 adds the Community release path that requires GitHub-hosted HTTPS
+SwiftPM consumer evidence while explicitly skipping any Developer ID,
+notarization, or stapling claim.

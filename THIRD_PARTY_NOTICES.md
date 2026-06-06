@@ -6,7 +6,7 @@ This file is an inventory and notice index. It does not include full license tex
 
 ## Release Blockers
 
-- EcritumRuntime.xcframework has unknown shipped license
+- None
 
 ## Shipped Components
 
@@ -14,7 +14,7 @@ This file is an inventory and notice index. It does not include full license tex
 | --- | --- | --- | --- |
 | borkdude:edamame | 1.5.37 | EPL-1.0 | https://github.com/borkdude/edamame |
 | borkdude:graal.locking | 0.0.2 | EPL-1.0 | https://github.com/borkdude/graal.locking |
-| EcritumRuntime.xcframework | 0.1.0-dev | NOASSERTION | NOASSERTION |
+| EcritumRuntime.xcframework | 0.1.0-dev | MIT | LICENSE |
 | GraalVM Native Image embedded runtime code | 25.0.2 | GPL-2.0-only WITH Classpath-exception-2.0 | GraalVM Community 25.0.2 LICENSE_NATIVEIMAGE.txt sha256=11a8fe0c63dcff8bd8674b89a5895dfbcf5f7e5453cf0a33566c4b3fb64e404c and https://www.graalvm.org/faq/ |
 | org.babashka:sci | 0.12.51 | EPL-1.0 | https://github.com/babashka/SCI |
 | org.babashka:sci.impl.types | 0.0.2 | EPL-1.0 | https://clojars.org/org.babashka/sci.impl.types |

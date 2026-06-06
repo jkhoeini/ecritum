@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
   cat <<'USAGE'
 Usage: release-check.sh
-       release-check.sh [--lane core|full] [--output-dir PATH] [--artifact PATH] [--release-zip PATH] [--public] [--notary-submit-json PATH] [--notary-log-json PATH] [--stapling-exception-json PATH] [--stapler-evidence-json PATH]
+       release-check.sh [--lane core|full] [--output-dir PATH] [--artifact PATH] [--release-zip PATH] [--community] [--public] [--notary-submit-json PATH] [--notary-log-json PATH] [--stapling-exception-json PATH] [--stapler-evidence-json PATH]
 
 Run the release gates. This command exits nonzero when any release blocker is
 present, including unknown shipped licenses.
@@ -17,6 +17,7 @@ artifact="dist/local/EcritumRuntime.xcframework"
 artifact_was_set="0"
 release_zip=""
 just_bin="${JUST:-just}"
+community_release="0"
 public_release="0"
 notary_submit_json=""
 notary_log_json=""
@@ -43,6 +44,7 @@ while [ "$#" -gt 0 ]; do
       esac
       shift 2
       ;;
+    --community|--community-release) community_release="1"; shift ;;
     --public|--public-release) public_release="1"; shift ;;
     --help|-h) usage; exit 0 ;;
     *) echo "unknown argument: $1" >&2; usage >&2; exit 2 ;;
@@ -50,6 +52,11 @@ while [ "$#" -gt 0 ]; do
 done
 if [ "$lane" != "core" ] && [ "$lane" != "full" ]; then
   echo "invalid release lane: $lane" >&2
+  usage >&2
+  exit 2
+fi
+if [ "$community_release" = "1" ] && [ "$public_release" = "1" ]; then
+  echo "release mode cannot be both --community and --public" >&2
   usage >&2
   exit 2
 fi
@@ -73,6 +80,10 @@ if [ "$public_release" = "1" ]; then
     usage >&2
     exit 2
   fi
+fi
+if [ "$community_release" = "1" ] && [ -z "${ECRITUM_CONSUMER_ARTIFACT_URL:-}" ]; then
+  echo "community release requires ECRITUM_CONSUMER_ARTIFACT_URL for hosted SwiftPM consumer validation" >&2
+  exit 1
 fi
 
 mkdir -p "$output_dir"
@@ -104,7 +115,7 @@ fi
 
 release_manifest_url="https://example.invalid/EcritumRuntime.xcframework.zip"
 release_manifest_checksum="$release_checksum"
-if [ "$public_release" = "1" ]; then
+if [ "$public_release" = "1" ] || [ "$community_release" = "1" ]; then
   if [ -z "${ECRITUM_CONSUMER_ARTIFACT_URL:-}" ]; then
     echo "public release requires ECRITUM_CONSUMER_ARTIFACT_URL for hosted SwiftPM consumer validation" >&2
     exit 1
@@ -129,6 +140,8 @@ else
 fi
 if [ "$public_release" = "1" ]; then
   "$just_bin" check-public-signing "$artifact" "$release_zip" "$notary_submit_json" "$notary_log_json" "$stapling_exception_json" "$stapler_evidence_json" "$package_manifest" > "$output_dir/public-signing.json"
+elif [ "$community_release" = "1" ]; then
+  printf '%s\n' '{"ok":false,"mode":"community","skipped":true,"reason":"community release does not claim Developer ID signing, notarization, or stapling"}' > "$output_dir/public-signing.json"
 else
   printf '%s\n' '{"ok":false,"skipped":true,"reason":"release-check was not run in public mode"}' > "$output_dir/public-signing.json"
 fi

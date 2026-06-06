@@ -40,6 +40,11 @@ EXPECTED_TEXTS = {
     },
 }
 
+FIRST_PARTY_PACKAGE_NAME = "EcritumRuntime.xcframework"
+FIRST_PARTY_LICENSE_SOURCE = "LICENSE"
+FIRST_PARTY_PACKAGED_LICENSE_FILE = "Ecritum-LICENSE.txt"
+FIRST_PARTY_LICENSE_SHA256 = "41d9a76b60d9da5bb4b77b00ed219efff21ac9cee12f764aa9e8200f252f9f87"
+
 EXTRA_TEXTS = {
     "LuaJ-MIT": {
         "file": "LuaJ-MIT.txt",
@@ -84,10 +89,33 @@ def package_scope(package):
     return "unknown"
 
 
+def annotation_value(package, key):
+    comment = package["annotations"][0]["comment"]
+    prefix = f"{key}="
+    for part in comment.split(";"):
+        part = part.strip()
+        if part.startswith(prefix):
+            return part[len(prefix):]
+    return None
+
+
+def first_party_license_required(report):
+    for package in report["packages"]:
+        if package_scope(package) != "shipped":
+            continue
+        if package.get("name") != FIRST_PARTY_PACKAGE_NAME:
+            continue
+        if annotation_value(package, "license-source") == FIRST_PARTY_LICENSE_SOURCE:
+            return True
+    return False
+
+
 def required_license_ids(report):
     ids = set()
     for package in report["packages"]:
         if package_scope(package) != "shipped":
+            continue
+        if package.get("name") == FIRST_PARTY_PACKAGE_NAME and annotation_value(package, "license-source") == FIRST_PARTY_LICENSE_SOURCE:
             continue
         expression = package["licenseConcluded"]
         if expression == "NOASSERTION":
@@ -160,6 +188,19 @@ def validate_bundle(bundle, required_ids):
     return errors, manifest
 
 
+def validate_first_party_license_file(path):
+    errors = []
+    if not path.is_file():
+        return [f"missing first-party Ecritum license text: {path}"]
+    actual_sha = sha256(path)
+    if actual_sha != FIRST_PARTY_LICENSE_SHA256:
+        errors.append(
+            "first-party Ecritum license hash mismatch: "
+            + f"{path} sha256={actual_sha}, expected {FIRST_PARTY_LICENSE_SHA256}"
+        )
+    return errors
+
+
 def artifact_license_dir(artifact):
     candidates = sorted(artifact.glob("*/EcritumRuntime.framework/Resources/Licenses"))
     if len(candidates) != 1:
@@ -167,7 +208,7 @@ def artifact_license_dir(artifact):
     return candidates[0]
 
 
-def validate_release_zip(release_zip, required_ids):
+def validate_release_zip(release_zip, required_ids, require_first_party_license):
     errors = []
     expected = expected_manifest()
     with zipfile.ZipFile(release_zip) as archive:
@@ -177,6 +218,19 @@ def validate_release_zip(release_zip, required_ids):
             return [f"expected one packaged Resources/Licenses/manifest.json in {release_zip}, found {len(manifest_names)}"]
         manifest_name = manifest_names[0]
         prefix = manifest_name.rsplit("/", 1)[0] + "/"
+        if require_first_party_license:
+            first_party_name = prefix + FIRST_PARTY_PACKAGED_LICENSE_FILE
+            if first_party_name not in names:
+                errors.append(f"missing first-party Ecritum license text in release zip: {first_party_name}")
+            else:
+                import hashlib
+
+                actual_sha = hashlib.sha256(archive.read(first_party_name)).hexdigest()
+                if actual_sha != FIRST_PARTY_LICENSE_SHA256:
+                    errors.append(
+                        "first-party Ecritum license hash mismatch in release zip: "
+                        + f"{first_party_name} sha256={actual_sha}, expected {FIRST_PARTY_LICENSE_SHA256}"
+                    )
         manifest = json.loads(archive.read(manifest_name).decode())
         if manifest != expected:
             errors.append(f"license text manifest is stale in release zip: {manifest_name}")
@@ -217,20 +271,28 @@ if args.write_manifest:
 
 report = run_license_report(args.license_report_command)
 required_ids = required_license_ids(report)
+require_first_party_license = first_party_license_required(report)
 errors, manifest = validate_bundle(bundle, required_ids)
 artifact_bundle = None
 if args.artifact:
     artifact_bundle = artifact_license_dir(Path(args.artifact))
     artifact_errors, _ = validate_bundle(artifact_bundle, required_ids)
     errors.extend(f"artifact: {error}" for error in artifact_errors)
+    if require_first_party_license:
+        errors.extend(
+            f"artifact: {error}"
+            for error in validate_first_party_license_file(artifact_bundle / FIRST_PARTY_PACKAGED_LICENSE_FILE)
+        )
 if args.release_zip:
-    zip_errors = validate_release_zip(Path(args.release_zip), required_ids)
+    zip_errors = validate_release_zip(Path(args.release_zip), required_ids, require_first_party_license)
     errors.extend(f"release zip: {error}" for error in zip_errors)
 
 payload = {
     "artifactBundle": str(artifact_bundle) if artifact_bundle else None,
     "bundle": str(bundle),
     "expectedLicenseIds": sorted(EXPECTED_TEXTS),
+    "firstPartyLicenseFile": FIRST_PARTY_PACKAGED_LICENSE_FILE if require_first_party_license else None,
+    "firstPartyLicenseRequired": require_first_party_license,
     "ok": not errors,
     "releaseZip": args.release_zip,
     "requiredLicenseIds": required_ids,

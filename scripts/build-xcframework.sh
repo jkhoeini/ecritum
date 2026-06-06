@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'USAGE'
-Usage: build-xcframework.sh [--lane core|full] [--native-dir PATH] [--public-headers PATH] [--license-texts-dir PATH] [--output PATH] [--work-dir PATH] [--min-macos VERSION] [--sign-identity ID] [--skip-sign] [--public-release]
+Usage: build-xcframework.sh [--lane core|full] [--native-dir PATH] [--public-headers PATH] [--license-texts-dir PATH] [--first-party-license-file PATH] [--output PATH] [--work-dir PATH] [--min-macos VERSION] [--sign-identity ID] [--skip-sign] [--public-release]
 
 Build dist/local/EcritumRuntime.xcframework from the M1 native output.
 Diagnostics go to stderr. The output path is printed to stdout.
@@ -13,6 +13,7 @@ USAGE
 native_dir="build/native/macos-arm64"
 public_headers="Sources/CEcritum/include"
 license_texts_dir="THIRD_PARTY_LICENSES"
+first_party_license_file="LICENSE"
 output="dist/local/EcritumRuntime.xcframework"
 work_dir="build/xcframework"
 min_macos="14.0"
@@ -27,6 +28,7 @@ while [ "$#" -gt 0 ]; do
     --native-dir) native_dir="$2"; shift 2 ;;
     --public-headers) public_headers="$2"; shift 2 ;;
     --license-texts-dir) license_texts_dir="$2"; shift 2 ;;
+    --first-party-license-file) first_party_license_file="$2"; shift 2 ;;
     --output) output="$2"; shift 2 ;;
     --work-dir) work_dir="$2"; shift 2 ;;
     --min-macos) min_macos="$2"; shift 2 ;;
@@ -60,7 +62,7 @@ framework_dir="$work_dir/macos-arm64/EcritumRuntime.framework"
 resources_dir="$framework_dir/Resources"
 modules_dir="$framework_dir/Modules"
 
-for path in "$native_lib" "$private_headers/libecritum.h" "$private_headers/graal_isolate.h" "$public_headers/ecritum.h" "$license_texts_dir/manifest.json" "scripts/ecritum_runtime_wrapper.c"; do
+for path in "$native_lib" "$private_headers/libecritum.h" "$private_headers/graal_isolate.h" "$public_headers/ecritum.h" "$license_texts_dir/manifest.json" "$first_party_license_file" "scripts/ecritum_runtime_wrapper.c"; do
   if [ ! -e "$path" ]; then
     echo "missing required input: $path" >&2
     exit 1
@@ -78,6 +80,7 @@ mkdir -p "$framework_dir/Headers" "$modules_dir" "$resources_dir" "$(dirname "$o
 cp "$public_headers/ecritum.h" "$framework_dir/Headers/ecritum.h"
 cp "$native_lib" "$resources_dir/libecritum_graal.dylib"
 cp -R "$license_texts_dir" "$resources_dir/Licenses"
+cp "$first_party_license_file" "$resources_dir/Licenses/Ecritum-LICENSE.txt"
 printf '{"formatVersion":1,"releaseLane":"%s"}\n' "$lane" > "$resources_dir/ecritum-runtime-lane.json"
 install_name_tool -id "@loader_path/Resources/libecritum_graal.dylib" "$resources_dir/libecritum_graal.dylib"
 

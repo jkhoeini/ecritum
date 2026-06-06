@@ -8,6 +8,8 @@ The planned core is a GraalVM Native Image shared library (`.dylib` or `XCFramew
 
 ## Hard Boundaries
 
+- Run shell commands through `zsh -ic "cmd"` so agents get the user's zsh PATH,
+  tool shims, and environment setup.
 - Use `jj` for version control. Do not use `git` commands.
 - Use `mise` for project tools and `just` for project tasks. Prefer `mise exec -- just <task>` if tool versions matter.
 - Keep the public ABI C-compatible: opaque handles, explicit ownership, explicit error objects, no exceptions crossing FFI.
