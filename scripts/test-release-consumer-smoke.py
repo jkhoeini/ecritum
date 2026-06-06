@@ -94,7 +94,16 @@ def validate_ecritum_release_manifest(repo_root, env):
     if len(runtime_targets) != 1:
         fail(f"expected one EcritumRuntime binary target in Ecritum release manifest, found {len(runtime_targets)}")
     runtime_target = runtime_targets[0]
-    if runtime_target.get("type") != "binary" or runtime_target.get("path") != "remote/archive/EcritumRuntime.xcframework.zip":
+    runtime_path = runtime_target.get("path")
+    archive_prefix = "remote/archive/"
+    archive_name = runtime_path[len(archive_prefix):] if isinstance(runtime_path, str) and runtime_path.startswith(archive_prefix) else ""
+    if (
+        runtime_target.get("type") != "binary"
+        or not isinstance(runtime_path, str)
+        or not runtime_path.startswith(archive_prefix)
+        or "/" in archive_name
+        or not runtime_path.endswith(".zip")
+    ):
         fail(f"EcritumRuntime did not resolve through a remote binary target: {runtime_target}")
     return runtime_target
 

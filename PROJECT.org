@@ -3745,7 +3745,7 @@ Remaining M7 blockers, not M7-001 blockers:
 - The current combined local artifact remains above Core size budgets until the
   Core/Full artifact split or budget policy is resolved.
 
-*** IN-PROGRESS M7-002 Clean-machine consumer validation
+*** DONE M7-002 Clean-machine consumer validation
 
 Lead persona: Tests.
 Reviewer personas: Release, Swift DX, Security.
@@ -3814,6 +3814,10 @@ Implementation progress:
   target selection, checksum sidecar mismatch, package-manifest checksum
   mismatch, and =workspace-state.json= local/missing/duplicate/missing-source
   artifact shapes.
+- Relaxed release-manifest validation to accept SwiftPM's real
+  =remote/archive/<url-basename>.zip= path while still requiring a remote
+  single-component zip archive path. This fixed the positive hosted run where
+  SwiftPM resolved the Catbox artifact as =remote/archive/nr0ybn.zip=.
 - Integrated optional clean-consumer evidence into =release-check.sh=:
   =build/release/clean-consumer.json= records either the positive HTTPS
   consumer result or a skipped gate explaining that SwiftPM binary target URLs
@@ -3856,20 +3860,50 @@ Review evidence:
   does not apply because the runtime subprocess receives an explicit three-key
   environment instead of inheriting the parent environment; the justfile uses
   positional task parameters intentionally and converts them to script flags.
+- 2026-06-06 Claude diff review for the hosted-basename fix returned no
+  blockers. Non-blocking feedback to require a single zip basename under
+  =remote/archive/= was implemented with a fake-Swift regression test.
+- Tests/Security/Unix and Release/Swift DX post-change reviewers confirmed the
+  acceptance bar: M7-002 requires =clean-consumer.json= with =ok: true= from a
+  real trusted HTTPS URL, not self-signed loopback or local-path evidence.
 
 Verification evidence:
 
 - =python3 -m py_compile scripts/test-release-consumer-smoke.py scripts/package-artifact.py scripts/check-package-reproducible.py Tests/Release/test_package_artifact.py= -> exit 0.
 - =bash -n scripts/release-check.sh= -> exit 0.
 - =mise exec -- just plan-check= -> exit 0.
-- =mise exec -- just test-release-tools= -> exit 0; 15 tests cover package
+- =python3 -B -m unittest Tests/Release/test_package_artifact.py= -> PASS, 21
+  tests.
+- =mise exec -- just test-release-tools= -> PASS, 59 tests cover package
   determinism, manifest release-mode failures/success, reproducibility checker,
   non-HTTPS URL rejection, invalid checksum rejection, stale release zip
   rejection, checksum sidecar mismatch, package-manifest checksum mismatch,
   manifest-only release binary target validation, and SwiftPM
   =workspace-state.json= remote/local/missing/duplicate/missing-source artifact
-  validation.
+  validation, including generated hosted zip basenames.
 - =python3 scripts/test-release-consumer-smoke.py --artifact-url https://example.invalid/EcritumRuntime.xcframework.zip --checksum 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef --release-zip /tmp/ecritum-missing-release.zip --manifest-only= -> exit 0; release manifest selects =remote/archive/EcritumRuntime.xcframework.zip=.
+- Uploaded the exact Full-lane zip
+  =dist/release/full/EcritumRuntime.xcframework.zip= to the unauthenticated
+  public HTTPS URL =https://files.catbox.moe/nr0ybn.zip=. The URL contains no
+  signed token or secret. The zip checksum is
+  =7a5e11565033aa8967bd40b15c20a3812f77993a1eab4ed7862a456ee35da51d=.
+- =mise exec -- just test-release-consumer-smoke
+  https://files.catbox.moe/nr0ybn.zip
+  7a5e11565033aa8967bd40b15c20a3812f77993a1eab4ed7862a456ee35da51d
+  dist/release/full/EcritumRuntime.xcframework.zip= -> PASS.
+  =build/release/full/clean-consumer-positive.json= records =ok: true=,
+  =binaryTargetPath: remote/archive/nr0ybn.zip=, downloaded framework path under
+  =build/release-consumer-smoke/swift-build/artifacts/ecritum/=, and output
+  =ReleaseConsumerSmoke version=0.1.0-dev clojure=42 javascript=42=.
+- =ECRITUM_CONSUMER_ARTIFACT_URL=https://files.catbox.moe/nr0ybn.zip
+  ECRITUM_CONSUMER_ARTIFACT_CHECKSUM=7a5e11565033aa8967bd40b15c20a3812f77993a1eab4ed7862a456ee35da51d
+  mise exec -- just release-check full= -> expected exit 1 at the known
+  first-party license blocker after hosted clean-consumer evidence passed.
+  =build/release/full/clean-consumer.json= records =ok: true= and the same
+  hosted URL/checksum/downloaded framework evidence; =size.json=,
+  =package-reproducibility.json=, and =vulnerability-response.json= are also
+  ok. The final blocker is
+  =EcritumRuntime.xcframework has unknown shipped license=.
 - Local loopback HTTPS with temporary self-signed cert plus =SSL_CERT_FILE= /
   =REQUESTS_CA_BUNDLE= -> expected exit 1 after SwiftPM attempted download;
   error: =The certificate for this server is invalid=.
@@ -3883,12 +3917,11 @@ Verification evidence:
   =artifact_bytes 151470866 exceeds budget 25000000= and
   =private_runtime_bytes 151308752 exceeds budget 20000000=.
 
-Not done yet:
+Completion note:
 
-- Positive clean-consumer validation still needs a real HTTPS URL serving the
-  current =dist/release/EcritumRuntime.xcframework.zip= and matching checksum.
-  M7-002 cannot move to DONE until that command succeeds and the output JSON is
-  recorded.
+- M7-002 is now done for the Full lane. Core remains size-blocked by ADR-018 and
+  true public release publication remains blocked by the first-party license,
+  signing/notarization, and hosted-release-operation gates tracked elsewhere.
 
 *** DONE M7-003 License inventory and notices
 

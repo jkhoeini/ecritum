@@ -8,6 +8,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import textwrap
 import unittest
 import zipfile
 from pathlib import Path
@@ -192,6 +193,19 @@ class PackageArtifactTest(unittest.TestCase):
         self.assertEqual(runtime_targets[0]["type"], "binary")
         self.assertEqual(runtime_targets[0]["path"], "remote/archive/EcritumRuntime.xcframework.zip")
 
+    def test_release_manifest_accepts_remote_archive_basename_from_url(self):
+        completed = self.describe_package({
+            "ECRITUM_RELEASE_RUNTIME_REQUIRED": "1",
+            "ECRITUM_RUNTIME_URL": "https://files.example.invalid/nr0ybn.zip",
+            "ECRITUM_RUNTIME_CHECKSUM": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        })
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        payload = json.loads(completed.stdout)
+        runtime_targets = [target for target in payload["targets"] if target["name"] == "EcritumRuntime"]
+        self.assertEqual(len(runtime_targets), 1)
+        self.assertEqual(runtime_targets[0]["type"], "binary")
+        self.assertEqual(runtime_targets[0]["path"], "remote/archive/nr0ybn.zip")
+
     def test_missing_artifact_fails(self):
         shutil.rmtree(self.artifact)
         completed = subprocess.run(
@@ -320,7 +334,75 @@ class PackageArtifactTest(unittest.TestCase):
         payload = json.loads(completed.stdout)
         self.assertTrue(payload["ok"])
         self.assertTrue(payload["manifestOnly"])
-        self.assertEqual(payload["binaryTargetPath"], "remote/archive/EcritumRuntime.xcframework.zip")
+        self.assertTrue(payload["binaryTargetPath"].startswith("remote/archive/"))
+        self.assertTrue(payload["binaryTargetPath"].endswith(".zip"))
+
+    def test_release_consumer_smoke_manifest_only_accepts_remote_archive_basename_from_url(self):
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(RELEASE_CONSUMER_SMOKE),
+                "--artifact-url",
+                "https://files.example.invalid/nr0ybn.zip",
+                "--checksum",
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "--release-zip",
+                str(self.root / "missing-release.zip"),
+                "--manifest-only",
+            ],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        payload = json.loads(completed.stdout)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["binaryTargetPath"], "remote/archive/nr0ybn.zip")
+
+    def test_release_consumer_smoke_rejects_nested_remote_archive_path(self):
+        fake_bin = self.root / "fake-bin"
+        fake_swift = fake_bin / "swift"
+        fake_bin.mkdir()
+        fake_swift.write_text(textwrap.dedent("""\
+            #!/usr/bin/env python3
+            import json
+            print(json.dumps({
+                "targets": [
+                    {
+                        "name": "EcritumRuntime",
+                        "path": "remote/archive/nested/EcritumRuntime.xcframework.zip",
+                        "type": "binary",
+                    }
+                ]
+            }))
+        """))
+        fake_swift.chmod(fake_swift.stat().st_mode | stat.S_IXUSR)
+        env = os.environ.copy()
+        env["PATH"] = str(fake_bin) + os.pathsep + env["PATH"]
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(RELEASE_CONSUMER_SMOKE),
+                "--artifact-url",
+                "https://example.invalid/EcritumRuntime.xcframework.zip",
+                "--checksum",
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "--release-zip",
+                str(self.root / "missing-release.zip"),
+                "--manifest-only",
+            ],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("did not resolve through a remote binary target", completed.stderr)
 
     def test_release_consumer_smoke_workspace_state_accepts_remote_artifact(self):
         swift_build = self.root / "swift-build"
