@@ -29,6 +29,7 @@ done
 mkdir -p "$output_dir"
 package_manifest="$release_zip.json"
 package_checksum="$release_zip.checksum"
+sbom_file="$release_zip.spdx.json"
 "$just_bin" test
 "$just_bin" check-abi "$artifact"
 "$just_bin" check-xcframework "$artifact"
@@ -64,10 +65,12 @@ elif [ -n "${ECRITUM_CONSUMER_ARTIFACT_CHECKSUM:-}" ]; then
 else
   printf '%s\n' '{"ok":false,"skipped":true,"reason":"ECRITUM_CONSUMER_ARTIFACT_URL is not set; SwiftPM binary target URLs require https"}' > "$output_dir/clean-consumer.json"
 fi
-"$just_bin" license-report > "$output_dir/licenses.spdx.json"
+"$just_bin" sbom "$output_dir/licenses.spdx.json"
+cp "$output_dir/licenses.spdx.json" "$sbom_file"
 "$just_bin" third-party-notices "$output_dir/THIRD_PARTY_NOTICES.md"
 cmp "$output_dir/THIRD_PARTY_NOTICES.md" THIRD_PARTY_NOTICES.md
 "$just_bin" check-license-texts "$artifact" "$output_dir/licenses.spdx.json" > "$output_dir/license-texts.json"
 "$just_bin" check-license-texts-zip "$release_zip" "$output_dir/licenses.spdx.json" > "$output_dir/license-texts-zip.json"
+"$just_bin" check-vulnerability-response "$release_zip" "$output_dir/licenses.spdx.json" "${ECRITUM_CONSUMER_ARTIFACT_URL:-}" > "$output_dir/vulnerability-response.json"
 python3 scripts/size-artifact.py --artifact "$artifact" --require-artifact > "$output_dir/size.json"
 python3 scripts/license-report.py --strict > "$output_dir/licenses-strict.spdx.json"

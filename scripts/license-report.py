@@ -153,6 +153,22 @@ def spdx_license_expression(license_name):
     return mapping.get(license_name, "NOASSERTION")
 
 
+def purl_ref(locator, comment=None):
+    ref = {
+        "referenceCategory": "PACKAGE-MANAGER",
+        "referenceType": "purl",
+        "referenceLocator": locator,
+    }
+    if comment:
+        ref["comment"] = comment
+    return ref
+
+
+def maven_purl(coordinates, version):
+    group, artifact = coordinates.split(":", 1)
+    return f"pkg:maven/{group}/{artifact}@{version}"
+
+
 def license_names(license_info):
     if license_info is None:
         return None
@@ -175,6 +191,7 @@ def package(
     created,
     download_location="NOASSERTION",
     license_source=None,
+    external_refs=None,
 ):
     license_expression = spdx_license_expression(license_name)
     blocker = scope == "shipped" and license_expression == "NOASSERTION"
@@ -184,7 +201,7 @@ def package(
     )
     if license_source:
         comment += f"; license-source={license_source}"
-    return {
+    result = {
         "SPDXID": spdx_id,
         "name": name,
         "versionInfo": version,
@@ -202,6 +219,9 @@ def package(
             }
         ]
     }
+    if external_refs:
+        result["externalRefs"] = external_refs
+    return result
 
 
 def annotation_value(item, key):
@@ -314,6 +334,7 @@ packages = [
         "shipped",
         "NOASSERTION",
         created,
+        external_refs=[purl_ref("pkg:generic/ecritum/EcritumRuntime.xcframework@0.1.0-dev")],
     ),
     package(
         "SPDXRef-Package-GraalVM-NativeImage-EmbeddedRuntime",
@@ -324,6 +345,7 @@ packages = [
         created,
         "https://www.graalvm.org/",
         "GraalVM Community 25.0.2 LICENSE_NATIVEIMAGE.txt sha256=11a8fe0c63dcff8bd8674b89a5895dfbcf5f7e5453cf0a33566c4b3fb64e404c and https://www.graalvm.org/faq/",
+        [purl_ref(f"pkg:generic/oracle/graalvm-native-image-embedded-runtime@{graal_version}")],
     ),
     package(
         "SPDXRef-Package-GraalVM-NativeImage-SDK",
@@ -333,6 +355,7 @@ packages = [
         license_names(nativeimage_license),
         created,
         "https://github.com/oracle/graal",
+        external_refs=[purl_ref(maven_purl("org.graalvm.sdk:nativeimage", graal_version))],
     ),
     package(
         "SPDXRef-Package-GraalVM-Polyglot",
@@ -342,6 +365,7 @@ packages = [
         license_names(polyglot_license),
         created,
         "https://github.com/oracle/graal",
+        external_refs=[purl_ref(maven_purl("org.graalvm.polyglot:polyglot", graal_version))],
     ),
     package(
         "SPDXRef-Package-GraalVM-Collections",
@@ -351,6 +375,7 @@ packages = [
         license_names(collections_license),
         created,
         "https://github.com/oracle/graal",
+        external_refs=[purl_ref(maven_purl("org.graalvm.sdk:collections", graal_version))],
     ),
     package(
         "SPDXRef-Package-GraalJS-Language",
@@ -360,6 +385,7 @@ packages = [
         license_names(js_language_license),
         created,
         "https://github.com/oracle/graaljs",
+        external_refs=[purl_ref(maven_purl("org.graalvm.js:js-language", graal_version))],
     ),
     package(
         "SPDXRef-Package-GraalVM-Regex",
@@ -369,6 +395,7 @@ packages = [
         license_names(regex_license),
         created,
         "https://github.com/oracle/graal",
+        external_refs=[purl_ref(maven_purl("org.graalvm.regex:regex", graal_version))],
     ),
     package(
         "SPDXRef-Package-GraalVM-TruffleAPI",
@@ -378,6 +405,7 @@ packages = [
         license_names(truffle_api_license),
         created,
         "https://github.com/oracle/graal",
+        external_refs=[purl_ref(maven_purl("org.graalvm.truffle:truffle-api", graal_version))],
     ),
     package(
         "SPDXRef-Package-GraalVM-ICU4J",
@@ -387,6 +415,7 @@ packages = [
         license_names(icu4j_license),
         created,
         "https://github.com/unicode-org/icu",
+        external_refs=[purl_ref(maven_purl("org.graalvm.shadowed:icu4j", graal_version))],
     ),
     package(
         "SPDXRef-Package-GraalVM-XZ",
@@ -396,6 +425,7 @@ packages = [
         license_names(xz_license),
         created,
         "https://tukaani.org/xz/java.html",
+        external_refs=[purl_ref(maven_purl("org.graalvm.shadowed:xz", graal_version))],
     ),
     package(
         "SPDXRef-Package-GraalVM-TruffleRuntime",
@@ -405,6 +435,7 @@ packages = [
         license_names(truffle_runtime_license),
         created,
         "https://github.com/oracle/graal",
+        external_refs=[purl_ref(maven_purl("org.graalvm.truffle:truffle-runtime", graal_version))],
     ),
     package(
         "SPDXRef-Package-GraalVM-JNIUtils",
@@ -414,6 +445,7 @@ packages = [
         license_names(jniutils_license),
         created,
         "https://github.com/oracle/graal",
+        external_refs=[purl_ref(maven_purl("org.graalvm.sdk:jniutils", graal_version))],
     ),
     package(
         "SPDXRef-Package-GraalVM-TruffleCompiler",
@@ -423,6 +455,7 @@ packages = [
         license_names(truffle_compiler_license),
         created,
         "https://github.com/oracle/graal",
+        external_refs=[purl_ref(maven_purl("org.graalvm.truffle:truffle-compiler", graal_version))],
     ),
     package(
         "SPDXRef-Package-SCI",
@@ -432,6 +465,7 @@ packages = [
         license_names(sci_license),
         created,
         "https://github.com/babashka/SCI",
+        external_refs=[purl_ref(maven_purl("org.babashka:sci", "0.12.51"))],
     ),
     package(
         "SPDXRef-Package-Clojure",
@@ -441,6 +475,7 @@ packages = [
         license_names(clojure_license),
         created,
         "https://github.com/clojure/clojure",
+        external_refs=[purl_ref(maven_purl("org.clojure:clojure", "1.10.3"))],
     ),
     package(
         "SPDXRef-Package-Clojure-SpecAlpha",
@@ -450,6 +485,7 @@ packages = [
         license_names(spec_alpha_license),
         created,
         "https://github.com/clojure/spec.alpha",
+        external_refs=[purl_ref(maven_purl("org.clojure:spec.alpha", "0.2.194"))],
     ),
     package(
         "SPDXRef-Package-Clojure-CoreSpecsAlpha",
@@ -459,6 +495,7 @@ packages = [
         license_names(core_specs_alpha_license),
         created,
         "https://github.com/clojure/core.specs.alpha",
+        external_refs=[purl_ref(maven_purl("org.clojure:core.specs.alpha", "0.2.56"))],
     ),
     package(
         "SPDXRef-Package-Edamame",
@@ -468,6 +505,7 @@ packages = [
         license_names(edamame_license),
         created,
         "https://github.com/borkdude/edamame",
+        external_refs=[purl_ref(maven_purl("borkdude:edamame", "1.5.37"))],
     ),
     package(
         "SPDXRef-Package-Clojure-ToolsReader",
@@ -477,6 +515,7 @@ packages = [
         license_names(tools_reader_license),
         created,
         "https://github.com/clojure/tools.reader",
+        external_refs=[purl_ref(maven_purl("org.clojure:tools.reader", "1.5.2"))],
     ),
     package(
         "SPDXRef-Package-SCI-ImplTypes",
@@ -486,6 +525,7 @@ packages = [
         "Eclipse Public License 1.0",
         created,
         "https://clojars.org/org.babashka/sci.impl.types",
+        external_refs=[purl_ref(maven_purl("org.babashka:sci.impl.types", "0.0.2"))],
     ),
     package(
         "SPDXRef-Package-GraalLocking",
@@ -495,6 +535,7 @@ packages = [
         license_names(graal_locking_license),
         created,
         "https://github.com/borkdude/graal.locking",
+        external_refs=[purl_ref(maven_purl("borkdude:graal.locking", "0.0.2"))],
     ),
     package(
         "SPDXRef-Package-LuaJ-JME",
@@ -504,6 +545,7 @@ packages = [
         license_names(luaj_jme_license),
         created,
         "https://sourceforge.net/projects/luaj/",
+        external_refs=[purl_ref(maven_purl("org.luaj:luaj-jme", "3.0.1"))],
     ),
     package(
         "SPDXRef-Package-GraalVM-Word-SDK",
@@ -513,6 +555,7 @@ packages = [
         license_names(word_license),
         created,
         "https://github.com/oracle/graal",
+        external_refs=[purl_ref(maven_purl("org.graalvm.sdk:word", graal_version))],
     ),
     package(
         "SPDXRef-Package-JUnit",
@@ -522,6 +565,7 @@ packages = [
         "Eclipse Public License 2.0",
         created,
         "https://junit.org/junit5/",
+        external_refs=[purl_ref(maven_purl("org.junit.jupiter:junit-jupiter", "5.14.1"))],
     ),
 ]
 

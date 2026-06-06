@@ -4038,6 +4038,122 @@ Definition of done:
 - Maven build plugins and POM-only resolver artifacts are either inventoried in
   a build-tool notice bundle or explicitly excluded by ADR.
 
+*** DONE M7-005 Vulnerability response, SBOM, CVE tracking, and revocation gate
+
+Lead persona: Release.
+Reviewer personas: Security, Tests, Unix, Architecture.
+Write scope: docs/, scripts/, Tests/Release/, justfile, release metadata.
+
+Execution notes:
+
+- Engineering Manager started M7-005 in jj child change
+  =docs: define vulnerability response policy= on top of completed M7-004.
+- Security, Release, and Tests/Unix reviewer agents reviewed the plan and
+  identified acceptance criteria before implementation.
+- Claude CLI is used directly with no auth check. Plan and post-change review
+  attempts both timed out with no output and are not counted as signoff.
+
+Completed:
+
+- Accepted ADR-015 as
+  =docs/adr/0015-vulnerability-response-sbom-cve-tracking-and-revocation.md=.
+- Added =SECURITY.md= and =docs/security/vulnerability-response.md=.
+- Added =docs/security/release-security-state.json= for monitoring sources,
+  package coverage rules, advisory state, accepted-risk policy, and revocation
+  rules.
+- Added public =revocations.json= as the current empty revocation index.
+- Extended =scripts/license-report.py= so every current package has SPDX
+  package-url =externalRefs= for vulnerability tracking.
+- Added =scripts/check-vulnerability-response.py= to validate SPDX 2.3 SBOM
+  shape, published SBOM sidecar freshness, purl identity coverage, monitoring
+  rule coverage, advisory blockers, accepted-risk expiry, revocation index
+  shape, required revocation fields, and current-artifact URL/checksum
+  revocation.
+- Added =just sbom= and =just check-vulnerability-response=.
+- Wired =release-check= to write =build/release/licenses.spdx.json= through
+  =just sbom=, publish =$release_zip.spdx.json=, pass the publication URL when
+  available, and record =build/release/vulnerability-response.json= before the
+  existing size and strict-license publication blockers.
+- Updated =docs/release-gates.md= with the concrete ADR-015 release gate.
+- Added release tests for current policy pass, non-SPDX-2.3 SBOM rejection,
+  duplicate package identity, missing purl, missing/stale published SBOM
+  sidecar, open high advisory blocker, accepted-risk ADR/expiry/owner/
+  mitigation/verification requirements, expired accepted risk, revoked current
+  checksum, revoked current URL, missing required revocation hashes, and
+  malformed revocation entries.
+
+Review evidence:
+
+- Security reviewer required SECURITY.md/advisory process, checksum-linked SBOM,
+  shipped/build CVE tracking, immutable revocation, and no GraalVM CE
+  containment overclaim. Implemented with ADR-015, runbook, purl externalRefs,
+  revocation index, and explicit ADR-004 non-claim.
+- Release reviewer required SPDX 2.3 as the SBOM baseline, package-url
+  external refs, immutable sidecars, no same-URL artifact replacement, high/
+  critical/known-exploited blockers, and release-check integration. Implemented
+  these in policy, state, checker, tests, and release-check.
+- Tests/Unix reviewer required one offline checker, JSON stdout, synthetic
+  fixtures, accepted-risk expiry tests, revoked-checksum tests, and no network
+  scanner in local release-check. Implemented that shape.
+- Claude plan consult timed out with no output after a bounded wait.
+- Claude post-change diff review timed out with no output after a bounded wait.
+  Do not count either Claude run as signoff.
+- Post-change Tests/Unix reviewer found blockers in required revocation-field
+  enforcement, public SBOM sidecar naming/freshness, and malformed revocation
+  type handling. Fixed with stricter checker validation and new tests.
+- Post-change Security/Release reviewer found the same SBOM and required-hash
+  blockers plus missing publication URL revocation enforcement and accepted-risk
+  owner/mitigation/verification gaps. Fixed with release URL plumbing and
+  accepted-risk field checks.
+
+Verification:
+
+- =python3 -m py_compile scripts/license-report.py
+  scripts/check-vulnerability-response.py
+  Tests/Release/test_vulnerability_response.py
+  Tests/Release/test_license_report.py= -> PASS.
+- =bash -n scripts/release-check.sh= -> PASS.
+- =mise exec -- just --list | rg 'sbom|vulnerability|license-texts'= -> PASS;
+  new just targets are visible.
+- =python3 -B -m unittest Tests/Release/test_vulnerability_response.py= ->
+  PASS, 14 tests.
+- =python3 -B -m unittest Tests/Release/test_license_report.py= -> PASS, 8
+  tests.
+- =mise exec -- just test-release-tools= -> PASS, 45 tests.
+- =mise exec -- just sbom /tmp/ecritum-vuln-sbom.json && python3 -m json.tool
+  /tmp/ecritum-vuln-sbom.json >/dev/null= -> PASS.
+- =mise exec -- just check-vulnerability-response= -> PASS; 24 covered
+  packages, 24 monitoring matches, no blocking advisories, current artifact not
+  revoked.
+- =mise exec -- just package-artifact >/tmp/ecritum-package-after-adr015.log &&
+  mise exec -- just sbom
+  dist/release/EcritumRuntime.xcframework.zip.spdx.json && mise exec -- just
+  check-vulnerability-response dist/release/EcritumRuntime.xcframework.zip
+  dist/release/EcritumRuntime.xcframework.zip.spdx.json= -> PASS; published
+  SBOM hash matched checker SBOM hash, 24/24 monitoring coverage, no
+  violations.
+- =mise exec -- just plan-check= -> PASS.
+- =mise exec -- just packaged-app-smoke= -> PASS; printed
+  =EcritumSmokeApp version=0.1.0-dev clojure=42 javascript=42=.
+- =mise exec -- just release-check > /tmp/ecritum-release-check-adr015.log
+  2>&1= -> expected exit 1 at the broader ADR-018 size gate after writing
+  =build/release/vulnerability-response.json=. The vulnerability gate passed
+  with 24/24 monitoring coverage and no violations. =build/release/size.json=
+  still reports =artifact_bytes 151941677 exceeds budget 25000000= and
+  =private_runtime_bytes 151308752 exceeds budget 20000000=.
+
+Definition of done:
+
+- Public release SBOM has package identities suitable for vulnerability
+  tracking.
+- Release gate fails for missing vulnerability-monitoring coverage, blocking
+  open advisories, expired accepted-risk records, malformed revocation entries,
+  or current-artifact revocation.
+- Released artifact bytes are immutable; revocation records exact URL,
+  checksum, SBOM hash, date, and reason.
+- Live network CVE scanning is intentionally deferred to release operations and
+  must consume the same SPDX/purl data.
+
 * ADR Backlog
 
 ** DONE ADR-001 SwiftPM binary target and package layout
@@ -4068,7 +4184,7 @@ Output of: M4.5-001.
 Output of: M2.5-001.
 ** DONE ADR-014 Resource limits, cancellation, teardown, and recovery
 Output of: M2-007.
-** TODO ADR-015 Vulnerability response, SBOM, CVE tracking, and revocation
+** DONE ADR-015 Vulnerability response, SBOM, CVE tracking, and revocation
 Output of: M2.5-002 and M7-003.
 ** DONE ADR-016 Swift API and permission policy shape
 Output of: M2-001A.

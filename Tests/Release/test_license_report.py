@@ -34,6 +34,15 @@ def package_named(report, name):
     return matches[0]
 
 
+def purls(package):
+    return [
+        ref["referenceLocator"]
+        for ref in package.get("externalRefs", [])
+        if ref.get("referenceCategory") == "PACKAGE-MANAGER"
+        and ref.get("referenceType") == "purl"
+    ]
+
+
 class LicenseReportTest(unittest.TestCase):
     def test_graalvm_native_image_runtime_license_is_resolved_from_adr_011_evidence(self):
         completed = run_license_report()
@@ -64,6 +73,19 @@ class LicenseReportTest(unittest.TestCase):
 
         self.assertEqual(js_language["licenseConcluded"], "UPL-1.0 AND MIT")
         self.assertIn("Universal Permissive License, Version 1.0 AND MIT License", js_language["annotations"][0]["comment"])
+
+    def test_packages_include_purl_external_refs_for_vulnerability_tracking(self):
+        completed = run_license_report()
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        report = json.loads(completed.stdout)
+
+        js_language = package_named(report, "org.graalvm.js:js-language")
+        first_party = package_named(report, "EcritumRuntime.xcframework")
+        graal_runtime = package_named(report, "GraalVM Native Image embedded runtime code")
+
+        self.assertIn("pkg:maven/org.graalvm.js/js-language@25.0.2", purls(js_language))
+        self.assertIn("pkg:generic/ecritum/EcritumRuntime.xcframework@0.1.0-dev", purls(first_party))
+        self.assertIn("pkg:generic/oracle/graalvm-native-image-embedded-runtime@25.0.2", purls(graal_runtime))
 
     def test_notices_include_blockers_scoped_components_and_full_text_warning(self):
         completed = run_license_report("--notices")

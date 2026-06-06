@@ -352,12 +352,22 @@ check-license-texts-zip release_zip="dist/release/EcritumRuntime.xcframework.zip
     if [ -n "{{license_report}}" ]; then args+=(--license-report-command python3 -c "import pathlib; print(pathlib.Path('{{license_report}}').read_text())"); fi; \
     python3 scripts/check-license-texts.py "${args[@]}"
 
+check-vulnerability-response release_zip="dist/release/EcritumRuntime.xcframework.zip" sbom="" release_url="":
+    @if [ -z "{{sbom}}" ]; then python3 scripts/license-report.py > "{{release_zip}}.spdx.json"; fi; \
+    args=(--release-zip "{{release_zip}}"); \
+    if [ -n "{{release_url}}" ]; then args+=(--release-url "{{release_url}}"); fi; \
+    if [ -n "{{sbom}}" ]; then args+=(--sbom-command python3 -c "import pathlib, sys; sys.stdout.write(pathlib.Path('{{sbom}}').read_text())"); fi; \
+    python3 scripts/check-vulnerability-response.py "${args[@]}"
+
 perf-baseline: size bench-cold-start bench-swift-cold-start bench-idle-rss bench-first-eval check-dep-delta
 
 perf: perf-baseline
 
 license-report:
     @python3 scripts/license-report.py
+
+sbom output="dist/release/EcritumRuntime.xcframework.zip.spdx.json":
+    @python3 scripts/license-report.py > "{{output}}"
 
 license-report-strict:
     @python3 scripts/license-report.py --strict

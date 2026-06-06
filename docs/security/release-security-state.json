@@ -1,0 +1,148 @@
+{
+  "schemaVersion": 1,
+  "policy": {
+    "sbom": {
+      "format": "SPDX-2.3",
+      "publicationArtifacts": [
+        "EcritumRuntime.xcframework.zip",
+        "EcritumRuntime.xcframework.zip.checksum",
+        "EcritumRuntime.xcframework.zip.json",
+        "EcritumRuntime.xcframework.zip.spdx.json",
+        "THIRD_PARTY_NOTICES.md",
+        "THIRD_PARTY_LICENSES/manifest.json",
+        "revocations.json"
+      ]
+    },
+    "monitoring": {
+      "coverageScopes": [
+        "shipped",
+        "build",
+        "test"
+      ],
+      "cadence": {
+        "preRelease": true,
+        "dependencyChange": true,
+        "weeklyWhilePublicArtifactsExist": true,
+        "outOfBandForHighCriticalOrKnownExploited": true
+      },
+      "sources": [
+        {
+          "id": "osv",
+          "url": "https://osv.dev/",
+          "kind": "open-source-vulnerability-database"
+        },
+        {
+          "id": "github-advisory-database",
+          "url": "https://github.com/advisories",
+          "kind": "open-source-vulnerability-database"
+        },
+        {
+          "id": "nvd",
+          "url": "https://services.nvd.nist.gov/rest/json/cves/2.0",
+          "kind": "cve-database"
+        },
+        {
+          "id": "cisa-kev",
+          "url": "https://www.cisa.gov/known-exploited-vulnerabilities-catalog",
+          "kind": "known-exploited-vulnerability-catalog"
+        },
+        {
+          "id": "graalvm-advisories",
+          "url": "https://www.graalvm.org/vulnerability-advisories/",
+          "kind": "vendor-advisory"
+        },
+        {
+          "id": "oracle-cpu",
+          "url": "https://www.oracle.com/security-alerts/",
+          "kind": "vendor-advisory"
+        },
+        {
+          "id": "ecritum-security",
+          "url": "SECURITY.md",
+          "kind": "first-party-intake"
+        }
+      ],
+      "rules": [
+        {
+          "id": "maven-components",
+          "purlType": "maven",
+          "appliesToScopes": [
+            "shipped",
+            "build",
+            "test"
+          ],
+          "sourceIds": [
+            "osv",
+            "github-advisory-database",
+            "nvd",
+            "cisa-kev"
+          ],
+          "blockSeverities": [
+            "critical",
+            "high"
+          ],
+          "blockKnownExploited": true
+        },
+        {
+          "id": "first-party-runtime",
+          "purl": "pkg:generic/ecritum/EcritumRuntime.xcframework@0.1.0-dev",
+          "appliesToScopes": [
+            "shipped"
+          ],
+          "sourceIds": [
+            "ecritum-security",
+            "github-advisory-database"
+          ],
+          "blockSeverities": [
+            "critical",
+            "high"
+          ],
+          "blockKnownExploited": true
+        },
+        {
+          "id": "graalvm-native-image-output",
+          "packageName": "GraalVM Native Image embedded runtime code",
+          "appliesToScopes": [
+            "shipped"
+          ],
+          "sourceIds": [
+            "graalvm-advisories",
+            "oracle-cpu",
+            "nvd",
+            "cisa-kev"
+          ],
+          "blockSeverities": [
+            "critical",
+            "high"
+          ],
+          "blockKnownExploited": true
+        }
+      ]
+    },
+    "triage": {
+      "severitySlaDays": {
+        "critical": 2,
+        "high": 7,
+        "medium": 30,
+        "low": 90,
+        "unknown": 30
+      },
+      "acceptedRiskMaxDays": 30,
+      "acceptedRiskRequiresAdr": true
+    },
+    "revocation": {
+      "indexArtifact": "revocations.json",
+      "immutableArtifactUrls": true,
+      "requiredFields": [
+        "artifactUrl",
+        "artifactSha256",
+        "swiftPackageChecksum",
+        "sbomSha256",
+        "revokedAt",
+        "reason"
+      ]
+    }
+  },
+  "advisories": [],
+  "revocations": []
+}

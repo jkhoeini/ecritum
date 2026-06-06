@@ -49,7 +49,10 @@ mise exec -- just release-check
 - `just test-release-consumer-smoke` when `ECRITUM_CONSUMER_ARTIFACT_URL` is
   set; otherwise `build/release/clean-consumer.json` records a skipped HTTPS
   artifact gate
-- `just license-report`
+- `just sbom`
+- `just check-license-texts`
+- `just check-license-texts-zip`
+- `just check-vulnerability-response`
 - `scripts/size-artifact.py --require-artifact`
 - `scripts/license-report.py --strict`
 
@@ -103,10 +106,13 @@ config, lifecycle, and host-registration coverage and records blocked eval,
 source, value, error, and callback parser surfaces until those public APIs exist.
 
 Release publication also requires a hardened runtime plan, signed/notarized
-artifacts, revocation mechanics, dependency digest locks, SBOM publication,
-CVE monitoring, and a vulnerability response process. These requirements are
-recorded here as release gates; implementation and final publication policy are
-owned by ADR-015 and M7 release tasks.
+artifacts, and dependency digest locks. ADR-015 owns SBOM publication, CVE
+tracking, vulnerability response, and revocation policy. The offline gate is
+`just check-vulnerability-response`, which verifies SPDX SBOM shape,
+package-url identity coverage, monitoring-source coverage, advisory blockers,
+accepted-risk expiry, and revoked artifact checksums. Live OSV/NVD/CISA/vendor
+queries are scheduled release-operations work and are intentionally not part of
+the deterministic local `release-check` yet.
 
 ## ABI Gate
 
@@ -149,6 +155,13 @@ document with standard document and package annotations for:
 - test-only components
 - shipped-license blockers
 
+`just sbom` writes the same SPDX 2.3 JSON to a release sidecar path. SPDX
+packages include package-url external references so downstream CVE tooling can
+map Maven dependencies, the first-party XCFramework, and the GraalVM Native
+Image embedded runtime identity. `just check-vulnerability-response` validates
+that every covered package has purl identity and monitoring coverage in
+`docs/security/release-security-state.json`.
+
 `just license-report` is report-only and exits zero. `just license-report-strict`
 and `just release-check` exit nonzero and print release blockers to stderr if
 any shipped component has `NOASSERTION`, `UNKNOWN`, or missing license data.
@@ -166,8 +179,6 @@ recorded policy. The strict gate still blocks on `EcritumRuntime.xcframework`
 until the project owner chooses and commits a top-level Ecritum license.
 
 `THIRD_PARTY_NOTICES.md` is an inventory index, not a full license-text bundle.
-M7-004 must add a packaging gate for required GPL+Classpath Exception, EPL, MIT,
-ICU, UPL, and other upstream license texts before public release.
 M7-004 adds `THIRD_PARTY_LICENSES/` as the checked-in full-text bundle and
 `just check-license-texts` / `just check-license-texts-zip` as the artifact and
 release-zip gates. `just xcframework` copies the bundle into
@@ -177,6 +188,29 @@ against the SPDX license report generated in the same release run.
 POM-only resolver artifacts such as `org.graalvm.polyglot:js-community` and
 Maven build plugins are excluded from this shipped-runtime full-text gate because
 they are not redistributed in the SwiftPM binary target.
+
+## Vulnerability Response And Revocation
+
+ADR-015 defines the release-security policy.
+`docs/security/release-security-state.json` is the machine-readable advisory and
+revocation state, while `docs/security/vulnerability-response.md` is the
+operator runbook.
+
+The vulnerability response gate fails when:
+
+- the SBOM is not SPDX 2.3
+- a shipped, build, or test component lacks purl identity
+- a covered component has no monitoring rule
+- a high, critical, or known-exploited open advisory affects the current SBOM
+- an accepted-risk advisory lacks an ADR, rationale, or unexpired acceptance
+  window
+- a revocation entry is malformed
+- the current release zip checksum or URL is listed as revoked
+
+Published artifact bytes are immutable. Do not replace a zip at an existing
+SwiftPM URL. If an artifact is unsafe, publish a revocation entry with the exact
+URL, zip SHA-256, SwiftPM checksum, SBOM SHA-256, date, and reason, then ship a
+fixed artifact at a new URL/checksum.
 
 The current Maven SDK inputs `org.graalvm.sdk:nativeimage` and
 `org.graalvm.sdk:word` are inventoried separately as build-time inputs. JUnit is
