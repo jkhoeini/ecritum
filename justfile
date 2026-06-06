@@ -73,7 +73,7 @@ test-abi-checker:
     python3 -m unittest Tests/ABI/test_check_abi.py
 
 test-release-tools:
-    python3 -m unittest Tests/Release/test_package_artifact.py
+    python3 -B -m unittest discover -s Tests/Release -p 'test_*.py'
 
 build-swift:
     test -f Package.swift
@@ -351,6 +351,9 @@ license-report:
 
 license-report-strict:
     @python3 scripts/license-report.py --strict
+
+third-party-notices output="THIRD_PARTY_NOTICES.md":
+    @SOURCE_DATE_EPOCH=0 python3 scripts/license-report.py --notices > "{{output}}"
 
 release-check:
     @scripts/release-check.sh

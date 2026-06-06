@@ -62,8 +62,8 @@ ABI packaging gates cover the artifact runtime path. First-eval is part of
 The current combined SCI/GraalJS/Lua local artifact also exceeds ADR-018 Core
 size budgets. `release-check` is therefore expected to exit nonzero at the size
 gate until the Core/Full artifact split or size policy is resolved. After size
-passes, the strict license step remains a publication blocker while shipped
-licenses are unknown.
+passes, the strict license step remains a publication blocker until the project
+owner chooses and commits a top-level Ecritum license.
 
 SwiftPM requires remote binary target URLs to use `https`. Local `http://` and
 `file://` URLs are not accepted as release proof. Self-signed loopback HTTPS
@@ -152,11 +152,22 @@ document with standard document and package annotations for:
 `just license-report` is report-only and exits zero. `just license-report-strict`
 and `just release-check` exit nonzero and print release blockers to stderr if
 any shipped component has `NOASSERTION`, `UNKNOWN`, or missing license data.
+`just third-party-notices` regenerates the checked-in `THIRD_PARTY_NOTICES.md`;
+`release-check` verifies the generated notices match the checked-in file. POMs
+with multiple declared licenses are represented as conservative combined SPDX
+expressions unless a runtime ADR accepts a narrower upstream interpretation.
+`just check-dep-delta` compares scope, component name, exact version, and SPDX
+expression against the reviewed release baseline.
 
-For M1, the strict gate blocks on:
+ADR-011 resolves GraalVM Community 25.0.2 Native Image output as
+`GPL-2.0-only WITH Classpath-exception-2.0` when the local GraalVM CE
+`LICENSE_NATIVEIMAGE.txt` evidence and `native-image --version` output match the
+recorded policy. The strict gate still blocks on `EcritumRuntime.xcframework`
+until the project owner chooses and commits a top-level Ecritum license.
 
-- `EcritumRuntime.xcframework`
-- GraalVM Native Image embedded runtime code
+`THIRD_PARTY_NOTICES.md` is an inventory index, not a full license-text bundle.
+M7-004 must add a packaging gate for required GPL+Classpath Exception, EPL, MIT,
+ICU, UPL, and other upstream license texts before public release.
 
 The current Maven SDK inputs `org.graalvm.sdk:nativeimage` and
 `org.graalvm.sdk:word` are inventoried separately as build-time inputs. JUnit is

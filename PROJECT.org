@@ -3890,17 +3890,86 @@ Not done yet:
   M7-002 cannot move to DONE until that command succeeds and the output JSON is
   recorded.
 
-*** TODO M7-003 License inventory and notices
+*** DONE M7-003 License inventory and notices
 
 Lead persona: Release.
 Reviewer personas: Technical Debt, GraalVM Runtime, Security.
 Write scope: docs/, scripts/, THIRD_PARTY_NOTICES.md.
+
+Execution notes:
+
+- Release implemented the generator and release gate wiring.
+- Technical Debt/Security and Test/Verification personas reviewed the plan and
+  verification coverage in parallel read-only sub-agents.
+- Claude CLI is used directly for review; authentication checks are skipped per
+  =AGENTS.md=.
+
+Completed:
+
+- ADR-011 records the first-party license boundary, GraalVM Community 25.0.2
+  Native Image evidence, and deterministic notices policy.
+- =scripts/license-report.py= separates shipped, build, and test scopes and
+  keeps =EcritumRuntime.xcframework= as the remaining strict blocker.
+- =scripts/license-report.py --strict= verifies the pinned GraalVM CE
+  =LICENSE_NATIVEIMAGE.txt= hash and =native-image --version= evidence.
+- =check-dep-delta= compares scope, component name, exact version, and SPDX
+  expression against the reviewed release baseline.
+- =THIRD_PARTY_NOTICES.md= is generated from the SPDX inventory and checked in.
+- =release-check= verifies generated notices against the checked-in notice file.
+
+Verification:
+
+- =python3 -m py_compile scripts/license-report.py scripts/check-dep-delta.py
+  Tests/Release/test_license_report.py Tests/Release/test_check_dep_delta.py= -> PASS.
+- =mise exec -- just test-release-tools= -> PASS, 23 tests.
+- =mise exec -- just license-report= plus =python3 -m json.tool= -> PASS.
+- =mise exec -- just license-report-strict= -> expected exit 1; only
+  =EcritumRuntime.xcframework has unknown shipped license= remains.
+- =python3 -B scripts/check-dep-delta.py= -> PASS with no version/SPDX/scope
+  delta.
+- =SOURCE_DATE_EPOCH=0 python3 scripts/license-report.py --notices | cmp -
+  THIRD_PARTY_NOTICES.md= -> PASS.
+- =bash -n scripts/release-check.sh= -> PASS.
+- =mise exec -- just plan-check= -> PASS.
+
+Review:
+
+- Earlier Claude plan review found GraalVM/notice/full-license-text risks; those
+  findings were incorporated into ADR-011, strict evidence checks, and M7-004.
+- Final Claude diff review attempts on =/tmp/ecritum-m7-003.diff= and a compact
+  implementation brief produced no output after bounded waits and were
+  terminated. Do not count them as signoff.
+- Persona review follow-ups were incorporated: deterministic notice compare,
+  missing POM blockers, GraalVM evidence verification, version/SPDX dependency
+  delta, and full license-text packaging as M7-004.
+
+Closed with follow-ups:
+
+- M7-004 owns full license-text packaging and build-tool/POM-only notice policy.
+- The intentional first-party =EcritumRuntime.xcframework= license blocker
+  remains until the project owner chooses and commits a top-level Ecritum
+  license.
 
 Definition of done:
 
 - Shipped runtime dependencies are separated from build-only tools.
 - License obligations are documented with exact versions.
 - Release is blocked if licenses are unknown.
+
+*** TODO M7-004 Full license text packaging gate
+
+Lead persona: Release.
+Reviewer personas: Technical Debt, Security.
+Write scope: docs/, scripts/, release packaging.
+
+Definition of done:
+
+- Public release packaging includes required full upstream license texts for
+  GPL+Classpath Exception, EPL, MIT, ICU, UPL, and any future accepted licenses.
+- =release-check= or a dedicated release gate fails when required full license
+  text files are missing or stale.
+- Maven build plugins and POM-only resolver artifacts are either inventoried in
+  a build-tool notice bundle or explicitly excluded by ADR.
 
 * ADR Backlog
 
@@ -3924,7 +3993,7 @@ Output of: M6-001.
 Output of: M6-002.
 ** DONE ADR-010 XCFramework release, signing, and checksum policy
 Output of: M7-001.
-** TODO ADR-011 License inventory and redistribution policy
+** DONE ADR-011 License inventory and redistribution policy
 Output of: M7-003.
 ** DONE ADR-012 ABI versioning and compatibility policy
 Output of: M4.5-001.

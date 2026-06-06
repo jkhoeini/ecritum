@@ -65,5 +65,7 @@ else
   printf '%s\n' '{"ok":false,"skipped":true,"reason":"ECRITUM_CONSUMER_ARTIFACT_URL is not set; SwiftPM binary target URLs require https"}' > "$output_dir/clean-consumer.json"
 fi
 "$just_bin" license-report > "$output_dir/licenses.spdx.json"
+"$just_bin" third-party-notices "$output_dir/THIRD_PARTY_NOTICES.md"
+cmp "$output_dir/THIRD_PARTY_NOTICES.md" THIRD_PARTY_NOTICES.md
 python3 scripts/size-artifact.py --artifact "$artifact" --require-artifact > "$output_dir/size.json"
 python3 scripts/license-report.py --strict > "$output_dir/licenses-strict.spdx.json"
