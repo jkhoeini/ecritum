@@ -67,5 +67,7 @@ fi
 "$just_bin" license-report > "$output_dir/licenses.spdx.json"
 "$just_bin" third-party-notices "$output_dir/THIRD_PARTY_NOTICES.md"
 cmp "$output_dir/THIRD_PARTY_NOTICES.md" THIRD_PARTY_NOTICES.md
+"$just_bin" check-license-texts "$artifact" "$output_dir/licenses.spdx.json" > "$output_dir/license-texts.json"
+"$just_bin" check-license-texts-zip "$release_zip" "$output_dir/licenses.spdx.json" > "$output_dir/license-texts-zip.json"
 python3 scripts/size-artifact.py --artifact "$artifact" --require-artifact > "$output_dir/size.json"
 python3 scripts/license-report.py --strict > "$output_dir/licenses-strict.spdx.json"

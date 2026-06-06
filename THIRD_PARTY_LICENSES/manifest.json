@@ -1,0 +1,53 @@
+{
+  "formatVersion": 1,
+  "licenseTexts": [
+    {
+      "file": "EPL-1.0.txt",
+      "id": "EPL-1.0",
+      "sha256": "cc07bd2bd6ba843a9a2865ed891d5a3b5835a64bab6fa90945403ee53965d46f",
+      "source": "org.babashka:sci:0.12.51 META-INF/leiningen/org.babashka/sci/LICENSE"
+    },
+    {
+      "file": "EPL-2.0.txt",
+      "id": "EPL-2.0",
+      "sha256": "5aa4cd44c111add178d1c2e2fe36d58a484012c80167df925f826cd64d411bf0",
+      "source": "org.junit.jupiter:junit-jupiter:5.14.1 META-INF/LICENSE.md"
+    },
+    {
+      "file": "GPL-2.0-only_WITH_Classpath-exception-2.0.txt",
+      "id": "GPL-2.0-only WITH Classpath-exception-2.0",
+      "sha256": "11a8fe0c63dcff8bd8674b89a5895dfbcf5f7e5453cf0a33566c4b3fb64e404c",
+      "source": "GraalVM Community 25.0.2 LICENSE_NATIVEIMAGE.txt"
+    },
+    {
+      "file": "GraalVM-THIRD-PARTY-LICENSES.txt",
+      "id": "GraalVM-Third-Party-Licenses",
+      "sha256": "2894dad2ce3342888a1d224be01ed16fc1167f8b70910944e03e10c3889836b4",
+      "source": "GraalVM Community 25.0.2 THIRD_PARTY_LICENSE.txt"
+    },
+    {
+      "file": "ICU.txt",
+      "id": "ICU",
+      "sha256": "e55522d81edc687a341a4411e0776e54ca654e90147f354a90458aaced4116af",
+      "source": "https://raw.githubusercontent.com/unicode-org/icu/main/LICENSE"
+    },
+    {
+      "file": "LuaJ-MIT.txt",
+      "id": "LuaJ-MIT",
+      "sha256": "94e20766f076ab59a1a444f385c204e4ae00d10ca6aa82323ee561a53b455909",
+      "source": "http://luaj.sourceforge.net/license.txt"
+    },
+    {
+      "file": "MIT.txt",
+      "id": "MIT",
+      "sha256": "c3b1b78bc8bd3ea13aa4bc9778442d16560270afa235006d816e5e88cef24db4",
+      "source": "https://spdx.org/licenses/MIT.txt"
+    },
+    {
+      "file": "UPL-1.0.txt",
+      "id": "UPL-1.0",
+      "sha256": "8ecddac84b6852e812a14695b27bbaa231451958508c2f75427d7c1b0db9ab7f",
+      "source": "https://spdx.org/licenses/UPL-1.0.txt"
+    }
+  ]
+}

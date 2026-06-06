@@ -342,6 +342,16 @@ bench-javascript-first-eval:
 check-dep-delta:
     @python3 scripts/check-dep-delta.py
 
+check-license-texts artifact="dist/local/EcritumRuntime.xcframework" license_report="":
+    @args=(--artifact "{{artifact}}"); \
+    if [ -n "{{license_report}}" ]; then args+=(--license-report-command python3 -c "import pathlib; print(pathlib.Path('{{license_report}}').read_text())"); fi; \
+    python3 scripts/check-license-texts.py "${args[@]}"
+
+check-license-texts-zip release_zip="dist/release/EcritumRuntime.xcframework.zip" license_report="":
+    @args=(--release-zip "{{release_zip}}"); \
+    if [ -n "{{license_report}}" ]; then args+=(--license-report-command python3 -c "import pathlib; print(pathlib.Path('{{license_report}}').read_text())"); fi; \
+    python3 scripts/check-license-texts.py "${args[@]}"
+
 perf-baseline: size bench-cold-start bench-swift-cold-start bench-idle-rss bench-first-eval check-dep-delta
 
 perf: perf-baseline

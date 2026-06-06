@@ -98,11 +98,15 @@ as separate consumer artifacts.
 
 The `org.graalvm.polyglot:js-community` dependency in `native/pom.xml` is a
 POM-only resolver for GraalJS runtime dependencies. It is not inventoried as a
-separate shipped artifact; the resolved GraalJS runtime artifacts are
-inventoried individually. Maven build plugins and their transitive dependency
-graphs are also not part of the runtime notice inventory in M7-003. M7-004 owns
-the follow-up gate for packaging full license texts and deciding whether build
-plugins need a separate build-tool notice inventory.
+separate shipped artifact or full-text obligation; the resolved GraalJS runtime
+artifacts are inventoried individually.
+
+Maven build plugins and their transitive dependency graphs are explicitly
+excluded from the shipped-runtime notice and full-text bundle because they are
+not redistributed in the SwiftPM binary target or the packaged XCFramework.
+They remain build-environment dependencies. If Ecritum later vendors, mirrors,
+publishes, or redistributes build tools or plugin artifacts, a new build-tool
+license inventory task and ADR update must precede that distribution.
 
 Manual overrides are allowed only with a comment in `scripts/license-report.py`
 or an ADR note that names the upstream metadata source and exact version. The
@@ -112,9 +116,11 @@ already recorded in the SCI task notes.
 `THIRD_PARTY_NOTICES.md` is generated deterministically, checked in, and
 verified during `release-check`. It lists release blockers plus shipped,
 build-only, and test-only components with exact versions, SPDX expressions, and
-source URLs. It intentionally does not include full license text; M7-004 must add
-a release gate that packages the required full upstream license texts before
-public release.
+source URLs. It intentionally does not include full license text.
+
+`THIRD_PARTY_LICENSES/` is the checked-in full-text bundle for shipped runtime
+license obligations. M7-004 adds release gates that verify this bundle, the
+packaged XCFramework resources, and the release zip against the SPDX report.
 
 ADR-015 still owns vulnerability response, SBOM/CVE tracking, revocation, and
 public artifact withdrawal policy. ADR-011 only owns license inventory and

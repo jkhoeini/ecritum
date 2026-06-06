@@ -36,14 +36,18 @@ class PackageArtifactTest(unittest.TestCase):
         framework = self.artifact / "macos-arm64" / "EcritumRuntime.framework"
         headers = framework / "Headers"
         resources = framework / "Resources"
+        license_resources = resources / "Licenses"
         headers.mkdir(parents=True)
         resources.mkdir()
+        license_resources.mkdir()
         (self.artifact / "__MACOSX").mkdir()
         (headers / "ecritum.h").write_text("int ecritum_version(char *, unsigned long);\n")
         runtime = framework / "EcritumRuntime"
         runtime.write_text("runtime\n")
         runtime.chmod(runtime.stat().st_mode | stat.S_IXUSR)
         (resources / "libecritum_graal.dylib").write_text("graal\n")
+        (license_resources / "manifest.json").write_text('{"formatVersion":1,"licenseTexts":[]}\n')
+        (license_resources / "MIT.txt").write_text("license\n")
         (framework / ".DS_Store").write_text("skip\n")
         (framework / "._EcritumRuntime").write_text("skip\n")
         (self.artifact / "__MACOSX" / "ignored").write_text("skip\n")
@@ -78,6 +82,8 @@ class PackageArtifactTest(unittest.TestCase):
             self.assertNotIn("EcritumRuntime.xcframework/macos-arm64/EcritumRuntime.framework/.DS_Store", names)
             self.assertNotIn("EcritumRuntime.xcframework/macos-arm64/EcritumRuntime.framework/._EcritumRuntime", names)
             self.assertNotIn("EcritumRuntime.xcframework/__MACOSX/ignored", names)
+            self.assertIn("EcritumRuntime.xcframework/macos-arm64/EcritumRuntime.framework/Resources/Licenses/manifest.json", names)
+            self.assertIn("EcritumRuntime.xcframework/macos-arm64/EcritumRuntime.framework/Resources/Licenses/MIT.txt", names)
             for info in infos:
                 self.assertEqual(info.date_time, NORMALIZED_TIMESTAMP)
                 self.assertEqual(info.compress_type, zipfile.ZIP_DEFLATED)

@@ -168,6 +168,15 @@ until the project owner chooses and commits a top-level Ecritum license.
 `THIRD_PARTY_NOTICES.md` is an inventory index, not a full license-text bundle.
 M7-004 must add a packaging gate for required GPL+Classpath Exception, EPL, MIT,
 ICU, UPL, and other upstream license texts before public release.
+M7-004 adds `THIRD_PARTY_LICENSES/` as the checked-in full-text bundle and
+`just check-license-texts` / `just check-license-texts-zip` as the artifact and
+release-zip gates. `just xcframework` copies the bundle into
+`EcritumRuntime.framework/Resources/Licenses` before codesigning, and
+`release-check` verifies both the XCFramework artifact and deterministic zip
+against the SPDX license report generated in the same release run.
+POM-only resolver artifacts such as `org.graalvm.polyglot:js-community` and
+Maven build plugins are excluded from this shipped-runtime full-text gate because
+they are not redistributed in the SwiftPM binary target.
 
 The current Maven SDK inputs `org.graalvm.sdk:nativeimage` and
 `org.graalvm.sdk:word` are inventoried separately as build-time inputs. JUnit is

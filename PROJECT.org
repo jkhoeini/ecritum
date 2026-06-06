@@ -3956,11 +3956,78 @@ Definition of done:
 - License obligations are documented with exact versions.
 - Release is blocked if licenses are unknown.
 
-*** TODO M7-004 Full license text packaging gate
+*** DONE M7-004 Full license text packaging gate
 
 Lead persona: Release.
-Reviewer personas: Technical Debt, Security.
+Reviewer personas: Technical Debt, Security, Unix, Tests.
 Write scope: docs/, scripts/, release packaging.
+
+Execution notes:
+
+- Release is implementing the checked-in full license text bundle and release
+  gates.
+- Technical Debt/Security and Unix/Test reviewers confirmed the target shape:
+  machine-readable manifest, hash checks, framework resource packaging before
+  codesigning, artifact verification, and zip verification.
+
+Completed:
+
+- Added =THIRD_PARTY_LICENSES/= with full text files and a hash manifest for
+  shipped runtime SPDX obligations plus GraalVM and LuaJ source-specific text.
+- Added =scripts/check-license-texts.py= to verify the checked-in bundle,
+  packaged XCFramework resources, and packaged release zip contents.
+- Added =just check-license-texts= and =just check-license-texts-zip=.
+- Wired =release-check= to verify artifact and zip license texts against the
+  same SPDX report generated during the release run.
+- Updated =scripts/build-xcframework.sh= to copy license texts into
+  =EcritumRuntime.framework/Resources/Licenses= before codesigning and assemble
+  the single macOS-arm64 XCFramework without the previously killed
+  =xcodebuild -create-xcframework= step.
+- Added release tests for missing/stale text files, unmapped shipped SPDX,
+  combined =AND= expressions, zip mode, and build/test scope exclusion.
+- ADR-011 now explicitly excludes POM-only resolver artifacts and Maven build
+  plugins from the shipped-runtime full-text obligation unless they are later
+  redistributed.
+
+Verification:
+
+- =python3 -m py_compile scripts/check-license-texts.py
+  Tests/Release/test_license_texts.py= -> PASS.
+- =python3 scripts/check-license-texts.py= -> PASS for the checked-in bundle.
+- =python3 -B -m unittest Tests/Release/test_license_texts.py= -> PASS, 7
+  tests.
+- =python3 -B -m unittest Tests/Release/test_package_artifact.py= -> PASS, 15
+  tests.
+- =mise exec -- just test-release-tools= -> PASS, 30 tests.
+- =bash -n scripts/build-xcframework.sh scripts/release-check.sh= -> PASS.
+- =scripts/build-xcframework.sh --output dist/local/EcritumRuntime.xcframework=
+  -> PASS; rebuilt the real local XCFramework with packaged license resources.
+- =mise exec -- just check-license-texts= -> PASS against
+  =dist/local/EcritumRuntime.xcframework=.
+- =mise exec -- just package-artifact= -> PASS; package manifest has 16 entries
+  including all =Resources/Licenses= files.
+- =mise exec -- just check-license-texts-zip= -> PASS against
+  =dist/release/EcritumRuntime.xcframework.zip=.
+- =mise exec -- just package-artifact-verify= -> PASS; repeated zip bytes,
+  normalized timestamps, SHA-256, and SwiftPM checksum all match.
+- =mise exec -- just checksum= -> PASS,
+  =7a5e11565033aa8967bd40b15c20a3812f77993a1eab4ed7862a456ee35da51d=.
+- =python3 scripts/check-license-texts.py --artifact
+  dist/local/EcritumRuntime.xcframework --release-zip
+  dist/release/EcritumRuntime.xcframework.zip= -> PASS.
+
+Review:
+
+- Technical Debt/Security and Unix/Test sub-agent review findings were
+  incorporated: manifest hashes, GraalVM Native Image and third-party text,
+  packaged framework resources, zip mode, stale/missing text failures, shipped
+  SPDX rule coverage, and build/test scope exclusion.
+- Claude CLI review was invoked directly with no auth check under a 45-second
+  timeout and produced no output. Do not count it as signoff.
+- Full =release-check= remains a broader M7 publication gate and is still
+  expected to fail later on non-M7-004 release blockers such as size,
+  clean-consumer hosting, and the first-party Ecritum license blocker. M7-004's
+  dedicated artifact and zip license-text gates pass.
 
 Definition of done:
 

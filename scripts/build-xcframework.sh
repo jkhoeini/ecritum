@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'USAGE'
-Usage: build-xcframework.sh [--native-dir PATH] [--public-headers PATH] [--output PATH] [--work-dir PATH] [--min-macos VERSION] [--sign-identity ID] [--skip-sign]
+Usage: build-xcframework.sh [--native-dir PATH] [--public-headers PATH] [--license-texts-dir PATH] [--output PATH] [--work-dir PATH] [--min-macos VERSION] [--sign-identity ID] [--skip-sign]
 
 Build dist/local/EcritumRuntime.xcframework from the M1 native output.
 Diagnostics go to stderr. The output path is printed to stdout.
@@ -12,6 +12,7 @@ USAGE
 
 native_dir="build/native/macos-arm64"
 public_headers="Sources/CEcritum/include"
+license_texts_dir="THIRD_PARTY_LICENSES"
 output="dist/local/EcritumRuntime.xcframework"
 work_dir="build/xcframework"
 min_macos="14.0"
@@ -22,6 +23,7 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --native-dir) native_dir="$2"; shift 2 ;;
     --public-headers) public_headers="$2"; shift 2 ;;
+    --license-texts-dir) license_texts_dir="$2"; shift 2 ;;
     --output) output="$2"; shift 2 ;;
     --work-dir) work_dir="$2"; shift 2 ;;
     --min-macos) min_macos="$2"; shift 2 ;;
@@ -38,7 +40,7 @@ framework_dir="$work_dir/macos-arm64/EcritumRuntime.framework"
 resources_dir="$framework_dir/Resources"
 modules_dir="$framework_dir/Modules"
 
-for path in "$native_lib" "$private_headers/libecritum.h" "$private_headers/graal_isolate.h" "$public_headers/ecritum.h" "scripts/ecritum_runtime_wrapper.c"; do
+for path in "$native_lib" "$private_headers/libecritum.h" "$private_headers/graal_isolate.h" "$public_headers/ecritum.h" "$license_texts_dir/manifest.json" "scripts/ecritum_runtime_wrapper.c"; do
   if [ ! -e "$path" ]; then
     echo "missing required input: $path" >&2
     exit 1
@@ -55,6 +57,7 @@ mkdir -p "$framework_dir/Headers" "$modules_dir" "$resources_dir" "$(dirname "$o
 
 cp "$public_headers/ecritum.h" "$framework_dir/Headers/ecritum.h"
 cp "$native_lib" "$resources_dir/libecritum_graal.dylib"
+cp -R "$license_texts_dir" "$resources_dir/Licenses"
 install_name_tool -id "@loader_path/Resources/libecritum_graal.dylib" "$resources_dir/libecritum_graal.dylib"
 
 MACOSX_DEPLOYMENT_TARGET="$min_macos" clang \
@@ -115,5 +118,35 @@ if [ "$skip_sign" != "1" ]; then
   codesign "${codesign_args[@]}" "$framework_dir" >&2
 fi
 
-xcodebuild -create-xcframework -framework "$framework_dir" -output "$output" >&2
+mkdir -p "$output/macos-arm64"
+cp -R "$framework_dir" "$output/macos-arm64/EcritumRuntime.framework"
+cat > "$output/Info.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>AvailableLibraries</key>
+  <array>
+    <dict>
+      <key>BinaryPath</key>
+      <string>EcritumRuntime.framework/EcritumRuntime</string>
+      <key>LibraryIdentifier</key>
+      <string>macos-arm64</string>
+      <key>LibraryPath</key>
+      <string>EcritumRuntime.framework</string>
+      <key>SupportedArchitectures</key>
+      <array>
+        <string>arm64</string>
+      </array>
+      <key>SupportedPlatform</key>
+      <string>macos</string>
+    </dict>
+  </array>
+  <key>CFBundlePackageType</key>
+  <string>XFWK</string>
+  <key>XCFrameworkFormatVersion</key>
+  <string>1.0</string>
+</dict>
+</plist>
+PLIST
 printf '%s\n' "$output"
