@@ -45,50 +45,6 @@ not done if it introduced debt without an entry.
   exception, hosted `.binaryTarget(url:checksum:)` consumer smoke, and
   `mise exec -- just release-check`.
 
-- ID: ECRITUM-DEBT-0011
-- Source task: M5-001
-- Introduced by: LuaJ Native Image spike release gate
-- Owner persona: Release, Licensing, and Distribution Engineer
-- Date: 2026-06-06
-- Impact: LuaJ is inventoried as a shipped experimental dependency, but Lua is
-  not release-ready Core until the artifact-size classification, Lua-specific
-  performance data, and untrusted-memory controls are accepted.
-- Reason accepted: M5-001 needs a measured Native Image Lua smoke path before
-  Ecritum can decide whether LuaJ belongs in the default artifact, a Full-only
-  artifact, or a deferred runtime.
-- Resolve-by phase: M5
-- Exit condition: ADR-018/Core-Full policy explicitly classifies Lua with
-  recorded size, cold-start, idle-RSS, and first-Lua-eval data; LuaJ guest
-  exposure tests prove `CoroutineLib` is omitted and `string.dump`/binary
-  chunks are denied; memory limiting is accepted or Lua remains outside Core.
-- Removal task: M5 Lua runtime classification and release-readiness decision.
-- Verification required: `mise exec -- just size`, `mise exec -- just
-  bench-cold-start`, `mise exec -- just bench-idle-rss`, `mise exec -- just
-  bench-lua-first-eval`, `mise exec -- just security-lua`, `mise exec -- just
-  license-report`, `mise exec -- just check-dep-delta`, and documented
-  Core/Full decision.
-
-- ID: ECRITUM-DEBT-0009
-- Source task: M4-002
-- Introduced by: GraalJS smoke path
-- Owner persona: Release, Licensing, and Distribution Engineer
-- Date: 2026-06-05
-- Impact: Adding GraalJS increases `dist/local/EcritumRuntime.xcframework` to
-  150,960,731 bytes and the private Native Image runtime to 150,818,872 bytes,
-  exceeding ADR-018's initial Core tripwires of 25,000,000 and 20,000,000 bytes.
-- Reason accepted: M4-002 proves the GraalJS embedding, C/Swift dispatch,
-  conformance, security, license inventory, startup, RSS, and first-eval data
-  needed for the artifact classification decision. The resulting artifact is a
-  local smoke artifact, not a release-ready Core artifact.
-- Resolve-by phase: M4.5
-- Exit condition: ADR-018 is revised or a Core/Full split is implemented so
-  `mise exec -- just size` passes for the default release artifact, or GraalJS
-  remains explicitly Full-only.
-- Removal task: M4.5 Core/Full artifact split and budget rebaseline
-- Verification required: `mise exec -- just size`, `mise exec -- just
-  bench-javascript-first-eval`, `mise exec -- just bench-cold-start`,
-  `mise exec -- just bench-idle-rss`, and a documented Core/Full decision.
-
 - ID: ECRITUM-DEBT-0007
 - Source task: M3-002
 - Introduced by: Clojure eval and host-call roll-up
@@ -110,43 +66,74 @@ not done if it introduced debt without an entry.
   artifact-backed C/Swift script-error tests, and conformance evidence for
   source-name plus stack-frame behavior when supported.
 
+## Resolved Debt
+
+- ID: ECRITUM-DEBT-0011
+- Source task: M5-001
+- Introduced by: LuaJ Native Image spike release gate
+- Owner persona: Release, Licensing, and Distribution Engineer
+- Date: 2026-06-06
+- Resolved in: M7-007
+- Resolution: ADR-0023 and M5-001 record LuaJ's dependency, license, security,
+  size, cold-start, idle-RSS, and first-Lua-eval evidence. M7-006/ADR-018
+  classify the current combined SCI/GraalJS/Lua artifact as a Full candidate,
+  not release-ready Core. Lua remains experimental/outside Core until a future
+  memory-limiting design is accepted, so this classification debt is closed
+  without promoting Lua to the default Core artifact.
+- Verification: M5-001 records `security-lua`, `bench-lua-first-eval`,
+  startup/RSS, size, license, and dependency-delta evidence. M7-006 records
+  Full-lane size success and Core-lane size failure for the combined artifact.
+  Release persona review confirmed this debt can resolve from existing
+  evidence; Claude plan review timed out with no output.
+
+- ID: ECRITUM-DEBT-0009
+- Source task: M4-002
+- Introduced by: GraalJS smoke path
+- Owner persona: Release, Licensing, and Distribution Engineer
+- Date: 2026-06-05
+- Resolved in: M7-007
+- Resolution: ADR-018 now defines explicit Core and Full release lanes. M7-006
+  classifies the combined SCI/GraalJS/Lua artifact that includes GraalJS as a
+  Full candidate and preserves Core as the default lane until true Core artifact
+  production or an ADR-018 rebaseline lands. GraalJS is therefore no longer an
+  unresolved implicit Core-size overage.
+- Verification: M4-002 records GraalJS conformance/security, size, startup,
+  RSS, first-eval, license, and dependency evidence. M7-006 records Full-lane
+  size success, Core-lane size failure, lane-aware package metadata, and
+  release-check lane propagation. Release persona review confirmed this debt can
+  resolve from existing evidence; Claude plan review timed out with no output.
+
 - ID: ECRITUM-DEBT-0006
 - Source task: M3-002B
 - Introduced by: Embedded SCI eval backend
 - Owner persona: Release, Licensing, and Distribution Engineer
 - Date: 2026-06-05
-- Impact: SCI support increases `dist/local/EcritumRuntime.xcframework` to
-  29,951,339 bytes and the private Native Image runtime to 29,828,696 bytes,
-  exceeding ADR-018's initial M1 Core tripwires of 25,000,000 and 20,000,000
-  bytes.
-- Reason accepted: M3-002B is a backend integration slice and does not claim
-  release-ready Clojure support. The concrete SCI size data is needed before the
-  Core budget can be reaffirmed, revised, or split into Core/Full artifacts.
-- Resolve-by phase: M4.5
-- Exit condition: ADR-018 is revised or reaffirmed with SCI measurements, or
-  the SCI artifact is optimized/split until `mise exec -- just size` passes.
-- Removal task: M4.5 ABI freeze and packaged app smoke budget review
-- Verification required: `mise exec -- just size`,
-  `mise exec -- just bench-first-eval`, and documented Core/Full artifact
-  decision.
+- Resolved in: M7-007
+- Resolution: ADR-018 now defines the current combined SCI/GraalJS/Lua artifact
+  as a Full candidate and keeps Core as the default lane until a smaller Core
+  build exists or the budget is rebaselined. SCI's initial Core-size overage is
+  no longer unresolved policy debt; it is part of the explicit Full candidate
+  classification.
+- Verification: M3 and M7 verification records SCI runtime behavior,
+  conformance/security, size, first-eval/startup/RSS, license, and dependency
+  evidence. M7-006 records lane-aware size policy. Release persona review
+  confirmed this debt can resolve from existing evidence; Claude plan review
+  timed out with no output.
 
 - ID: ECRITUM-DEBT-0004
 - Source task: M1-007
 - Introduced by: Initial performance and artifact budget policy
 - Owner persona: Release, Licensing, and Distribution Engineer
 - Date: 2026-06-05
-- Impact: M1 budget values are based on the version-only Native Image runtime
-  before SCI, GraalJS, Lua, Python, or Ruby are embedded.
-- Reason accepted: Numeric tripwires are needed before language-runtime work can
-  proceed, but final product budgets require runtime-specific measurements.
-- Resolve-by phase: M4.5
-- Exit condition: SCI and GraalJS size/startup/RSS/first-eval data have been
-  recorded and ADR-018 budgets are either reaffirmed or revised.
-- Removal task: M4.5 ABI freeze and packaged app smoke budget review
-- Verification required: `mise exec -- just perf-baseline` and documented
-  language-runtime delta table.
-
-## Resolved Debt
+- Resolved in: M7-007
+- Resolution: ADR-018 has been revised from a single early M1 tripwire set into
+  explicit Core and Full artifact budgets. The roadmap records measured SCI,
+  GraalJS, and Lua size/performance data, Full-lane acceptance for the current
+  combined artifact, and the remaining true Core production follow-up.
+- Verification: M7-006 records Core/Full size-gate behavior and release-lane
+  evidence; M5 and M4 records language-specific performance data. Release
+  persona review confirmed this debt can resolve from existing evidence; Claude
+  plan review timed out with no output.
 
 - ID: ECRITUM-DEBT-0008
 - Source task: M3-003

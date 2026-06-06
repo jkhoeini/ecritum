@@ -4584,6 +4584,177 @@ Definition of done:
 - Full size gates pass for the current combined artifact.
 - The follow-up true Core build split is not hidden or implied complete.
 
+*** DONE M7-007 Reconcile Core/Full and Lua classification debt
+
+Lead persona: Release.
+Reviewer personas: Architecture, GraalVM Runtime, Tests.
+Write scope: DEBT.md, PROJECT.org.
+Debt resolved: ECRITUM-DEBT-0004, ECRITUM-DEBT-0006,
+ECRITUM-DEBT-0009, ECRITUM-DEBT-0011.
+
+Definition of done:
+
+- SCI, GraalJS, and Lua size/classification debts are resolved only if existing
+  ADR-018, M5, and M7-006 evidence explicitly classifies the combined artifact
+  without claiming release-ready Core.
+- Lua remains experimental/outside Core unless memory-limiting work is accepted.
+- True Core artifact production remains visible as future product work.
+- Public release signing/notarization and diagnostic stack-frame ABI debt stay
+  active until implemented or explicitly dropped.
+- Claude review and persona review outcomes are recorded.
+
+Notes:
+
+- M7-006 already changed ADR-018 from one early M1 budget into explicit Core
+  and Full release lanes. The current combined SCI/GraalJS/Lua artifact is a
+  Full candidate. Core remains the default lane and still requires true Core
+  artifact production or an ADR-018 rebaseline.
+- M5-001 and ADR-0023 already record LuaJ license, security, first-eval,
+  startup, RSS, and size evidence. Lua is not promoted to Core because heap
+  memory controls remain unresolved.
+- The stale size/classification debts are now resolved in DEBT.md from existing
+  evidence rather than by changing artifact contents.
+- ECRITUM-DEBT-0007 remains active because public diagnostic stack-frame ABI
+  support has not been implemented or dropped from support claims.
+- ECRITUM-DEBT-0012 remains active because public Developer ID signing,
+  notarization, stapling policy, and hosted release enforcement are not
+  implemented.
+
+Review:
+
+- Release persona review: ECRITUM-DEBT-0004, ECRITUM-DEBT-0006,
+  ECRITUM-DEBT-0009, and ECRITUM-DEBT-0011 can resolve from M5/M7-006/ADR-018
+  evidence; ECRITUM-DEBT-0012 needs a public release signing/notarization gate.
+- Architecture persona review: ECRITUM-DEBT-0007 remains active; ADR/header/
+  manifest/Swift paths do not expose backend stack frames. Add a diagnostic
+  stack-frame ABI decision task before claiming that support.
+- Claude plan review: direct `claude -p` attempt timed out after 90 seconds
+  with no output (`CLAUDE_STATUS=124`). Persona reviews were used as fallback.
+
+Verification:
+
+- `mise exec -- just plan-check` -> exit 0.
+- `mise exec -- just size dist/local/EcritumRuntime.xcframework full` ->
+  exit 0; artifact 151,958,109 bytes, private runtime 151,325,184 bytes,
+  wrapper 147,504 bytes, no violations.
+- `mise exec -- just size dist/local/EcritumRuntime.xcframework core` ->
+  expected exit 1; same artifact exceeds Core artifact and private-runtime
+  budgets.
+- Source evidence reviewed: M5-001, M7-006, ADR-018, ADR-0023, DEBT.md,
+  docs/release-gates.md.
+- No source/runtime artifact changed in this task.
+
+** TODO Milestone M8: Release Candidate Closure
+
+Goal: close the remaining product blockers before Ecritum can be treated as a
+release candidate rather than a local Full candidate.
+
+Lead: Engineering Manager.
+Required reviewers: Architecture, Release, Security, Tests, Swift DX, Unix.
+
+Definition of done:
+
+- Active debt ledger is empty or each remaining entry has an accepted
+  owner-approved deferral outside the release claim.
+- Public diagnostic stack-frame behavior is either implemented through the C ABI
+  or explicitly dropped from the support claim.
+- A publishable release lane is selected and passes its gates with no hidden
+  local path, signing, license, or hosting dependency.
+- Public release artifacts are signed, notarized or have an accepted archive
+  exception, hosted over HTTPS, and verified by a clean SwiftPM consumer.
+
+*** TODO M8-001 Decide public diagnostic stack-frame ABI
+
+Lead persona: Architecture.
+Reviewer personas: Swift DX, Tests, Security.
+Debt: ECRITUM-DEBT-0007.
+
+Definition of done:
+
+- ADR/update chooses one path: implement a stable redacted stack-frame ABI, or
+  drop stack-frame diagnostics from v0 support claims.
+- If implemented, `docs/abi/ecritum-c-abi.json`, `ecritum.h`, wrapper code,
+  backend result format, Swift `EcritumErrorDetails.stack`, and ABI checker
+  coverage are updated together.
+- Artifact-backed C/Swift/conformance tests prove source-name plus stack-frame
+  behavior where supported.
+
+Verification plan:
+
+- `mise exec -- just check-abi`
+- `mise exec -- just test-c-abi-eval`
+- `mise exec -- just test-swift`
+- `mise exec -- just test-xcframework-eval-smoke`
+- `mise exec -- just conformance`
+
+*** TODO M8-002 Produce true Core artifact or rebaseline ADR-018
+
+Lead persona: Release.
+Reviewer personas: GraalVM Runtime, Architecture, Tests, Security.
+
+Definition of done:
+
+- Either a true Core artifact exists with Native Image Core/Full profiles,
+  matching private entrypoints, wrapper compile guards, lane-aware dependency
+  and SBOM baselines, and Core size compliance; or ADR-018 explicitly accepts a
+  new default-lane budget.
+- Full remains explicit and cannot become the default lane through ambient
+  environment.
+- Core and Full release evidence are lane-scoped and deterministic.
+
+Verification plan:
+
+- `mise exec -- just native`
+- `mise exec -- just xcframework`
+- `mise exec -- just size dist/local/EcritumRuntime.xcframework core`
+- `mise exec -- just size dist/local/EcritumRuntime.xcframework full`
+- `mise exec -- just test-release-tools`
+- `mise exec -- just check-dep-delta`
+
+*** TODO M8-003 Choose first-party Ecritum license
+
+Lead persona: Release.
+Reviewer personas: Security, Swift DX, Architecture.
+
+Definition of done:
+
+- Project owner chooses and commits the top-level Ecritum license.
+- `scripts/license-report.py --strict` no longer reports
+  `EcritumRuntime.xcframework has unknown shipped license`.
+- THIRD_PARTY_NOTICES and license-text packaging remain correct after the
+  first-party license choice.
+
+Verification plan:
+
+- `mise exec -- just license-report-strict`
+- `mise exec -- just check-license-texts`
+- `mise exec -- just check-license-texts-zip`
+- `mise exec -- just test-release-tools`
+
+*** TODO M8-004 Public release signing and notarization gate
+
+Lead persona: Release.
+Reviewer personas: Security, Swift DX, Tests, Unix.
+Debt: ECRITUM-DEBT-0012.
+
+Definition of done:
+
+- Public release mode requires non-ad-hoc Developer ID signing and hardened
+  runtime options for every shipped slice and nested dylib.
+- Notarization evidence from `xcrun notarytool` is recorded, and stapler
+  validation or an accepted non-app archive exception is enforced.
+- Post-unpack `codesign --verify --deep --strict` equivalent passes.
+- Hosted HTTPS URL/checksum SwiftPM resolution is required for public release;
+  local `.binaryTarget(path:)` cannot satisfy the gate.
+- ECRITUM-DEBT-0012 is resolved.
+
+Verification plan:
+
+- `mise exec -- just test-release-tools`
+- New public signing/notary gate.
+- Hosted `mise exec -- just test-release-consumer-smoke`
+- `ECRITUM_CONSUMER_ARTIFACT_URL=... ECRITUM_CONSUMER_ARTIFACT_CHECKSUM=... mise exec -- just release-check full`
+
 * ADR Backlog
 
 ** DONE ADR-001 SwiftPM binary target and package layout
