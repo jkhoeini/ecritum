@@ -495,7 +495,7 @@ public final class NativeEntrypoints {
         }
 
         @Override
-        public Object invoke(String operation, List<Object> arguments) {
+        public StandardLibraryResult invoke(String operation, List<Object> arguments) {
             byte[] argumentPayload = BackendResultCodec.encode(SciEvalResult.ok(List.copyOf(arguments)));
             byte[] resultPayload = new byte[RESULT_BUFFER_BYTES];
             CLongPointer bytesWritten = StackValue.get(CLongPointer.class);
@@ -525,9 +525,9 @@ public final class NativeEntrypoints {
                 }
                 SciEvalResult result = BackendResultCodec.decode(Arrays.copyOf(resultPayload, (int)rawLength));
                 if (result.status() != EcritumStatus.OK) {
-                    throw StandardLibraryException.bridgeResult(result.status(), result.category(), result.message());
+                    return StandardLibraryResult.failure(result.status(), result.category(), result.message());
                 }
-                return result.value();
+                return StandardLibraryResult.success(result.value());
             }
         }
     }

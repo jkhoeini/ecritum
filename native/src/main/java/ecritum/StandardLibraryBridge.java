@@ -3,7 +3,7 @@ package ecritum;
 import java.util.List;
 
 interface StandardLibraryBridge {
-    Object invoke(String operation, List<Object> arguments);
+    StandardLibraryResult invoke(String operation, List<Object> arguments);
 
     static StandardLibraryBridge denying() {
         return (operation, arguments) -> {

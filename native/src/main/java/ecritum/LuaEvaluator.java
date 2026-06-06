@@ -238,7 +238,7 @@ final class LuaEvaluator {
                 if (!policy.clockReadable()) {
                     throw StandardLibraryException.permissionDenied("clock access is not permitted");
                 }
-                return toGuestValue(bridge.invoke("time.now", List.of()));
+                return toGuestValue(bridge.invoke("time.now", List.of()).valueOrThrow());
             })
         ));
         root.installReservedObject("fs", Map.of(
@@ -264,7 +264,7 @@ final class LuaEvaluator {
             if (!policy.filesystemReadable()) {
                 throw StandardLibraryException.permissionDenied("filesystem access is not permitted");
             }
-            return toGuestValue(bridge.invoke(operation, List.of(path.tojstring())));
+            return toGuestValue(bridge.invoke(operation, List.of(path.tojstring())).valueOrThrow());
         });
     }
 

@@ -67,7 +67,7 @@ final class StandardLibraryFacade {
         if (!policy.clockReadable()) {
             throw StandardLibraryException.permissionDenied("clock access is not permitted");
         }
-        return bridge.invoke("time.now", List.of());
+        return bridge.invoke("time.now", List.of()).valueOrThrow();
     }
 
     private static Object filesystemRead(
@@ -80,7 +80,7 @@ final class StandardLibraryFacade {
         if (!policy.filesystemReadable()) {
             throw StandardLibraryException.permissionDenied("filesystem access is not permitted");
         }
-        return bridge.invoke(operation, args);
+        return bridge.invoke(operation, args).valueOrThrow();
     }
 
     private static Object httpRequest(StandardLibraryPolicy policy, StandardLibraryBridge bridge, List<Object> args) {
@@ -127,7 +127,7 @@ final class StandardLibraryFacade {
             for (ISeq current = (ISeq) args; current != null; current = current.next()) {
                 rawArgs.add(current.first());
             }
-            return SciClojureEvaluator.normalizeValue(invoker.invoke(List.copyOf(rawArgs)));
+            return ClojureValueCodec.normalize(invoker.invoke(List.copyOf(rawArgs)));
         }
     }
 }

@@ -249,6 +249,46 @@ final class SciClojureEvaluatorTest {
     }
 
     @Test
+    void mapsStandardLibraryBridgeResultsThroughFacades() {
+        StandardLibraryPolicy policy = new StandardLibraryPolicy("read_only", List.of("/tmp/ecritum"), true, false);
+        StandardLibraryBridge bridge = (operation, arguments) -> switch (operation) {
+            case "time.now" -> StandardLibraryResult.success("2026-06-06T00:00:00Z");
+            case "fs.read_text" -> {
+                assertEquals(List.of("/tmp/ecritum/data.txt"), arguments);
+                yield StandardLibraryResult.success("contents");
+            }
+            case "fs.read_bytes" -> StandardLibraryResult.success(new byte[] {0, 1, 2});
+            case "fs.exists" -> StandardLibraryResult.success(true);
+            default -> StandardLibraryResult.failure(EcritumStatus.INTERNAL, "internal", "unexpected operation");
+        };
+
+        SciEvalResult success = SciClojureEvaluator.evaluate(
+            """
+            {"now" (ecritum.time/now)
+             "text" (ecritum.fs/read-text "/tmp/ecritum/data.txt")
+             "bytes" (ecritum.fs/read-bytes "/tmp/ecritum/data.bin")
+             "exists" (ecritum.fs/exists? "/tmp/ecritum/data.txt")}
+            """,
+            "bridge-success.clj",
+            List.of(),
+            (namespace, function, arguments) -> 0L,
+            policy,
+            bridge
+        );
+
+        assertEquals(EcritumStatus.OK, success.status(), success.message());
+        Map<?, ?> value = assertInstanceOf(Map.class, success.value());
+        assertEquals("2026-06-06T00:00:00Z", value.get("now"));
+        assertEquals("contents", value.get("text"));
+        assertArrayEquals(new byte[] {0, 1, 2}, (byte[]) value.get("bytes"));
+        assertEquals(Boolean.TRUE, value.get("exists"));
+
+        assertBridgeFailure(EcritumStatus.PERMISSION_DENIED, "permission");
+        assertBridgeFailure(EcritumStatus.SCRIPT, "runtime");
+        assertBridgeFailure(EcritumStatus.INTERNAL, "internal");
+    }
+
+    @Test
     void permitsOnlyLiteralEcritumRequireForms() {
         assertEquals(
             "{\"a\":1}",
@@ -346,5 +386,23 @@ final class SciClojureEvaluatorTest {
         assertEquals("clojure", result.language());
         assertEquals(sourceName, result.sourceName());
         assertTrue(result.message().contains(sourceName));
+    }
+
+    private void assertBridgeFailure(int status, String category) {
+        StandardLibraryPolicy policy = new StandardLibraryPolicy("denied", List.of(), true, false);
+        SciEvalResult result = SciClojureEvaluator.evaluate(
+            "(ecritum.time/now)",
+            "bridge-failure.clj",
+            List.of(),
+            (namespace, function, arguments) -> 0L,
+            policy,
+            (operation, arguments) -> StandardLibraryResult.failure(status, category, "bridge failed")
+        );
+
+        assertEquals(status, result.status());
+        assertEquals(category, result.category());
+        assertEquals("clojure", result.language());
+        assertEquals("bridge-failure.clj", result.sourceName());
+        assertTrue(result.message().contains("bridge failed"));
     }
 }

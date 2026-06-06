@@ -3347,6 +3347,143 @@ Not verified:
   debt cleanup and still owned by M7 release gates.
 #+end_src
 
+*** DONE M4.5-004 Decouple Clojure standard-library seams
+
+Lead persona: Clean Code and Functional Core.
+Reviewer personas: TDD/Testability, Architecture, Security.
+Debt: ECRITUM-DEBT-0008.
+Depends on: M3-003, M4.5-003.
+Write scope: native/src/main/java/ecritum/, native/src/test/java/ecritum/,
+DEBT.md, PROJECT.org.
+
+Definition of done:
+
+- Literal supported `require` preprocessing is no longer implemented as nested
+  parser classes inside `SciClojureEvaluator`.
+- Clojure facade input/result normalization is owned by a dedicated internal
+  value boundary rather than calling evaluator normalization from
+  `StandardLibraryFacade`.
+- `StandardLibraryBridge` returns an explicit backend result type or an ADR
+  records why the current normalized-Java contract is intentionally retained.
+- Behavior remains unchanged for supported `ecritum.*` requires, aliasing,
+  denied require forms, JSON/time/fs/http facades, host projections, and
+  security bypass probes.
+- No public C ABI, Swift API, language support claim, runtime policy, or
+  distribution behavior changes.
+- Claude review attempts and persona reviews are recorded, with fallback noted
+  if Claude CLI times out.
+
+Implementation plan:
+
+- Extract require rewriting into a dedicated internal class with focused tests
+  covering allowed literal forms, aliases, strings/comments, malformed forms,
+  and denied namespaces.
+- Extract Clojure value normalization into a dedicated internal codec used by
+  both evaluator result normalization and Clojure facade functions.
+- Inspect `StandardLibraryBridge` call sites and either introduce an explicit
+  bridge result wrapper or record a narrow acceptance if the current object
+  contract is already the least risky internal boundary.
+- Run Java tests first; run broader native/Swift smoke only if public behavior
+  or artifact-backed facade behavior changes.
+
+Reviewer assignments:
+
+- Clean Code lead: internal seams, pure parsing/normalization helpers, naming.
+- TDD/Testability review: focused regression tests and cheapest useful gates.
+- Architecture/Security review: no public boundary widening and no denied
+  require/capability regression.
+
+Progress notes:
+
+- 2026-06-06: Engineering Manager opened jj change `refactor: decouple clojure
+  stdlib facades`, selected ECRITUM-DEBT-0008 as the next actionable internal
+  cleanup, and spawned fresh Clean Code plus TDD/Testability sub-agent reviews.
+- 2026-06-06: Initial research found `SciClojureEvaluator` owns require
+  rewriting, `StandardLibraryFacade.FacadeFunction` calls
+  `SciClojureEvaluator.normalizeValue`, and `StandardLibraryBridge` returns raw
+  Java values from native stdlib callbacks.
+
+Planned verification:
+
+- `mise exec -- mvn -s .mvn/settings.xml -f native/pom.xml
+  -Dtest=SciClojureEvaluatorTest test`
+- `mise exec -- just test-java`
+- `mise exec -- just test-m3-003`
+- `mise exec -- just conformance-clojure-facades`
+- `mise exec -- just security-clojure-facades`
+- `mise exec -- just plan-check`
+
+Notes:
+
+- Extracted `SciRequirePreprocessor` and `SciRequireRewrite` so literal
+  supported require preprocessing no longer lives inside `SciClojureEvaluator`.
+- Extracted `ClojureValueCodec` and routed Clojure eval results, host-call
+  arguments/results, and facade function results through that dedicated
+  internal normalization boundary.
+- Added `StandardLibraryResult` and changed `StandardLibraryBridge` to return
+  explicit success/failure results. Clojure, JavaScript, and Lua facades now
+  deliberately unwrap bridge results through `valueOrThrow`.
+- Kept the public C ABI, Swift API, runtime policy, language support claims,
+  and distribution behavior unchanged.
+- No ADR was written: this is an internal clean-code boundary refactor with
+  focused tests and no public contract change.
+
+Review:
+
+- Clean Code persona review: recommended extracting require rewriting,
+  centralizing Clojure/SCI normalization in `ClojureValueCodec`, and
+  strengthening `StandardLibraryResult` to carry success/failure status.
+  Implemented.
+- TDD/Testability persona review: recommended direct require-preprocessor,
+  value-codec, bridge-result, Clojure facade, conformance, security, and full
+  M3-003 gates. Implemented.
+- Claude plan review: direct `claude -p` attempt timed out with no output
+  (`CLAUDE_STATUS=124`).
+- Claude implementation review: direct `claude -p` attempt timed out after
+  120s with no output (`CLAUDE_STATUS=124`). Persona review was used as
+  fallback and the timeout is recorded here.
+
+#+begin_src markdown
+## Verification
+
+Layers tested: Unit, Native, Sanitizer, Swift artifact, Conformance, Security,
+ABI, License, Dependency, Planning
+Commands run:
+- `mise exec -- mvn -s .mvn/settings.xml -f native/pom.xml
+  -Dtest=SciClojureEvaluatorTest,SciRequirePreprocessorTest,ClojureValueCodecTest,StandardLibraryResultTest test`
+  -> exit 0, 27 tests passed
+- `mise exec -- just test-java` -> exit 0, 56 tests passed
+- `mise exec -- just test-m3-003` -> exit 0, including native rebuild, Java
+  tests, C ABI eval/policy/native smoke tests, ASan variants, XCFramework
+  rebuild/check, Swift artifact tests, Clojure facade conformance/security,
+  broader security, ABI, license report, and dependency delta
+- `mise exec -- just plan-check` -> exit 0
+- `build/facades/clojure.json` -> `ok=true`
+- `build/conformance/clojure-facades.json` -> `ok=true`
+- `build/security/clojure-facades.json` -> `ok=true`
+New tests added:
+- `SciRequirePreprocessorTest`
+- `ClojureValueCodecTest`
+- `StandardLibraryResultTest`
+- `SciClojureEvaluatorTest.mapsStandardLibraryBridgeResultsThroughFacades`
+Negative paths tested:
+- Malformed, dynamic, unsupported, `:refer`, mixed, and unsafe alias require
+  forms are denied by the extracted preprocessor/evaluator path.
+- Duplicate normalized map keys and unsupported Clojure values are rejected by
+  the extracted value codec.
+- Standard-library bridge permission, script, and internal failures propagate
+  through the Clojure facade path without raw exception leakage.
+Size impact:
+- Native image rebuilt at 152.19MB total file size; no release budget decision
+  changed in this task.
+Sanitizers:
+- `just test-m3-003` ran C ABI eval, policy, and native eval ASan/UBSan smoke
+  variants.
+Not verified:
+- Public release signing/notarization and hosted consumer smoke; outside this
+  internal cleanup and still owned by M7 release gates.
+#+end_src
+
 ** DONE Milestone M5: Lua Feasibility and Runtime Decision
 
 Goal: decide whether Lua ships in the default artifact through LuaJ or another

@@ -89,30 +89,6 @@ not done if it introduced debt without an entry.
   bench-javascript-first-eval`, `mise exec -- just bench-cold-start`,
   `mise exec -- just bench-idle-rss`, and a documented Core/Full decision.
 
-- ID: ECRITUM-DEBT-0008
-- Source task: M3-003
-- Introduced by: First standard-library facades
-- Owner persona: Clean Code and Functional Core Engineer
-- Date: 2026-06-05
-- Impact: The Clojure facade behavior is verified through Java/native/Swift/
-  conformance/security gates, but some internal boundaries remain too coupled:
-  literal `require` preprocessing lives in `SciClojureEvaluator`,
-  `StandardLibraryBridge` uses normalized Java values rather than an explicit
-  backend-wire result type, and facade functions reuse evaluator normalization.
-- Reason accepted: The public ABI remains unchanged, the native boundary uses a
-  private stdlib entrypoint, denied-by-default behavior is covered, and Claude's
-  final read-only implementation review found no blockers. Splitting these
-  internal seams now would be a larger refactor after the M3-003 acceptance gate
-  passed.
-- Resolve-by phase: M4.5
-- Exit condition: Require preprocessing, facade value normalization, and stdlib
-  bridge result mapping have dedicated internal modules or an ADR explicitly
-  accepts the current coupling.
-- Removal task: M4.5 clean-code pass before ABI freeze.
-- Verification required: `mise exec -- just test-java`,
-  `mise exec -- just test-m3-003`, and a Clean Code persona review confirming
-  the internal seams are either decoupled or intentionally accepted.
-
 - ID: ECRITUM-DEBT-0007
 - Source task: M3-002
 - Introduced by: Clojure eval and host-call roll-up
@@ -171,6 +147,26 @@ not done if it introduced debt without an entry.
   language-runtime delta table.
 
 ## Resolved Debt
+
+- ID: ECRITUM-DEBT-0008
+- Source task: M3-003
+- Introduced by: First standard-library facades
+- Owner persona: Clean Code and Functional Core Engineer
+- Date: 2026-06-05
+- Resolved in: M4.5-004
+- Resolution: Clojure standard-library seams now have dedicated internal
+  modules. Literal supported `require` rewriting lives in
+  `SciRequirePreprocessor`/`SciRequireRewrite`; SCI/Clojure value normalization
+  lives in `ClojureValueCodec`; and `StandardLibraryBridge` returns explicit
+  `StandardLibraryResult` success/failure values that Clojure, JavaScript, and
+  Lua stdlib call sites unwrap deliberately. No public C ABI, Swift API,
+  runtime policy, support claim, or distribution behavior changed.
+- Verification: M4.5-004 records focused Java tests for require preprocessing,
+  value normalization, bridge result mapping, and facade failure propagation;
+  full `test-java`; full `test-m3-003`; Clojure facade conformance/security
+  evidence; and Clean Code/TDD persona reviews. Claude CLI reviews were
+  attempted directly and timed out with no output; the timeout is recorded in
+  PROJECT.org.
 
 - ID: ECRITUM-DEBT-0010
 - Source task: M4-002

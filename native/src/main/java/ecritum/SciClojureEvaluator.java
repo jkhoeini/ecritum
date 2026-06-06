@@ -9,10 +9,7 @@ import clojure.lang.PersistentHashSet;
 import clojure.lang.RT;
 import clojure.lang.RestFn;
 import clojure.lang.Symbol;
-import java.math.BigDecimal;
-import java.math.BigInteger;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -85,7 +82,7 @@ final class SciClojureEvaluator {
         if (source == null) {
             return SciEvalResult.scriptError(LANGUAGE, safeSourceName, "runtime", errorPrefix(safeSourceName) + "missing source");
         }
-        RequireRewrite requireRewrite = SupportedRequireForms.rewrite(source);
+        SciRequireRewrite requireRewrite = SciRequirePreprocessor.rewrite(source);
         if (!requireRewrite.allowed() || ConservativeSourceDenyPolicy.denies(requireRewrite.source())) {
             return new SciEvalResult(
                 EcritumStatus.PERMISSION_DENIED,
@@ -108,7 +105,7 @@ final class SciClojureEvaluator {
                     requireRewrite.aliases()
                 )
             );
-            return SciEvalResult.ok(normalizeValue(rawValue));
+            return SciEvalResult.ok(ClojureValueCodec.normalize(rawValue));
         } catch (Throwable ex) {
             StandardLibraryException facadeError = findStandardLibraryException(ex);
             if (facadeError != null) {
@@ -174,69 +171,6 @@ final class SciClojureEvaluator {
             return LANGUAGE + ": ";
         }
         return LANGUAGE + " " + sourceName + ": ";
-    }
-
-    static Object normalizeValue(Object value) {
-        if (value == null
-            || value instanceof Boolean
-            || value instanceof String
-            || value instanceof Character
-            || value instanceof Byte
-            || value instanceof Short
-            || value instanceof Integer
-            || value instanceof Long
-            || value instanceof Float
-            || value instanceof Double
-            || value instanceof BigDecimal) {
-            return value;
-        }
-        if (value instanceof byte[] data) {
-            return data.clone();
-        }
-        if (value instanceof BigInteger bigInteger) {
-            return bigInteger.longValueExact();
-        }
-        if (value instanceof clojure.lang.BigInt bigInt) {
-            return bigInt.toBigInteger().longValueExact();
-        }
-        if (value instanceof clojure.lang.Keyword keyword) {
-            return keyword.getName();
-        }
-        if (value instanceof Symbol symbol) {
-            return symbol.getName();
-        }
-        if (value instanceof Map<?, ?> map) {
-            LinkedHashMap<String, Object> normalized = new LinkedHashMap<>();
-            for (Map.Entry<?, ?> entry : map.entrySet()) {
-                String key = normalizeKey(entry.getKey());
-                if (normalized.containsKey(key)) {
-                    throw new IllegalArgumentException("duplicate normalized map key");
-                }
-                normalized.put(key, normalizeValue(entry.getValue()));
-            }
-            return normalized;
-        }
-        if (value instanceof Iterable<?> iterable) {
-            ArrayList<Object> normalized = new ArrayList<>();
-            for (Object item : iterable) {
-                normalized.add(normalizeValue(item));
-            }
-            return normalized;
-        }
-        throw new IllegalArgumentException("unsupported result type");
-    }
-
-    private static String normalizeKey(Object key) {
-        if (key instanceof String string) {
-            return string;
-        }
-        if (key instanceof Keyword keyword) {
-            return keyword.getName();
-        }
-        if (key instanceof Symbol symbol) {
-            return symbol.getName();
-        }
-        throw new IllegalArgumentException("unsupported map key type");
     }
 
     private static String classify(String source, Throwable ex) {
@@ -336,202 +270,6 @@ final class SciClojureEvaluator {
         }
     }
 
-    private record RequireRewrite(String source, Map<String, String> aliases, boolean allowed) {
-        static RequireRewrite denied() {
-            return new RequireRewrite("", Map.of(), false);
-        }
-    }
-
-    private static final class SupportedRequireForms {
-        private static final List<String> ALLOWED_NAMESPACES = List.of(
-            "ecritum.json",
-            "ecritum.time",
-            "ecritum.fs",
-            "ecritum.http"
-        );
-
-        private SupportedRequireForms() {
-        }
-
-        static RequireRewrite rewrite(String source) {
-            if (!source.contains("(require")) {
-                return new RequireRewrite(source, Map.of(), true);
-            }
-
-            StringBuilder rewritten = new StringBuilder(source.length());
-            LinkedHashMap<String, String> aliases = new LinkedHashMap<>();
-            int index = 0;
-            boolean inString = false;
-            boolean escaped = false;
-            boolean inComment = false;
-            boolean foundRequire = false;
-            while (index < source.length()) {
-                char ch = source.charAt(index);
-                if (inString) {
-                    rewritten.append(ch);
-                    if (escaped) {
-                        escaped = false;
-                    } else if (ch == '\\') {
-                        escaped = true;
-                    } else if (ch == '"') {
-                        inString = false;
-                    }
-                    index++;
-                } else if (inComment) {
-                    rewritten.append(ch);
-                    if (ch == '\n' || ch == '\r') {
-                        inComment = false;
-                    }
-                    index++;
-                } else if (ch == '"') {
-                    rewritten.append(ch);
-                    inString = true;
-                    index++;
-                } else if (ch == ';') {
-                    rewritten.append(ch);
-                    inComment = true;
-                    index++;
-                } else if (startsRequireForm(source, index)) {
-                    int end = findFormEnd(source, index);
-                    if (end < 0) {
-                        return RequireRewrite.denied();
-                    }
-                    if (!parseRequireForm(source.substring(index, end + 1), aliases)) {
-                        return RequireRewrite.denied();
-                    }
-                    rewritten.append("nil");
-                    index = end + 1;
-                    foundRequire = true;
-                } else {
-                    rewritten.append(ch);
-                    index++;
-                }
-            }
-
-            if (!foundRequire) {
-                return new RequireRewrite(source, Map.of(), true);
-            }
-            return new RequireRewrite(rewritten.toString(), Map.copyOf(aliases), true);
-        }
-
-        private static boolean startsRequireForm(String source, int index) {
-            String marker = "(require";
-            if (!source.startsWith(marker, index)) {
-                return false;
-            }
-            int next = index + marker.length();
-            return next < source.length() && Character.isWhitespace(source.charAt(next));
-        }
-
-        private static int findFormEnd(String source, int start) {
-            int depth = 0;
-            boolean inString = false;
-            boolean escaped = false;
-            for (int index = start; index < source.length(); index++) {
-                char ch = source.charAt(index);
-                if (inString) {
-                    if (escaped) {
-                        escaped = false;
-                    } else if (ch == '\\') {
-                        escaped = true;
-                    } else if (ch == '"') {
-                        inString = false;
-                    }
-                    continue;
-                }
-                if (ch == '"') {
-                    inString = true;
-                } else if (ch == '(') {
-                    depth++;
-                } else if (ch == ')') {
-                    depth--;
-                    if (depth == 0) {
-                        return index;
-                    }
-                    if (depth < 0) {
-                        return -1;
-                    }
-                }
-            }
-            return -1;
-        }
-
-        private static boolean parseRequireForm(String form, Map<String, String> aliases) {
-            String body = form.substring("(require".length(), form.length() - 1).trim();
-            List<String> clauses = splitClauses(body);
-            if (clauses.isEmpty()) {
-                return false;
-            }
-            for (String clause : clauses) {
-                if (!parseRequireClause(clause, aliases)) {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        private static List<String> splitClauses(String body) {
-            ArrayList<String> clauses = new ArrayList<>();
-            StringBuilder current = new StringBuilder();
-            int bracketDepth = 0;
-            for (int index = 0; index < body.length(); index++) {
-                char ch = body.charAt(index);
-                if (ch == '"' || ch == '(' || ch == ')' || ch == ';') {
-                    return List.of();
-                }
-                if (ch == '[') {
-                    bracketDepth++;
-                } else if (ch == ']') {
-                    bracketDepth--;
-                    if (bracketDepth < 0) {
-                        return List.of();
-                    }
-                }
-                if (Character.isWhitespace(ch) && bracketDepth == 0) {
-                    if (!current.isEmpty()) {
-                        clauses.add(current.toString());
-                        current.setLength(0);
-                    }
-                } else {
-                    current.append(ch);
-                }
-            }
-            if (bracketDepth != 0) {
-                return List.of();
-            }
-            if (!current.isEmpty()) {
-                clauses.add(current.toString());
-            }
-            return clauses;
-        }
-
-        private static boolean parseRequireClause(String clause, Map<String, String> aliases) {
-            if (clause.startsWith("'[") && clause.endsWith("]")) {
-                String[] tokens = clause.substring(2, clause.length() - 1).trim().split("\\s+");
-                if (tokens.length != 3 || !":as".equals(tokens[1])) {
-                    return false;
-                }
-                if (!ALLOWED_NAMESPACES.contains(tokens[0]) || !isAlias(tokens[2])) {
-                    return false;
-                }
-                aliases.put(tokens[2], tokens[0]);
-                return true;
-            }
-            if (!clause.startsWith("'")) {
-                return false;
-            }
-            return ALLOWED_NAMESPACES.contains(clause.substring(1));
-        }
-
-        private static boolean isAlias(String alias) {
-            if (!alias.matches("[A-Za-z][A-Za-z0-9_-]*")) {
-                return false;
-            }
-            String lower = alias.toLowerCase();
-            return !List.of("ecritum", "java", "javax", "sun", "clojure", "graal", "truffle", "sci").contains(lower);
-        }
-    }
-
     static final class ProjectedHostFunction extends RestFn {
         private final String namespace;
         private final String function;
@@ -552,9 +290,9 @@ final class SciClojureEvaluator {
         protected Object doInvoke(Object args) {
             ArrayList<Object> normalizedArgs = new ArrayList<>();
             for (ISeq current = (ISeq) args; current != null; current = current.next()) {
-                normalizedArgs.add(normalizeValue(current.first()));
+                normalizedArgs.add(ClojureValueCodec.normalize(current.first()));
             }
-            return normalizeValue(invoker.invoke(namespace, function, normalizedArgs));
+            return ClojureValueCodec.normalize(invoker.invoke(namespace, function, normalizedArgs));
         }
     }
 }

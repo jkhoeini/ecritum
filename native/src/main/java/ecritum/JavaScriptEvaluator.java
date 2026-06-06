@@ -187,7 +187,7 @@ final class JavaScriptEvaluator {
                 if (!policy.clockReadable()) {
                     throw StandardLibraryException.permissionDenied("clock access is not permitted");
                 }
-                return bridge.invoke("time.now", List.of());
+                return toGuestValue(context, bridge.invoke("time.now", List.of()).valueOrThrow());
             })
         ));
         root.installReservedObject("fs", Map.of(
@@ -214,7 +214,10 @@ final class JavaScriptEvaluator {
             if (!policy.filesystemReadable()) {
                 throw StandardLibraryException.permissionDenied("filesystem access is not permitted");
             }
-            return toGuestValue(context, bridge.invoke(operation, List.of(normalizeValue(context, args[0], newIdentitySet()))));
+            return toGuestValue(
+                context,
+                bridge.invoke(operation, List.of(normalizeValue(context, args[0], newIdentitySet()))).valueOrThrow()
+            );
         });
     }
 
