@@ -45,6 +45,20 @@ unless overridden, prepares the deterministic zip at
 `dist/release/<lane>/EcritumRuntime.xcframework.zip`.
 The release lane is selected only by command arguments; ambient
 `ECRITUM_RELEASE_LANE` does not make release-check or direct packaging run Full.
+Local release-check mode validates developer artifacts and records
+`public-signing.json` as skipped. Public release mode is explicit:
+
+```sh
+export ECRITUM_CONSUMER_ARTIFACT_URL=https://.../EcritumRuntime.xcframework.zip
+export ECRITUM_CONSUMER_ARTIFACT_CHECKSUM=$(cat dist/release/core/EcritumRuntime.xcframework.zip.checksum)
+mise exec -- just release-check-public core \
+  build/release/notary-submit.json \
+  build/release/notary-log.json \
+  build/release/stapling-exception.json
+```
+
+Public mode requires hosted HTTPS SwiftPM consumer validation and the public
+signing/notarization gate. It fails if clean-consumer evidence would be skipped.
 
 `just release-check` runs:
 
@@ -68,6 +82,8 @@ The release lane is selected only by command arguments; ambient
 - `just check-license-texts`
 - `just check-license-texts-zip`
 - `just check-vulnerability-response`
+- `just check-public-signing` in explicit public mode; otherwise
+  `public-signing.json` records a skipped local gate
 - `scripts/size-artifact.py --require-artifact` with the selected release lane
 - `scripts/license-report.py --strict`
 
@@ -124,14 +140,39 @@ Java lookup, raw host access, raw C handle access, and classpath mutation.
 config, lifecycle, and host-registration coverage and records blocked eval,
 source, value, error, and callback parser surfaces until those public APIs exist.
 
-Release publication also requires a hardened runtime plan, signed/notarized
-artifacts, and dependency digest locks. ADR-015 owns SBOM publication, CVE
-tracking, vulnerability response, and revocation policy. The offline gate is
+Release publication also requires public Developer ID signing, hardened runtime,
+notarization, stapling validation or an accepted zip exception, hosted SwiftPM
+consumer evidence, and dependency digest locks. ADR-015 owns SBOM publication,
+CVE tracking, vulnerability response, and revocation policy. The offline gate is
 `just check-vulnerability-response`, which verifies SPDX SBOM shape,
 package-url identity coverage, monitoring-source coverage, advisory blockers,
 accepted-risk expiry, and revoked artifact checksums. Live OSV/NVD/CISA/vendor
 queries are scheduled release-operations work and are intentionally not part of
 the deterministic local `release-check` yet.
+
+## Public Signing And Notarization
+
+`just check-public-signing` validates the prepared XCFramework and the unpacked
+SwiftPM release zip. For each framework executable and nested dylib it runs
+`codesign --verify --deep --strict --verbose=2`, parses `codesign -dv
+--verbose=4`, and rejects ad-hoc signatures, non-Developer ID Application
+authority chains, missing TeamIdentifier, missing hardened runtime, missing
+secure timestamp, and `get-task-allow=true`.
+
+The public signing JSON evidence is also bound to the release zip:
+
+- the zip checksum sidecar and package manifest must match the exact zip bytes
+- `notarytool submit` JSON and `notarytool log` JSON must include the exact zip
+  SHA-256, matching submission/job id, status `Accepted`, and no error issues
+- SwiftPM zip artifacts require a JSON stapling exception because Apple
+  documents that zip archives cannot be stapled directly
+- staple-capable future formats must provide stapler validation evidence instead
+  of the zip exception
+
+`scripts/build-xcframework.sh --public-release` is a build guardrail: it rejects
+`--skip-sign` and ad-hoc identity `-`. The release gate still proves the final
+certificate chain and hardened-runtime state through `check-public-signing`
+because signing identities may be passed as names or certificate hashes.
 
 ## ABI Gate
 

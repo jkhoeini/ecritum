@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'USAGE'
-Usage: build-xcframework.sh [--lane core|full] [--native-dir PATH] [--public-headers PATH] [--license-texts-dir PATH] [--output PATH] [--work-dir PATH] [--min-macos VERSION] [--sign-identity ID] [--skip-sign]
+Usage: build-xcframework.sh [--lane core|full] [--native-dir PATH] [--public-headers PATH] [--license-texts-dir PATH] [--output PATH] [--work-dir PATH] [--min-macos VERSION] [--sign-identity ID] [--skip-sign] [--public-release]
 
 Build dist/local/EcritumRuntime.xcframework from the M1 native output.
 Diagnostics go to stderr. The output path is printed to stdout.
@@ -19,6 +19,7 @@ min_macos="14.0"
 sign_identity="${ECRITUM_CODESIGN_IDENTITY:--}"
 skip_sign="0"
 lane="full"
+public_release="0"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -31,6 +32,7 @@ while [ "$#" -gt 0 ]; do
     --min-macos) min_macos="$2"; shift 2 ;;
     --sign-identity) sign_identity="$2"; shift 2 ;;
     --skip-sign) skip_sign="1"; shift ;;
+    --public-release) public_release="1"; shift ;;
     --help|-h) usage; exit 0 ;;
     *) echo "unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -40,6 +42,16 @@ if [ "$lane" != "core" ] && [ "$lane" != "full" ]; then
   echo "invalid lane: $lane" >&2
   usage >&2
   exit 2
+fi
+if [ "$public_release" = "1" ]; then
+  if [ "$skip_sign" = "1" ]; then
+    echo "public release artifacts cannot skip code signing" >&2
+    exit 2
+  fi
+  if [ "$sign_identity" = "-" ]; then
+    echo "public release artifacts require a non-ad-hoc code signing identity" >&2
+    exit 2
+  fi
 fi
 
 native_lib="$native_dir/libecritum.dylib"

@@ -195,8 +195,140 @@ class ReleaseCheckTest(unittest.TestCase):
         self.assertEqual(completed.returncode, 2)
         self.assertIn("invalid release lane", completed.stderr)
 
+    def test_public_release_requires_notarization_evidence_args(self):
+        completed = subprocess.run(
+            ["bash", str(RELEASE_CHECK), "--public"],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+
+        self.assertEqual(completed.returncode, 2)
+        self.assertIn("public release requires --notary-submit-json and --notary-log-json", completed.stderr)
+
+    def test_public_release_requires_hosted_consumer_url(self):
+        env = os.environ.copy()
+        env["JUST"] = str(self.fake_bin / "fake-just")
+        env["JUST_LOG"] = str(self.log)
+        env["REPO_ROOT"] = str(ROOT)
+        env["PATH"] = str(self.fake_bin) + os.pathsep + env["PATH"]
+        env.pop("ECRITUM_CONSUMER_ARTIFACT_URL", None)
+        env.pop("ECRITUM_CONSUMER_ARTIFACT_CHECKSUM", None)
+        evidence = self.write_public_evidence_files()
+
+        completed = subprocess.run(
+            [
+                "bash",
+                str(RELEASE_CHECK),
+                "--lane",
+                "full",
+                "--output-dir",
+                str(self.output_dir),
+                "--artifact",
+                str(self.artifact),
+                "--release-zip",
+                str(self.release_zip),
+                "--public",
+                "--notary-submit-json",
+                str(evidence["submit"]),
+                "--notary-log-json",
+                str(evidence["log"]),
+                "--stapling-exception-json",
+                str(evidence["exception"]),
+            ],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+
+        self.assertEqual(completed.returncode, 1)
+        self.assertIn("public release requires ECRITUM_CONSUMER_ARTIFACT_URL", completed.stderr)
+
+    def test_public_release_runs_public_signing_gate_and_hosted_consumer(self):
+        env = os.environ.copy()
+        env["JUST"] = str(self.fake_bin / "fake-just")
+        env["JUST_LOG"] = str(self.log)
+        env["REPO_ROOT"] = str(ROOT)
+        env["PATH"] = str(self.fake_bin) + os.pathsep + env["PATH"]
+        env["ECRITUM_CONSUMER_ARTIFACT_URL"] = "https://example.invalid/EcritumRuntime.xcframework.zip"
+        env.pop("ECRITUM_CONSUMER_ARTIFACT_CHECKSUM", None)
+        evidence = self.write_public_evidence_files()
+
+        completed = subprocess.run(
+            [
+                "bash",
+                str(RELEASE_CHECK),
+                "--lane",
+                "full",
+                "--output-dir",
+                str(self.output_dir),
+                "--artifact",
+                str(self.artifact),
+                "--release-zip",
+                str(self.release_zip),
+                "--public",
+                "--notary-submit-json",
+                str(evidence["submit"]),
+                "--notary-log-json",
+                str(evidence["log"]),
+                "--stapling-exception-json",
+                str(evidence["exception"]),
+            ],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        payload = json.loads((self.output_dir / "public-signing.json").read_text())
+        self.assertTrue(payload["ok"])
+        log_entries = [json.loads(line) for line in self.log.read_text().splitlines()]
+        self.assertIn(
+            {
+                "target": "check-public-signing",
+                "args": [
+                    str(self.artifact),
+                    str(self.release_zip),
+                    str(evidence["submit"]),
+                    str(evidence["log"]),
+                    str(evidence["exception"]),
+                    "",
+                    str(self.release_zip) + ".json",
+                ],
+            },
+            log_entries,
+        )
+        self.assertIn(
+            {
+                "target": "test-release-consumer-smoke",
+                "args": [
+                    "https://example.invalid/EcritumRuntime.xcframework.zip",
+                    self.release_zip_checksum(),
+                    str(self.release_zip),
+                ],
+            },
+            log_entries,
+        )
+
     def test_missing_option_values_exit_with_usage(self):
-        for option in ["--lane", "--output-dir", "--artifact", "--release-zip"]:
+        for option in [
+            "--lane",
+            "--output-dir",
+            "--artifact",
+            "--release-zip",
+            "--notary-submit-json",
+            "--notary-log-json",
+            "--stapling-exception-json",
+            "--stapler-evidence-json",
+        ]:
             with self.subTest(option=option):
                 completed = subprocess.run(
                     ["bash", str(RELEASE_CHECK), option],
@@ -217,6 +349,17 @@ class ReleaseCheckTest(unittest.TestCase):
         digest = hashlib.sha256()
         digest.update(b"release-zip-full")
         return digest.hexdigest()
+
+    def write_public_evidence_files(self):
+        evidence_dir = self.root / "evidence"
+        evidence_dir.mkdir()
+        submit = evidence_dir / "notary-submit.json"
+        log = evidence_dir / "notary-log.json"
+        exception = evidence_dir / "stapling-exception.json"
+        submit.write_text("{}\n")
+        log.write_text("{}\n")
+        exception.write_text("{}\n")
+        return {"exception": exception, "log": log, "submit": submit}
 
     def write_fake_just(self):
         script = self.fake_bin / "fake-just"
@@ -263,6 +406,8 @@ class ReleaseCheckTest(unittest.TestCase):
                     print(json.dumps(payload, indent=2, sort_keys=True))
                 elif target == "package-artifact-verify":
                     print(json.dumps({"ok": True, "releaseLane": args[1], "violations": []}, indent=2, sort_keys=True))
+                elif target == "check-public-signing":
+                    print(json.dumps({"ok": True, "target": target, "args": args}, indent=2, sort_keys=True))
                 elif target == "checksum":
                     print(sha256(Path(args[0])))
                 elif target == "sbom":

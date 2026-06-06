@@ -73,10 +73,32 @@ Public release artifacts require:
 - `codesign --verify --verbose=2` on every shipped framework slice and nested
   dylib after signing and after packaging/unpacking.
 
-The public signing/notarization gate is not satisfied by M7-001. A later public
-release check must enforce these requirements before publication; local
-`release-check` records the policy and validates ad-hoc signed development
-artifacts only.
+`scripts/check-public-signing.py` is the public signing/notarization gate. It
+validates every shipped `EcritumRuntime.framework/EcritumRuntime` executable and
+nested `Resources/*.dylib` with `codesign --verify --deep --strict
+--verbose=2`, then reads `codesign -dv --verbose=4` evidence to reject ad-hoc
+signatures, non-Developer ID authority chains, missing team identifiers, missing
+hardened runtime, missing secure timestamps, and `get-task-allow=true`
+entitlements. The same validation runs on the unpacked release zip, not just the
+prepared `dist/<lane>` artifact.
+
+The public gate requires `notarytool submit` and `notarytool log` JSON evidence
+for the exact release zip SHA-256. Both submit and log evidence must resolve to
+status `Accepted`, must reference the same submission/job id, and the log must
+contain no error-severity issues. Because SwiftPM binary targets use zip
+archives and Apple documents that zip archives cannot be stapled directly, the
+gate accepts an explicit JSON stapling exception for zip artifacts. The exception
+must record `artifactFormat=zip`, reason, accepted-by, accepted date, ADR/source,
+notarization submission id, and the exact release zip SHA-256. If a later
+release format can be stapled directly, the gate must use stapler validation
+evidence instead of the zip exception.
+
+Local `release-check` remains contributor-friendly and may validate ad-hoc
+signed development artifacts. Public release mode is explicit:
+`release-check.sh --public` or `just release-check-public`. Public mode requires
+the signing/notarization evidence above and a hosted HTTPS
+`.binaryTarget(url:checksum:)` consumer smoke; skipped clean-consumer evidence
+cannot satisfy publication.
 
 `just checksum` prints the SwiftPM checksum for the current release zip.
 `just package-artifact` writes the zip, a JSON package manifest, and a `.checksum`
@@ -127,3 +149,6 @@ M7-001 verifies this ADR with:
 
 M7-002 must add a hosted or local HTTP-style clean-consumer SwiftPM resolution
 test that actually consumes `.binaryTarget(url:checksum:)`.
+M8-004 adds the public Developer ID signing, notarization, zip-stapling
+exception, post-unpack signature verification, and mandatory hosted consumer
+gate.

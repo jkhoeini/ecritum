@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
   cat <<'USAGE'
 Usage: release-check.sh
-       release-check.sh [--lane core|full] [--output-dir PATH] [--artifact PATH] [--release-zip PATH]
+       release-check.sh [--lane core|full] [--output-dir PATH] [--artifact PATH] [--release-zip PATH] [--public] [--notary-submit-json PATH] [--notary-log-json PATH] [--stapling-exception-json PATH] [--stapler-evidence-json PATH]
 
 Run the release gates. This command exits nonzero when any release blocker is
 present, including unknown shipped licenses.
@@ -17,10 +17,15 @@ artifact="dist/local/EcritumRuntime.xcframework"
 artifact_was_set="0"
 release_zip=""
 just_bin="${JUST:-just}"
+public_release="0"
+notary_submit_json=""
+notary_log_json=""
+stapling_exception_json=""
+stapler_evidence_json=""
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --lane|--output-dir|--artifact|--release-zip)
+    --lane|--output-dir|--artifact|--release-zip|--notary-submit-json|--notary-log-json|--stapling-exception-json|--stapler-evidence-json)
       if [ "$#" -lt 2 ]; then
         echo "missing value for $1" >&2
         usage >&2
@@ -31,9 +36,14 @@ while [ "$#" -gt 0 ]; do
         --output-dir) output_dir="$2" ;;
         --artifact) artifact="$2"; artifact_was_set="1" ;;
         --release-zip) release_zip="$2" ;;
+        --notary-submit-json) notary_submit_json="$2" ;;
+        --notary-log-json) notary_log_json="$2" ;;
+        --stapling-exception-json) stapling_exception_json="$2" ;;
+        --stapler-evidence-json) stapler_evidence_json="$2" ;;
       esac
       shift 2
       ;;
+    --public|--public-release) public_release="1"; shift ;;
     --help|-h) usage; exit 0 ;;
     *) echo "unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -51,6 +61,18 @@ if [ "$artifact_was_set" = "0" ]; then
 fi
 if [ -z "$release_zip" ]; then
   release_zip="dist/release/$lane/EcritumRuntime.xcframework.zip"
+fi
+if [ "$public_release" = "1" ]; then
+  if [ -z "$notary_submit_json" ] || [ -z "$notary_log_json" ]; then
+    echo "public release requires --notary-submit-json and --notary-log-json" >&2
+    usage >&2
+    exit 2
+  fi
+  if [ -z "$stapling_exception_json" ] && [ -z "$stapler_evidence_json" ]; then
+    echo "public release requires --stapling-exception-json or --stapler-evidence-json" >&2
+    usage >&2
+    exit 2
+  fi
 fi
 
 mkdir -p "$output_dir"
@@ -79,18 +101,36 @@ if [ "$release_checksum" != "$(tr -d '[:space:]' < "$package_checksum")" ]; then
   echo "SwiftPM checksum does not match package checksum sidecar" >&2
   exit 1
 fi
-# Test-only release URL evidence. M7-002 owns hosted SwiftPM resolution.
+
+release_manifest_url="https://example.invalid/EcritumRuntime.xcframework.zip"
+release_manifest_checksum="$release_checksum"
+if [ "$public_release" = "1" ]; then
+  if [ -z "${ECRITUM_CONSUMER_ARTIFACT_URL:-}" ]; then
+    echo "public release requires ECRITUM_CONSUMER_ARTIFACT_URL for hosted SwiftPM consumer validation" >&2
+    exit 1
+  fi
+  release_manifest_url="$ECRITUM_CONSUMER_ARTIFACT_URL"
+  release_manifest_checksum="${ECRITUM_CONSUMER_ARTIFACT_CHECKSUM:-$release_checksum}"
+fi
 ECRITUM_RELEASE_RUNTIME_REQUIRED=1 \
-  ECRITUM_RUNTIME_URL="https://example.invalid/EcritumRuntime.xcframework.zip" \
-  ECRITUM_RUNTIME_CHECKSUM="$release_checksum" \
+  ECRITUM_RUNTIME_URL="$release_manifest_url" \
+  ECRITUM_RUNTIME_CHECKSUM="$release_manifest_checksum" \
   swift package describe --type json > "$output_dir/release-manifest.json"
 if [ -n "${ECRITUM_CONSUMER_ARTIFACT_URL:-}" ]; then
   "$just_bin" test-release-consumer-smoke "$ECRITUM_CONSUMER_ARTIFACT_URL" "${ECRITUM_CONSUMER_ARTIFACT_CHECKSUM:-$release_checksum}" "$release_zip" > "$output_dir/clean-consumer.json"
 elif [ -n "${ECRITUM_CONSUMER_ARTIFACT_CHECKSUM:-}" ]; then
   echo "ECRITUM_CONSUMER_ARTIFACT_CHECKSUM requires ECRITUM_CONSUMER_ARTIFACT_URL" >&2
   exit 1
+elif [ "$public_release" = "1" ]; then
+  echo "public release requires hosted clean-consumer validation" >&2
+  exit 1
 else
   printf '%s\n' '{"ok":false,"skipped":true,"reason":"ECRITUM_CONSUMER_ARTIFACT_URL is not set; SwiftPM binary target URLs require https"}' > "$output_dir/clean-consumer.json"
+fi
+if [ "$public_release" = "1" ]; then
+  "$just_bin" check-public-signing "$artifact" "$release_zip" "$notary_submit_json" "$notary_log_json" "$stapling_exception_json" "$stapler_evidence_json" "$package_manifest" > "$output_dir/public-signing.json"
+else
+  printf '%s\n' '{"ok":false,"skipped":true,"reason":"release-check was not run in public mode"}' > "$output_dir/public-signing.json"
 fi
 "$just_bin" sbom "$output_dir/licenses.spdx.json" "$lane"
 cp "$output_dir/licenses.spdx.json" "$sbom_file"

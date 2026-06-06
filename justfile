@@ -424,6 +424,13 @@ check-vulnerability-response release_zip="dist/release/EcritumRuntime.xcframewor
     if [ -n "{{sbom}}" ]; then args+=(--sbom-command python3 -c "import pathlib, sys; sys.stdout.write(pathlib.Path('{{sbom}}').read_text())"); fi; \
     python3 scripts/check-vulnerability-response.py "${args[@]}"
 
+check-public-signing artifact release_zip notary_submit_json notary_log_json stapling_exception_json="" stapler_evidence_json="" package_manifest="":
+    @args=(--artifact "{{artifact}}" --release-zip "{{release_zip}}" --notary-submit-json "{{notary_submit_json}}" --notary-log-json "{{notary_log_json}}"); \
+    if [ -n "{{stapling_exception_json}}" ]; then args+=(--stapling-exception-json "{{stapling_exception_json}}"); fi; \
+    if [ -n "{{stapler_evidence_json}}" ]; then args+=(--stapler-evidence-json "{{stapler_evidence_json}}"); fi; \
+    if [ -n "{{package_manifest}}" ]; then args+=(--package-manifest "{{package_manifest}}"); fi; \
+    python3 scripts/check-public-signing.py "${args[@]}"
+
 perf-baseline: size bench-cold-start bench-swift-cold-start bench-idle-rss bench-first-eval check-dep-delta
 
 perf: perf-baseline
@@ -443,6 +450,14 @@ third-party-notices output="THIRD_PARTY_NOTICES.md" lane="full":
 release-check lane="":
     @args=(); \
     if [ -n "{{lane}}" ]; then args+=(--lane "{{lane}}"); fi; \
+    scripts/release-check.sh "${args[@]}"
+
+release-check-public lane="core" notary_submit_json="" notary_log_json="" stapling_exception_json="" stapler_evidence_json="":
+    @test -n "{{notary_submit_json}}" || { echo "release-check-public requires notary_submit_json" >&2; exit 2; }; \
+    test -n "{{notary_log_json}}" || { echo "release-check-public requires notary_log_json" >&2; exit 2; }; \
+    args=(--lane "{{lane}}" --public --notary-submit-json "{{notary_submit_json}}" --notary-log-json "{{notary_log_json}}"); \
+    if [ -n "{{stapling_exception_json}}" ]; then args+=(--stapling-exception-json "{{stapling_exception_json}}"); fi; \
+    if [ -n "{{stapler_evidence_json}}" ]; then args+=(--stapler-evidence-json "{{stapler_evidence_json}}"); fi; \
     scripts/release-check.sh "${args[@]}"
 
 clean:

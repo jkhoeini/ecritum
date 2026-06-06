@@ -19,33 +19,28 @@ not done if it introduced debt without an entry.
 
 ## Active Debt
 
+No active debt.
+
+## Resolved Debt
+
 - ID: ECRITUM-DEBT-0012
 - Source task: M7-001
 - Introduced by: Release artifact pipeline hardening
 - Owner persona: Release, Licensing, and Distribution Engineer
 - Date: 2026-06-06
-- Impact: Local XCFramework builds are ad-hoc signed and verified, but public
-  Developer ID signing, hardened-runtime enforcement, notarization, stapling or
-  stapling exception, and hosted SwiftPM artifact verification are not yet
-  enforced by a public release gate.
-- Reason accepted: M7-001 hardens deterministic packaging, local signing,
-  checksum evidence, and release-manifest URL/checksum selection without
-  requiring Apple Developer credentials or public artifact hosting in developer
-  workspaces. ADR-010 requires the stricter public gate before publication.
-- Resolve-by phase: M7
-- Exit condition: Public release automation verifies a Developer ID signed and
-  notarized artifact, records notarization evidence, validates the final
-  uploaded URL/checksum through SwiftPM, and fails if `.binaryTarget(path:)`
-  resolves during public release preparation.
-- Removal task: M7 public release signing/notarization and hosted SwiftPM
-  consumer gate.
-- Verification required: Developer ID `codesign --verify --deep --strict`
-  equivalent for every shipped slice and nested dylib, `xcrun notarytool`
-  submission evidence, stapler validation or documented non-app archive
-  exception, hosted `.binaryTarget(url:checksum:)` consumer smoke, and
-  `mise exec -- just release-check`.
-
-## Resolved Debt
+- Resolved in: M8-004
+- Resolution: Public release mode now enforces Developer ID non-ad-hoc
+  signatures, hardened runtime, secure timestamp, `get-task-allow` rejection,
+  post-unpack code-signature verification, exact release-zip checksum binding
+  for notary evidence, accepted `notarytool` submit/log status, ZIP stapling
+  exception evidence, and hosted HTTPS SwiftPM consumer validation. Local
+  contributor release checks remain allowed to use ad-hoc development artifacts,
+  but public mode cannot skip hosted consumer or signing/notarization evidence.
+- Verification: M8-004 records focused public signing tests, public
+  release-check tests, builder guardrail tests, shell syntax checks, just recipe
+  dry-runs, and the full release-tool suite. Real Developer ID credentials,
+  Apple notarization submission, and public artifact hosting remain release
+  operation inputs; the gate fails without their evidence.
 
 - ID: ECRITUM-DEBT-0007
 - Source task: M3-002

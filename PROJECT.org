@@ -4878,7 +4878,7 @@ Verification plan:
 - `mise exec -- just check-license-texts-zip`
 - `mise exec -- just test-release-tools`
 
-*** TODO M8-004 Public release signing and notarization gate
+*** DONE M8-004 Public release signing and notarization gate
 
 Lead persona: Release.
 Reviewer personas: Security, Swift DX, Tests, Unix.
@@ -4901,6 +4901,121 @@ Verification plan:
 - New public signing/notary gate.
 - Hosted `mise exec -- just test-release-consumer-smoke`
 - `ECRITUM_CONSUMER_ARTIFACT_URL=... ECRITUM_CONSUMER_ARTIFACT_CHECKSUM=... mise exec -- just release-check full`
+
+Assignment:
+
+- Lead persona: Release, Licensing, and Distribution Engineer.
+- Reviewer personas: Security, Swift DX, Tests/TDD, Unix.
+- Write scope: `scripts/check-public-signing.py`,
+  `scripts/release-check.sh`, `scripts/build-xcframework.sh`, `justfile`,
+  `Tests/Release/`, `docs/adr/0010...`, `docs/release-gates.md`,
+  `DEBT.md`, and this task record.
+- Research checklist: Apple notarization and Developer ID requirements,
+  ADR-010, ADR-017, release gate docs, existing packaging/checksum/consumer
+  smoke tests, and ECRITUM-DEBT-0012.
+- ADR requirement: update ADR-010 because the concrete public
+  signing/notarization gate enforces an existing distribution decision; no new
+  ADR is required unless the archive format changes.
+- Verification plan: focused release-tool unit tests; shell syntax checks;
+  public signing gate positive and negative fixtures; local `release-check`
+  regression; public-mode release-check fixture; full release-tool suite.
+
+Review:
+
+- Claude plan review was invoked directly with `claude -p` and no auth check.
+  It timed out after 120 seconds with no output (`CLAUDE_STATUS=124`), so it is
+  not counted as signoff.
+- Release persona review required exact zip checksum binding, mandatory hosted
+  SwiftPM consumer smoke in public mode, non-ad-hoc Developer ID/hardened
+  runtime/timestamp checks, retained notary evidence, and a ZIP stapling
+  exception. Implemented in the plan.
+- Security persona review blocked until public mode rejects ad-hoc/non-Developer
+  ID signatures, missing hardened runtime, missing timestamp,
+  `get-task-allow=true`, missing/rejected/stale notary evidence, missing ZIP
+  exception, skipped hosted consumer validation, and verifies post-unpack code.
+  Implemented in the plan.
+- Tests/Unix persona review required one scriptable JSON gate, fake-command
+  tests, release-check public flags, and post-unpack verification. Implemented
+  in the plan.
+
+Implementation:
+
+- Added `scripts/check-public-signing.py` as the public release
+  signing/notarization gate. It validates every shipped framework executable
+  and nested dylib in both the prepared XCFramework and the unpacked SwiftPM
+  release zip.
+- The gate rejects ad-hoc signatures, non-Developer ID Application authority
+  chains, missing TeamIdentifier, missing hardened runtime, missing secure
+  timestamp, and `get-task-allow=true`.
+- The gate requires package sidecars to match the exact release zip, requires
+  notary submit/log JSON to include the exact release zip SHA-256, status
+  `Accepted`, matching submission/job id, and no error issues, and requires ZIP
+  stapling exception evidence for SwiftPM zip artifacts.
+- `scripts/release-check.sh --public` and `just release-check-public` now make
+  hosted HTTPS SwiftPM consumer validation and public signing/notarization
+  evidence mandatory. Local `release-check` still records public signing as
+  skipped for contributor builds.
+- `scripts/build-xcframework.sh --public-release` rejects `--skip-sign` and the
+  default ad-hoc signing identity before building a public artifact.
+- ADR-010 and `docs/release-gates.md` now document the concrete public release
+  gate, evidence shape, post-unpack verification, and ZIP stapling exception.
+- ECRITUM-DEBT-0012 moved to resolved debt.
+
+Final review:
+
+- Claude diff review was invoked directly with `claude -p` and no auth check.
+  It timed out after 120 seconds with no output (`CLAUDE_STATUS=124`), so it is
+  not counted as signoff.
+- Claude second diff-review retry was invoked directly with `claude -p` and no
+  auth check. It timed out after 90 seconds with no output
+  (`CLAUDE_STATUS=124`), so it is not counted as signoff.
+- Engineering-manager decision: accept the implementation based on Release,
+  Security, Tests/TDD, and Unix persona reviews plus passing release-tool
+  verification. The real Apple notarization submission and hosted artifact URL
+  are release-operation inputs; public mode now fails without their evidence.
+
+Verification:
+
+- `python3 -m py_compile scripts/check-public-signing.py
+  Tests/Release/test_public_signing.py Tests/Release/test_release_check.py` ->
+  exit 0.
+- `python3 -m py_compile Tests/Release/test_build_xcframework.py` -> exit 0.
+- `bash -n scripts/release-check.sh scripts/build-xcframework.sh` -> exit 0.
+- `python3 -B -m unittest Tests/Release/test_public_signing.py` -> exit 0, 8
+  tests.
+- `python3 -B -m unittest Tests/Release/test_release_check.py` -> exit 0, 8
+  tests.
+- `mise exec -- just test-release-tools` -> exit 0, 75 tests.
+- `mise exec -- just plan-check` -> exit 0.
+- `mise exec -- just --dry-run check-public-signing ...` -> exit 0; the just
+  wrapper expands the expected checker arguments.
+- `mise exec -- just --dry-run release-check-public ...` -> exit 0; the just
+  wrapper expands `scripts/release-check.sh --public` with evidence args.
+- `mise exec -- just --summary` -> exit 0 and lists `check-public-signing` and
+  `release-check-public`.
+- TODO/FIXME/HACK/TEMP/XXX scan over changed files -> no new code/doc shortcut
+  markers; only existing PROJECT.org TODO headings and policy text.
+
+New tests:
+
+- `Tests/Release/test_public_signing.py`
+- `Tests/Release/test_build_xcframework.py`
+- Public release mode coverage in `Tests/Release/test_release_check.py`
+
+Negative paths tested:
+
+- Ad-hoc signature, non-Developer ID authority, missing hardened runtime,
+  `get-task-allow=true`, rejected notarization, stale notary checksum, missing
+  ZIP stapling exception, missing public evidence args, missing hosted public
+  consumer URL, `--public-release --skip-sign`, and default ad-hoc public build
+  identity.
+
+Not verified:
+
+- Real Apple Developer ID signing, `xcrun notarytool` submission, stapler
+  validation, and hosted HTTPS artifact download were not run in this developer
+  workspace. Owner: Release; these are required release-operation inputs and
+  public mode fails closed without their evidence.
 
 * ADR Backlog
 
