@@ -188,8 +188,9 @@ Java exceptions.
 
 Script failures return `ECRITUM_ERROR_SCRIPT` with structured, redacted
 diagnostics. Diagnostics include the Ecritum operation, language `clojure`,
-source name when provided, line/column when SCI reports them, and a safe
-category such as `syntax`, `runtime`, `permission`, `timeout`, or `callback`.
+source name when provided, and a safe category such as `syntax`, `runtime`,
+`permission`, `timeout`, or `callback`. ADR-024 defers public line/column and
+stack-frame diagnostics from v0.
 
 Diagnostics must not leak:
 
@@ -241,8 +242,7 @@ Clojure eval smoke tests:
 - `(inc 41)` returns Ecritum int `42`
 - booleans, nil, strings, doubles, data, vectors, maps, nested values, and EDN
   round-trip through Ecritum values
-- syntax errors include source name, line/column when available, language, and
-  safe category
+- syntax errors include source name, language, and safe category
 - runtime errors produce `ECRITUM_ERROR_SCRIPT`
 
 Namespace matrix tests:

@@ -45,28 +45,24 @@ not done if it introduced debt without an entry.
   exception, hosted `.binaryTarget(url:checksum:)` consumer smoke, and
   `mise exec -- just release-check`.
 
+## Resolved Debt
+
 - ID: ECRITUM-DEBT-0007
 - Source task: M3-002
 - Introduced by: Clojure eval and host-call roll-up
 - Owner persona: Architecture Expert Engineer
 - Date: 2026-06-05
-- Impact: Script failures expose safe structured status/category/operation/
-  language/source-name/message diagnostics, but do not yet expose structured
-  script stack-frame accessors through the public C ABI. Swift has a stack-frame
-  model, but backend script stack frames remain empty.
-- Reason accepted: Raw JVM/Graal/SCI stack traces are unsafe to expose by
-  default, and a stable language-neutral public stack-frame ABI needs an ABI
-  freeze decision rather than an M3-002 implementation shortcut.
-- Resolve-by phase: M4.5
-- Exit condition: A public diagnostic stack-frame ABI is accepted and script
-  errors can expose redacted language-level frames when available, or the
-  roadmap explicitly drops stack-frame diagnostics from the support claim.
-- Removal task: M4.5 ABI freeze diagnostic stack-frame review
-- Verification required: `mise exec -- just check-abi`,
-  artifact-backed C/Swift script-error tests, and conformance evidence for
-  source-name plus stack-frame behavior when supported.
-
-## Resolved Debt
+- Resolved in: M8-001
+- Resolution: ADR-024 explicitly drops public line/column and stack-frame
+  diagnostics from the v0 C ABI support claim. The supported v0 native
+  diagnostic surface is status, category, redacted message, operation,
+  language, and host-supplied source name. Swift may retain the future-compatible
+  `EcritumStackFrame` model, but native-backed v0 errors leave stack frames
+  empty until a later additive ABI decision supplies safe frame accessors.
+- Verification: M8-001 records ADR/support-claim updates, ABI unchanged
+  verification, Swift error tests, artifact-backed C/Swift eval smoke, and
+  conformance evidence. Claude CLI review was attempted directly and timed out
+  with no output; the timeout is recorded in PROJECT.org.
 
 - ID: ECRITUM-DEBT-0011
 - Source task: M5-001

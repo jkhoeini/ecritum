@@ -160,6 +160,10 @@ int ecritum_error_source_name(ecritum_error_t error, ecritum_string_view_t *out_
 These are language-neutral borrowed-view accessors. They do not add
 Clojure-specific public ABI symbols.
 
+ADR-024 defers public line, column, and stack-frame diagnostics from v0. Script
+errors may include safe language and source-name fields, but callers must not
+expect backend stack frames from the v0 C ABI.
+
 M3-002C projects registered host functions into SCI without adding public ABI.
 The projected Clojure syntax is ordinary namespace-qualified Clojure function
 syntax: a registered Ecritum namespace `app` with function `answer` is callable

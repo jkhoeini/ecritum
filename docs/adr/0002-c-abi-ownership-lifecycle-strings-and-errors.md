@@ -226,10 +226,14 @@ M2 error diagnostics must support:
 - redacted user-facing message
 - operation name
 - language, when relevant
-- source name, line, and column, when relevant
-- stack frame count and borrowed stack frame views, when relevant
+- source name, when relevant
 - optional debug diagnostics only when an explicit diagnostic capability enables
   them
+
+ADR-024 narrows the v0 public support claim: line, column, frame count, and
+stack-frame views are not part of the v0 C ABI. They require a later additive
+ABI decision with redaction, truncation, source-location trust rules, and
+capability detection.
 
 By default, error messages must not expose host filesystem paths, raw Java
 `Throwable` class names, internal Graal stack traces, environment values,
@@ -306,7 +310,7 @@ int ecritum_eval(
 | `ecritum_context_destroy(context, out_error)` | consumes context handle and zeros caller storage | null pointer/zero no-op | optional owned error on failure | null, zero, active destroy, copied stale handle, double destroy |
 | `ecritum_value_destroy(value)` | consumes owned immutable value handle | null pointer/zero no-op | no diagnostic object | null, zero, copied stale handle, wrong-kind handle |
 | `ecritum_error_destroy(error)` | consumes owned immutable error handle | null pointer/zero no-op | no diagnostic object | null, zero, double destroy through same storage, copied stale handle |
-| `ecritum_error_*` accessors | borrowed views from error | null/invalid error returns invalid handle | no new error allocation | code/message/source/stack access, destroyed error |
+| `ecritum_error_*` accessors | borrowed views from error | null/invalid error returns invalid handle | no new error allocation | code/message/language/source-name access, destroyed error |
 | `ecritum_string_free(string)` | consumes owned string buffer | null/empty no-op | no diagnostic object | null, empty, UTF-8 round trip, embedded NUL |
 | `ecritum_eval(context, language, source, source_name, options_json, out_result, out_error)` | returns owned value or error | null/invalid context/source/options defined; empty `source_name` view means anonymous source; empty `options_json` view means default options | optional owned error on failure | nulls, invalid UTF-8, oversized input, script error, busy context, permission denied |
 | host callback functions | result/error ownership transfers at callback return | borrowed call cannot be stored | callback errors converted | success, callback error, user_data cleanup exactly once, reentrant call rejected |

@@ -239,8 +239,8 @@ M2 Swift errors must map every C status to a typed case that preserves:
 - stable category
 - redacted message
 - operation
-- language/source location when present
-- stack frames when present
+- language and source name when present
+- line/column and stack frames only when a future ABI supplies them
 
 Swift copies borrowed error strings/views before destroying the C error handle.
 Permission and script errors should have useful user-facing messages without

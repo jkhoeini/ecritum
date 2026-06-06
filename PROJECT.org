@@ -999,8 +999,8 @@ Assignment:
 
 Implementation plan:
 
-- Keep `EcritumValue`, status mapping, stack frames, error details, and typed
-  errors as pure Swift values.
+- Keep `EcritumValue`, status mapping, the future stack-frame model, error
+  details, and typed errors as pure Swift values.
 - Keep C/Java/manifest status constants synchronized while preserving M1 numeric
   values (`OK=0`, `INVALID_ARGUMENT=1`, `BUFFER_TOO_SMALL=2`,
   `RUNTIME_UNAVAILABLE=3`) and appending M2 statuses.
@@ -4663,7 +4663,7 @@ Definition of done:
 - Public release artifacts are signed, notarized or have an accepted archive
   exception, hosted over HTTPS, and verified by a clean SwiftPM consumer.
 
-*** TODO M8-001 Decide public diagnostic stack-frame ABI
+*** DONE M8-001 Decide public diagnostic stack-frame ABI
 
 Lead persona: Architecture.
 Reviewer personas: Swift DX, Tests, Security.
@@ -4686,6 +4686,46 @@ Verification plan:
 - `mise exec -- just test-swift`
 - `mise exec -- just test-xcframework-eval-smoke`
 - `mise exec -- just conformance`
+
+Decision:
+
+- Accepted ADR-024. Ecritum v0 does not claim public diagnostic stack-frame,
+  line, or column support through the C ABI.
+- The v0 native diagnostic surface remains status, category, redacted message,
+  operation, language, and host-supplied source name.
+- Swift keeps `EcritumStackFrame` and `EcritumErrorDetails.stack` as a
+  future-compatible API shape, but native-backed v0 diagnostics leave the stack
+  empty unless a later ABI adds frame accessors.
+- No public C symbol, manifest entry, wrapper implementation, or runtime
+  behavior changed.
+
+Review:
+
+- Architecture reviewer recommended explicitly dropping stack-frame diagnostics
+  from v0 support claims because the safe v0 C ABI already covers status,
+  category, message, operation, language, and source name, while frames need
+  cross-runtime redaction, limits, source-location trust rules, and capability
+  detection. Implemented.
+- Swift DX/TDD reviewer independently recommended the same deferral because the
+  C ABI, ABI ledger, backend codec, wrapper records, Swift copy path, and
+  conformance tests only support status/category/message/operation/language/
+  source-name today. Implemented.
+- Claude plan review: direct `claude -p` attempt timed out after 90 seconds
+  with no output (`CLAUDE_STATUS=124`). Persona reviews were used as fallback.
+
+Verification:
+
+- `mise exec -- just plan-check` -> exit 0.
+- `mise exec -- just check-abi` -> exit 0.
+- `mise exec -- just test-c-abi-eval` -> exit 0.
+- `mise exec -- just conformance` -> exit 0, 23 tests passed plus scaffold
+  provider JSON generation.
+- `mise exec -- just test-swift` -> exit 0, 65 tests passed.
+- `mise exec -- just test-xcframework-eval-smoke` -> exit 0, 65 tests passed.
+- `mise exec -- just test-swift-scaffold` -> exit 0, 65 tests passed with
+  expected artifact-backed skips.
+- Support-claim scan removed stale v0 line/column and stack-frame claims from
+  ADR-002, ADR-005, ADR-016, and ADR-021.
 
 *** TODO M8-002 Produce true Core artifact or rebaseline ADR-018
 
@@ -4799,6 +4839,8 @@ Output of: M2-005.
 Output of: M1-007.
 ** DONE ADR-021 Value, call, and eval ABI surface
 Output of: M3-002A.
+** DONE ADR-024 Diagnostic stack-frame ABI deferral
+Output of: M8-001.
 
 * Test Pyramid
 

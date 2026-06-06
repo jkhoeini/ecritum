@@ -152,7 +152,10 @@ public enum EcritumErrorCategory: String, Sendable {
     }
 }
 
-/// One user-facing stack frame associated with an Ecritum diagnostic.
+/// One future-compatible stack frame associated with an Ecritum diagnostic.
+///
+/// Native-backed v0 errors leave stack frames empty. A later C ABI decision is
+/// required before runtime errors populate this model.
 public struct EcritumStackFrame: Equatable, Sendable {
     public private(set) var function: String?
     public private(set) var sourceName: String?
@@ -173,6 +176,10 @@ public struct EcritumStackFrame: Equatable, Sendable {
 }
 
 /// Safe diagnostics copied out of an Ecritum error object.
+///
+/// Native-backed v0 diagnostics preserve status, category, message, operation,
+/// language, and source name. Line, column, and stack are reserved for a future
+/// ABI that can provide them safely.
 public struct EcritumErrorDetails: Equatable, Sendable {
     public private(set) var status: EcritumStatus?
     public private(set) var category: EcritumErrorCategory
