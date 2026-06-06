@@ -31,6 +31,19 @@ mise exec -- just xcframework
 mise exec -- just release-check
 ```
 
+The default release lane is Core. To validate the current combined
+SCI/GraalJS/Lua candidate as Full, run:
+
+```sh
+mise exec -- just release-check full
+```
+
+`release-check` writes lane-specific evidence under `build/release/<lane>` and,
+unless overridden, prepares the deterministic zip at
+`dist/release/<lane>/EcritumRuntime.xcframework.zip`.
+The release lane is selected only by command arguments; ambient
+`ECRITUM_RELEASE_LANE` does not make release-check or direct packaging run Full.
+
 `just release-check` runs:
 
 - `just test`
@@ -41,8 +54,8 @@ mise exec -- just release-check
 - `just bench-first-eval`
 - `just bench-idle-rss`
 - `just check-dep-delta`
-- `just package-artifact`
-- `just package-artifact-verify`
+- `just package-artifact` with the selected release lane
+- `just package-artifact-verify` with the selected release lane
 - `just checksum`
 - release-mode `swift package describe --type json` with
   `ECRITUM_RELEASE_RUNTIME_REQUIRED=1`
@@ -53,7 +66,7 @@ mise exec -- just release-check
 - `just check-license-texts`
 - `just check-license-texts-zip`
 - `just check-vulnerability-response`
-- `scripts/size-artifact.py --require-artifact`
+- `scripts/size-artifact.py --require-artifact` with the selected release lane
 - `scripts/license-report.py --strict`
 
 `just bench-swift-cold-start` is represented by the M1 budget policy but is not
@@ -62,23 +75,28 @@ because it is a host-example benchmark rather than a release blocker while the C
 ABI packaging gates cover the artifact runtime path. First-eval is part of
 `release-check` once the eval ABI exists.
 
-The current combined SCI/GraalJS/Lua local artifact also exceeds ADR-018 Core
-size budgets. `release-check` is therefore expected to exit nonzero at the size
-gate until the Core/Full artifact split or size policy is resolved. After size
-passes, the strict license step remains a publication blocker until the project
-owner chooses and commits a top-level Ecritum license.
+The current combined SCI/GraalJS/Lua local artifact exceeds ADR-018 Core size
+budgets and is classified as a Full candidate. `just release-check` still
+defaults to Core and is expected to fail at the size gate for this artifact
+until a true Core build exists or ADR-018 is rebaselined. `just release-check
+full` applies Full size gates; after those pass, the strict license step remains
+a publication blocker until the project owner chooses and commits a top-level
+Ecritum license.
 
 SwiftPM requires remote binary target URLs to use `https`. Local `http://` and
 `file://` URLs are not accepted as release proof. Self-signed loopback HTTPS
 with a locally trusted certificate is development evidence only; M7-002 release
 acceptance requires a real hosted HTTPS artifact URL and matching checksum. To
-run the clean-consumer release gate, publish the current
-`dist/release/EcritumRuntime.xcframework.zip` to an HTTPS URL, then run:
+run the clean-consumer release gate, publish the lane-specific zip such as
+`dist/release/full/EcritumRuntime.xcframework.zip` to an HTTPS URL, then run:
 
 ```sh
-ECRITUM_CONSUMER_ARTIFACT_URL=https://.../EcritumRuntime.xcframework.zip \
-ECRITUM_CONSUMER_ARTIFACT_CHECKSUM=$(cat dist/release/EcritumRuntime.xcframework.zip.checksum) \
-mise exec -- just test-release-consumer-smoke
+export ECRITUM_CONSUMER_ARTIFACT_URL=https://.../EcritumRuntime.xcframework.zip
+export ECRITUM_CONSUMER_ARTIFACT_CHECKSUM=$(cat dist/release/full/EcritumRuntime.xcframework.zip.checksum)
+mise exec -- just test-release-consumer-smoke \
+  "$ECRITUM_CONSUMER_ARTIFACT_URL" \
+  "$ECRITUM_CONSUMER_ARTIFACT_CHECKSUM" \
+  dist/release/full/EcritumRuntime.xcframework.zip
 ```
 
 The clean-consumer smoke creates a temporary SwiftPM executable package outside
@@ -134,12 +152,21 @@ truth. The ABI gate prevents drift until M2 replaces that duplication.
 install names, bundled resources, code-signing status, architectures, minimum
 macOS version, checksums, and embedded runtime list.
 
-`just size` prints JSON and applies M1 regression budgets:
+`just size` prints JSON and applies Core regression budgets by default:
 
 - artifact directory: 25,000,000 bytes
 - artifact warning: above 15,000,000 bytes or above 10% growth from baseline
 - public wrapper binary: 262,144 bytes
 - private Graal runtime: 20,000,000 bytes
+
+`just size dist/local/EcritumRuntime.xcframework full` applies Full candidate
+budgets:
+
+- artifact directory: 200,000,000 bytes
+- artifact warning: above 175,000,000 bytes or above 10% growth from Full
+  baseline
+- public wrapper binary: 262,144 bytes
+- private Graal runtime: 190,000,000 bytes
 
 See [performance-and-artifact-budgets.md](performance-and-artifact-budgets.md)
 and ADR-018 for startup, first-eval, idle-RSS, dependency-delta, and Core/Full
@@ -296,11 +323,11 @@ M7 uses rebuildable provenance plus deterministic archive metadata:
 - `just xcframework` assembles `dist/local/EcritumRuntime.xcframework`
 - local artifacts are ad-hoc signed by signing the nested private dylib first
   and then the framework bundle
-- `just package-artifact` writes
-  `dist/release/EcritumRuntime.xcframework.zip`
-- `just package-artifact` also writes
-  `dist/release/EcritumRuntime.xcframework.zip.json` and
-  `dist/release/EcritumRuntime.xcframework.zip.checksum`
+- `release-check` invokes `just package-artifact` to write
+  `dist/release/<lane>/EcritumRuntime.xcframework.zip`
+- `release-check` also writes
+  `dist/release/<lane>/EcritumRuntime.xcframework.zip.json` and
+  `dist/release/<lane>/EcritumRuntime.xcframework.zip.checksum`
 - archive entries are sorted
 - archive timestamps are normalized to `1980-01-01T00:00:00Z`
 - macOS metadata files such as `.DS_Store`, `._*`, and `__MACOSX` are excluded

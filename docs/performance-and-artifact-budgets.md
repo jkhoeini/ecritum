@@ -7,6 +7,7 @@ budget policy. This page is the operator-facing checklist.
 
 ```sh
 mise exec -- just size
+mise exec -- just size dist/local/EcritumRuntime.xcframework full
 mise exec -- just bench-cold-start
 mise exec -- just bench-swift-cold-start
 mise exec -- just bench-idle-rss
@@ -37,7 +38,21 @@ the packaged artifact is missing or when first-eval latency exceeds budget.
 ## Core vs Full Criteria
 
 Core is the default SwiftPM artifact. Full is the heavier artifact reserved for
-runtime combinations that exceed Core gates.
+runtime combinations that exceed Core gates. `just size` defaults to Core;
+Full checks must be requested explicitly with the `full` lane.
+
+The current combined SCI/GraalJS/Lua local artifact is a Full candidate. It is
+not a release-ready Core artifact, and the default Core lane remains blocked
+until a smaller Core build exists or ADR-018 is rebaselined.
+
+Initial M7 Full-lane size gates for that candidate are:
+
+| Gate | Command | Budget | Full baseline |
+| --- | --- | ---: | ---: |
+| Artifact directory | `just size ... full` | 200,000,000 bytes | 151,941,677 bytes |
+| Artifact warning | `just size ... full` | 175,000,000 bytes or >10% growth | 151,941,677 bytes |
+| Public wrapper | `just size ... full` | 262,144 bytes | measured per artifact |
+| Private runtime | `just size ... full` | 190,000,000 bytes | measured per artifact |
 
 Python and Ruby remain Full-only until measurements prove:
 

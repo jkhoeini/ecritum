@@ -53,6 +53,7 @@ parser.add_argument("--artifact", default="dist/local/EcritumRuntime.xcframework
 parser.add_argument("--output", default="dist/release/EcritumRuntime.xcframework.zip")
 parser.add_argument("--manifest", help="JSON manifest path. Defaults to OUTPUT.json.")
 parser.add_argument("--checksum-output", help="Checksum file path. Defaults to OUTPUT.checksum.")
+parser.add_argument("--release-lane", choices=["core", "full"], default="core")
 args = parser.parse_args()
 
 artifact = Path(args.artifact)
@@ -95,6 +96,7 @@ payload = {
     "checksumFile": str(checksum_output),
     "output": str(output),
     "manifest": str(manifest),
+    "releaseLane": args.release_lane,
     "sha256": checksum,
     "swiftPackageChecksum": checksum,
     "entries": len(files),

@@ -71,6 +71,7 @@ class PackageArtifactTest(unittest.TestCase):
         self.assertEqual(payload["swiftPackageChecksum"], swiftpm_checksum)
         self.assertEqual(checksum, swiftpm_checksum)
         self.assertEqual(first["checksum"].read_text().strip(), checksum)
+        self.assertEqual(payload["releaseLane"], "core")
         self.assertEqual(payload["root"], "EcritumRuntime.xcframework")
         self.assertEqual(payload["slices"], ["macos-arm64"])
         self.assertRegex(payload["artifactSha256"], r"^[0-9a-f]{64}$")
@@ -108,6 +109,65 @@ class PackageArtifactTest(unittest.TestCase):
         payload = json.loads(completed.stdout)
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["violations"], [])
+        self.assertEqual(payload["releaseLane"], "core")
+
+    def test_writes_full_release_lane_to_package_manifest(self):
+        result = self.run_package("full-lane", release_lane="full")
+
+        payload = json.loads(result["manifest"].read_text())
+
+        self.assertEqual(payload["releaseLane"], "full")
+
+    def test_release_lane_environment_does_not_relabel_package(self):
+        env = os.environ.copy()
+        env["ECRITUM_RELEASE_LANE"] = "full"
+        output = self.root / "env-ignored.zip"
+        manifest = self.root / "env-ignored.json"
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(PACKAGE_ARTIFACT),
+                "--artifact",
+                str(self.artifact),
+                "--output",
+                str(output),
+                "--manifest",
+                str(manifest),
+            ],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(json.loads(manifest.read_text())["releaseLane"], "core")
+
+    def test_reproducibility_checker_propagates_full_release_lane(self):
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(CHECK_PACKAGE_REPRODUCIBLE),
+                "--artifact",
+                str(self.artifact),
+                "--package-script",
+                str(PACKAGE_ARTIFACT),
+                "--release-lane",
+                "full",
+            ],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        payload = json.loads(completed.stdout)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["releaseLane"], "full")
 
     def test_release_manifest_requires_url_and_checksum_together(self):
         completed = self.describe_package({"ECRITUM_RUNTIME_URL": "https://example.invalid/EcritumRuntime.xcframework.zip"})
@@ -338,23 +398,26 @@ class PackageArtifactTest(unittest.TestCase):
             check=False,
         )
 
-    def run_package(self, name):
+    def run_package(self, name, release_lane=None):
         output = self.root / f"{name}.zip"
         manifest = self.root / f"{name}.json"
         checksum = self.root / f"{name}.checksum"
+        command = [
+            sys.executable,
+            str(PACKAGE_ARTIFACT),
+            "--artifact",
+            str(self.artifact),
+            "--output",
+            str(output),
+            "--manifest",
+            str(manifest),
+            "--checksum-output",
+            str(checksum),
+        ]
+        if release_lane:
+            command.extend(["--release-lane", release_lane])
         completed = subprocess.run(
-            [
-                sys.executable,
-                str(PACKAGE_ARTIFACT),
-                "--artifact",
-                str(self.artifact),
-                "--output",
-                str(output),
-                "--manifest",
-                str(manifest),
-                "--checksum-output",
-                str(checksum),
-            ],
+            command,
             cwd=ROOT,
             text=True,
             stdout=subprocess.PIPE,

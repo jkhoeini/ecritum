@@ -4154,6 +4154,127 @@ Definition of done:
 - Live network CVE scanning is intentionally deferred to release operations and
   must consume the same SPDX/purl data.
 
+*** DONE M7-006 Core/Full release-lane gates
+
+Lead persona: Release.
+Reviewer personas: Architecture, GraalVM Runtime, Tests, Unix.
+Write scope: release scripts, release tests, ADR-018, release docs.
+
+Execution notes:
+
+- Engineering Manager started M7-006 in jj child change
+  =release: split core and full artifact gates= on top of M7-005.
+- This task is intentionally scoped to release-lane gates, not a complete Core
+  Native Image build split.
+- The current combined SCI/GraalJS/Lua artifact is classified as a Full
+  candidate. Core remains the default release lane and remains blocked by
+  ADR-018 size gates until a smaller Core artifact exists or ADR-018 is
+  rebaselined.
+- Claude CLI was invoked directly with no auth check for plan review and timed
+  out with exit 124/no output. Do not count it as signoff.
+
+Research and reviewer input:
+
+- Architecture/Release reviewer required this to be named =M7-006 Core/Full
+  release-lane gates=, with no claim that Core is shippable. Accepted.
+- GraalVM Runtime reviewer confirmed a true Core split requires Maven Native
+  Image profiles, lane-specific private entrypoints, wrapper compile guards,
+  native check targets, and lane-aware dependency/SBOM baselines. That work is
+  out of this task and remains a follow-up.
+- Tests/Unix reviewer required lane-aware JSON evidence, explicit Full lane,
+  deterministic per-lane outputs, invalid-lane coverage, Full/Core size
+  behavior, package manifest lane metadata, and release-check lane propagation.
+
+Completed:
+
+- =just release-check= remains Core by default.
+- =just release-check full= validates the current combined artifact against
+  Full size budgets.
+- Package, reproducibility, size, and release-check evidence record the
+  selected lane.
+- ADR-018 owns the Full-lane numeric budgets.
+- Docs explain that the current artifact is a Full candidate, not release-ready
+  Core.
+- Tests cover lane metadata, invalid lanes, Core/Full size behavior, and
+  release-check lane propagation.
+- =release-check.sh= writes lane-scoped evidence under =build/release/<lane>=
+  and lane-scoped zips under =dist/release/<lane>/= unless paths are explicitly
+  overridden.
+- =package-artifact.py= and =release-check.sh= ignore ambient
+  =ECRITUM_RELEASE_LANE= for lane selection; Full must be selected by command
+  argument.
+
+Review and fixes:
+
+- Claude post-change review was invoked directly with =claude -p= and no auth
+  check. It timed out with exit 124/no output and is not counted as signoff.
+- Tests/Unix post-change reviewer found a blocking shell-parser bug: missing
+  values for =--lane=, =--output-dir=, =--artifact=, or =--release-zip=
+  crashed with an unbound variable instead of usage/code 2. Fixed with explicit
+  operand validation and regression tests.
+- Tests/Unix reviewer also requested default lane path coverage. Fixed with a
+  fixture test proving Full defaults write under =build/release/full= and
+  =dist/release/full=.
+- Architecture/Release post-change reviewer found a policy blocker:
+  =ECRITUM_RELEASE_LANE= could make default =release-check= run Full. Fixed by
+  making release-check and direct packaging ignore ambient lane env and by
+  adding regression tests.
+- Architecture/Release reviewer noted the release docs still referenced the
+  non-lane zip path. Fixed release-gate docs to use lane-specific paths for
+  release-check evidence and clean-consumer examples.
+
+Verification:
+
+- =python3 -m py_compile scripts/size-artifact.py scripts/package-artifact.py
+  scripts/check-package-reproducible.py Tests/Release/test_size_artifact.py
+  Tests/Release/test_package_artifact.py Tests/Release/test_release_check.py=
+  -> PASS.
+- =bash -n scripts/release-check.sh= -> PASS.
+- =python3 -B -m unittest Tests/Release/test_size_artifact.py= -> PASS, 3
+  tests.
+- =python3 -B -m unittest Tests/Release/test_release_check.py= -> PASS, 4
+  tests.
+- =python3 -B -m unittest Tests/Release/test_package_artifact.py
+  Tests/Release/test_release_check.py= -> PASS, 23 tests.
+- =mise exec -- just test-release-tools= -> PASS, 56 tests.
+- =mise exec -- just size dist/local/EcritumRuntime.xcframework full= -> PASS;
+  Full lane reports =artifact_bytes=151941677=,
+  =private_runtime_bytes=151308752=, no violations, no warnings.
+- =mise exec -- just size dist/local/EcritumRuntime.xcframework core= ->
+  expected exit 1; Core lane reports the same current combined artifact bytes
+  exceeding =25000000= artifact and =20000000= private-runtime budgets.
+- =mise exec -- just package-artifact
+  dist/local/EcritumRuntime.xcframework
+  dist/release/full/EcritumRuntime.xcframework.zip full= -> PASS;
+  manifest records =releaseLane=full=, 16 entries, SHA-256
+  =7a5e11565033aa8967bd40b15c20a3812f77993a1eab4ed7862a456ee35da51d=.
+- =mise exec -- just package-artifact-verify
+  dist/local/EcritumRuntime.xcframework full= -> PASS; repeated zip bytes,
+  SwiftPM checksum, and package SHA-256 match.
+- =mise exec -- just release-check full= -> expected exit 1 after Full lane
+  evidence passed. =build/release/full/package.json= records
+  =releaseLane=full=, =package-reproducibility.json= is ok,
+  =size.json= is ok, =vulnerability-response.json= is ok, and the run blocks at
+  the known first-party license blocker:
+  =EcritumRuntime.xcframework has unknown shipped license=.
+
+Follow-up:
+
+- True Core artifact production remains open. It requires Native Image
+  Core/Full profiles, matching private entrypoints, wrapper compile guards,
+  lane-aware dependency/SBOM baselines, and either Core budget compliance or a
+  follow-up ADR-018 rebaseline.
+
+Definition of done:
+
+- Core and Full release lanes are explicit in tooling and documentation.
+- Full-lane package manifests record =releaseLane: full= and Core manifests
+  record =releaseLane: core=.
+- Core size gates still fail for the current combined artifact until real Core
+  production work lands.
+- Full size gates pass for the current combined artifact.
+- The follow-up true Core build split is not hidden or implied complete.
+
 * ADR Backlog
 
 ** DONE ADR-001 SwiftPM binary target and package layout

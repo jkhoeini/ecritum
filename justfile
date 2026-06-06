@@ -285,10 +285,11 @@ packaged-app-smoke:
 
 test-packaged-app-smoke: packaged-app-smoke
 
-test-release-consumer-smoke artifact_url="" checksum="":
+test-release-consumer-smoke artifact_url="" checksum="" release_zip="":
     @args=(); \
     if [ -n "{{artifact_url}}" ]; then args+=(--artifact-url "{{artifact_url}}"); fi; \
     if [ -n "{{checksum}}" ]; then args+=(--checksum "{{checksum}}"); fi; \
+    if [ -n "{{release_zip}}" ]; then args+=(--release-zip "{{release_zip}}"); fi; \
     python3 scripts/test-release-consumer-smoke.py "${args[@]}"
 
 examples: example-swift example-c packaged-app-smoke
@@ -303,18 +304,18 @@ test-examples-auto:
 inspect artifact="dist/local/EcritumRuntime.xcframework":
     @python3 scripts/inspect-artifact.py --artifact "{{artifact}}"
 
-package-artifact artifact="dist/local/EcritumRuntime.xcframework" output="dist/release/EcritumRuntime.xcframework.zip":
-    @python3 scripts/package-artifact.py --artifact "{{artifact}}" --output "{{output}}"
+package-artifact artifact="dist/local/EcritumRuntime.xcframework" output="dist/release/EcritumRuntime.xcframework.zip" lane="core":
+    @python3 scripts/package-artifact.py --artifact "{{artifact}}" --output "{{output}}" --release-lane "{{lane}}"
 
-package-artifact-verify artifact="dist/local/EcritumRuntime.xcframework":
-    @python3 scripts/check-package-reproducible.py --artifact "{{artifact}}"
+package-artifact-verify artifact="dist/local/EcritumRuntime.xcframework" lane="core":
+    @python3 scripts/check-package-reproducible.py --artifact "{{artifact}}" --release-lane "{{lane}}"
 
 checksum output="dist/release/EcritumRuntime.xcframework.zip":
     test -f "{{output}}"
     @swift package compute-checksum "{{output}}"
 
-size artifact="dist/local/EcritumRuntime.xcframework":
-    @python3 scripts/size-artifact.py --artifact "{{artifact}}"
+size artifact="dist/local/EcritumRuntime.xcframework" lane="core":
+    @python3 scripts/size-artifact.py --artifact "{{artifact}}" --lane "{{lane}}"
 
 bench-cold-start:
     @python3 scripts/measure-runtime.py --mode startup
@@ -375,8 +376,10 @@ license-report-strict:
 third-party-notices output="THIRD_PARTY_NOTICES.md":
     @SOURCE_DATE_EPOCH=0 python3 scripts/license-report.py --notices > "{{output}}"
 
-release-check:
-    @scripts/release-check.sh
+release-check lane="":
+    @args=(); \
+    if [ -n "{{lane}}" ]; then args+=(--lane "{{lane}}"); fi; \
+    scripts/release-check.sh "${args[@]}"
 
 clean:
     rm -rf .build target build dist native/target

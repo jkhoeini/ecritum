@@ -4,27 +4,50 @@ set -euo pipefail
 usage() {
   cat <<'USAGE'
 Usage: release-check.sh
-       release-check.sh [--output-dir PATH] [--artifact PATH] [--release-zip PATH]
+       release-check.sh [--lane core|full] [--output-dir PATH] [--artifact PATH] [--release-zip PATH]
 
 Run the release gates. This command exits nonzero when any release blocker is
 present, including unknown shipped licenses.
 USAGE
 }
 
-output_dir="build/release"
+lane="core"
+output_dir=""
 artifact="dist/local/EcritumRuntime.xcframework"
-release_zip="dist/release/EcritumRuntime.xcframework.zip"
+release_zip=""
 just_bin="${JUST:-just}"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --output-dir) output_dir="$2"; shift 2 ;;
-    --artifact) artifact="$2"; shift 2 ;;
-    --release-zip) release_zip="$2"; shift 2 ;;
+    --lane|--output-dir|--artifact|--release-zip)
+      if [ "$#" -lt 2 ]; then
+        echo "missing value for $1" >&2
+        usage >&2
+        exit 2
+      fi
+      case "$1" in
+        --lane) lane="$2" ;;
+        --output-dir) output_dir="$2" ;;
+        --artifact) artifact="$2" ;;
+        --release-zip) release_zip="$2" ;;
+      esac
+      shift 2
+      ;;
     --help|-h) usage; exit 0 ;;
     *) echo "unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
+if [ "$lane" != "core" ] && [ "$lane" != "full" ]; then
+  echo "invalid release lane: $lane" >&2
+  usage >&2
+  exit 2
+fi
+if [ -z "$output_dir" ]; then
+  output_dir="build/release/$lane"
+fi
+if [ -z "$release_zip" ]; then
+  release_zip="dist/release/$lane/EcritumRuntime.xcframework.zip"
+fi
 
 mkdir -p "$output_dir"
 package_manifest="$release_zip.json"
@@ -39,9 +62,9 @@ sbom_file="$release_zip.spdx.json"
 "$just_bin" bench-first-eval > "$output_dir/first-eval.json"
 "$just_bin" bench-idle-rss > "$output_dir/idle-rss.json"
 "$just_bin" check-dep-delta > "$output_dir/dependency-delta.json"
-"$just_bin" package-artifact "$artifact" "$release_zip" > "$output_dir/package.json"
+"$just_bin" package-artifact "$artifact" "$release_zip" "$lane" > "$output_dir/package.json"
 cmp "$output_dir/package.json" "$package_manifest"
-"$just_bin" package-artifact-verify "$artifact" > "$output_dir/package-reproducibility.json"
+"$just_bin" package-artifact-verify "$artifact" "$lane" > "$output_dir/package-reproducibility.json"
 "$just_bin" checksum "$release_zip" > "$output_dir/swiftpm-checksum.txt"
 release_checksum="$(tr -d '[:space:]' < "$output_dir/swiftpm-checksum.txt")"
 if [[ ! "$release_checksum" =~ ^[0-9a-f]{64}$ ]]; then
@@ -58,7 +81,7 @@ ECRITUM_RELEASE_RUNTIME_REQUIRED=1 \
   ECRITUM_RUNTIME_CHECKSUM="$release_checksum" \
   swift package describe --type json > "$output_dir/release-manifest.json"
 if [ -n "${ECRITUM_CONSUMER_ARTIFACT_URL:-}" ]; then
-  "$just_bin" test-release-consumer-smoke "$ECRITUM_CONSUMER_ARTIFACT_URL" "${ECRITUM_CONSUMER_ARTIFACT_CHECKSUM:-$release_checksum}" > "$output_dir/clean-consumer.json"
+  "$just_bin" test-release-consumer-smoke "$ECRITUM_CONSUMER_ARTIFACT_URL" "${ECRITUM_CONSUMER_ARTIFACT_CHECKSUM:-$release_checksum}" "$release_zip" > "$output_dir/clean-consumer.json"
 elif [ -n "${ECRITUM_CONSUMER_ARTIFACT_CHECKSUM:-}" ]; then
   echo "ECRITUM_CONSUMER_ARTIFACT_CHECKSUM requires ECRITUM_CONSUMER_ARTIFACT_URL" >&2
   exit 1
@@ -72,5 +95,5 @@ cmp "$output_dir/THIRD_PARTY_NOTICES.md" THIRD_PARTY_NOTICES.md
 "$just_bin" check-license-texts "$artifact" "$output_dir/licenses.spdx.json" > "$output_dir/license-texts.json"
 "$just_bin" check-license-texts-zip "$release_zip" "$output_dir/licenses.spdx.json" > "$output_dir/license-texts-zip.json"
 "$just_bin" check-vulnerability-response "$release_zip" "$output_dir/licenses.spdx.json" "${ECRITUM_CONSUMER_ARTIFACT_URL:-}" > "$output_dir/vulnerability-response.json"
-python3 scripts/size-artifact.py --artifact "$artifact" --require-artifact > "$output_dir/size.json"
-python3 scripts/license-report.py --strict > "$output_dir/licenses-strict.spdx.json"
+python3 scripts/size-artifact.py --artifact "$artifact" --lane "$lane" --require-artifact > "$output_dir/size.json"
+"$just_bin" license-report-strict > "$output_dir/licenses-strict.spdx.json"

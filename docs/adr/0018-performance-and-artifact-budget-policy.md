@@ -11,12 +11,13 @@ the current runtime only exports a version smoke.
 
 ## Decision
 
-Ecritum tracks a Core artifact and a future Full artifact.
+Ecritum tracks Core and Full artifact lanes.
 
 Core is the default SwiftPM artifact. It must stay small enough for ordinary
 desktop app distribution and must not require a separate GraalVM, JDK, Python,
 Ruby, Node, or Clojure install at runtime. Full is allowed to carry heavier
 language runtimes once licensing, packaging, and performance data justify it.
+The Full lane is explicit; it is never the default artifact by accident.
 
 Initial Core gates:
 
@@ -48,6 +49,22 @@ Initial Full gates before Python or Ruby can move into Core:
 - the runtime remains bundled inside Ecritum's artifact; hosts and end users do
   not install separate language runtimes
 
+M7 adds absolute Full-lane packaging gates for the current combined
+SCI/GraalJS/Lua candidate artifact:
+
+- artifact directory size: 200,000,000 bytes
+- artifact size warning: above 175,000,000 bytes or above 10% growth from the
+  Full-lane baseline
+- public wrapper binary size: 262,144 bytes
+- private native runtime size: 190,000,000 bytes
+- Full-lane artifact baseline: 151,941,677 bytes
+
+The current combined SCI/GraalJS/Lua artifact is a Full candidate, not a
+release-ready Core artifact. A true Core artifact still requires Native Image
+build profiles, matching wrapper symbols, lane-aware dependency/SBOM baselines,
+and either Core budget compliance or a follow-up ADR rebaseline. Python and Ruby
+remain future Full candidates and are not included in this M7 Full candidate.
+
 Python and Ruby are Full-only until GraalPy and TruffleRuby measurements prove
 they satisfy Core gates with known licenses and without separate runtime
 installation. SCI/Clojure, JavaScript, and Lua may remain Core only while their
@@ -55,7 +72,8 @@ measured deltas stay within Core gates.
 
 ## Measurement Commands
 
-- `just size`: artifact, wrapper, and private runtime size JSON.
+- `just size [artifact] [core|full]`: artifact, wrapper, and private runtime
+  size JSON for the selected lane. The default lane is Core.
 - `just bench-cold-start`: C host process, `dlopen+dlsym`, and first wrapper
   call p50/p95 JSON over repeated fresh-process runs.
 - `just bench-swift-cold-start`: Swift host p50/p95 JSON after the example is
@@ -64,8 +82,8 @@ measured deltas stay within Core gates.
 - `just bench-first-eval`: explicit `not_applicable` JSON until an eval API
   exists.
 - `just check-dep-delta`: dependency/license inventory delta JSON.
-- `just release-check`: includes release gates and strict shipped-license
-  blocking; first-eval remains outside release-check until eval exists.
+- `just release-check [core|full]`: includes release gates and strict
+  shipped-license blocking for the selected lane. The default lane is Core.
 
 ## M1 Baseline
 
