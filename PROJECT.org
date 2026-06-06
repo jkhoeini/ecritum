@@ -3208,6 +3208,145 @@ Not verified:
   signs and verifies the local test bundle.
 #+end_src
 
+*** DONE M4.5-003 Resolve JavaScript nested host value conversion debt
+
+Lead persona: Clean Code and Functional Core.
+Reviewer personas: TDD/Testability, Architecture, Swift DX.
+Debt: ECRITUM-DEBT-0010.
+Depends on: M4-002, M4.5-002.
+Write scope: native/src/main/java/ecritum/JavaScriptEvaluator.java,
+native/src/test/java/ecritum/JavaScriptEvaluatorTest.java,
+Tests/C/native_eval_smoke.c, Tests/EcritumTests/EcritumEvalTests.swift,
+DEBT.md, PROJECT.org.
+
+Definition of done:
+
+- JavaScript host callback return values normalize correctly when arrays,
+  objects, and data are returned top-level or nested inside guest-created
+  JavaScript arrays/objects.
+- Unsupported executable, promise, non-plain, cyclic, and ambient host-access
+  values remain rejected.
+- The change does not widen host capabilities, public C ABI, Swift API, or
+  runtime support claims.
+- Java, native C, and Swift artifact-backed tests cover nested host arrays,
+  objects, and data.
+- Claude plan and implementation reviews have been run directly with
+  `claude -p`; auth checks are skipped because Claude CLI works in this repo.
+- TDD/Testability and Clean Code persona reviews have been recorded.
+
+Implementation plan:
+
+- Start with Java regression tests that reproduce nested host-returned array,
+  object, and data conversion failure.
+- Keep conversion scoped to `JavaScriptEvaluator` unless the fix requires a
+  separate `JavaScriptValueCodec`; avoid public API/ABI changes.
+- Extend native C and Swift JavaScript host smokes after Java behavior is fixed
+  and rebuild the local artifact if needed.
+- Close ECRITUM-DEBT-0010 only after Java/native/Swift evidence passes.
+
+Reviewer assignments:
+
+- Clean Code lead: value normalization boundaries, proxy handling, and
+  unsupported-result rejection.
+- TDD/Testability review: Java/native/Swift regression coverage and verification
+  commands.
+- Architecture/Swift DX review: no public ABI/API widening and artifact-backed
+  developer experience remains coherent.
+
+Progress notes:
+
+- 2026-06-06: Engineering Manager opened jj change `fix: convert nested
+  JavaScript host values`, selected ECRITUM-DEBT-0010 as the next actionable
+  debt item, and spawned fresh Clean Code plus TDD/Testability sub-agent reviews.
+- 2026-06-06: Initial research found nested normalization is centralized in
+  `JavaScriptEvaluator.normalizeValue`; top-level host array/data return tests
+  already exist, but guest-object nesting needs source and artifact-backed
+  coverage.
+
+Planned verification:
+
+- `mise exec -- mvn -s .mvn/settings.xml -f native/pom.xml
+  -Dtest=JavaScriptEvaluatorTest test`
+- `mise exec -- just test-java`
+- `mise exec -- just native`
+- `mise exec -- just test-native-eval-smoke`
+- `mise exec -- just xcframework`
+- `mise exec -- just test-swift`
+- `mise exec -- just conformance-javascript-native`
+- `mise exec -- just security-javascript`
+- `mise exec -- just plan-check`
+
+Notes:
+
+- Added Java regression coverage for host-returned arrays, objects, and byte
+  data nested inside guest-created JavaScript objects and arrays.
+- Added Java rejection coverage for unsupported host return values and cyclic
+  host lists/object arrays.
+- Changed JavaScript host return conversion to materialize host lists/arrays as
+  real guest JavaScript arrays and host maps as null-prototype JavaScript
+  objects before returning to guest code. This keeps result normalization on
+  guest values and avoids accepting arbitrary Graal proxy values.
+- Updated the plain-object guard to accept null-prototype objects while
+  continuing to reject non-plain values such as `Map`.
+- Extended native C and Swift artifact-backed JavaScript host smokes with
+  nested host-returned array/object/data assertions.
+- No ADR was written: the change is internal codec behavior and does not alter
+  public C ABI, Swift API, security policy, distribution shape, or support
+  claims.
+
+Review:
+
+- Clean Code persona review: recommended materializing host lists/arrays as
+  guest arrays and maps as null-prototype guest objects, rejecting cyclic host
+  collections, avoiding broad proxy normalization, and adding C/Swift
+  artifact-backed coverage. Implemented.
+- TDD/Testability persona review: recommended Java, C/native, and Swift nested
+  host-return tests and warned that C/Swift evidence must follow `just native`
+  and `just xcframework`. Implemented.
+- Claude plan review: direct `claude -p` attempts timed out with no output.
+- Claude implementation review: direct `claude -p` attempt timed out after 120s
+  with no output (`CLAUDE_STATUS=124`). Persona review was used as fallback and
+  the timeout is recorded here.
+
+#+begin_src markdown
+## Verification
+
+Layers tested: Unit, Native, Sanitizer, Swift artifact, Conformance, Security,
+ABI, Planning
+Commands run:
+- `mise exec -- mvn -s .mvn/settings.xml -f native/pom.xml
+  -Dtest=JavaScriptEvaluatorTest test` -> exit 0, 14 tests passed
+- `mise exec -- just test-java` -> exit 0, 47 tests passed
+- `mise exec -- just native` -> exit 0, rebuilt `build/native/macos-arm64/libecritum.dylib`
+- `mise exec -- just test-native-eval-smoke` -> exit 0
+- `mise exec -- just test-native-eval-smoke-asan` -> exit 0
+- `mise exec -- just xcframework` -> exit 0
+- `mise exec -- just test-swift` -> exit 0, 65 tests passed
+- `mise exec -- just conformance-javascript-native` -> exit 0, `build/conformance/javascript-native.json` has `ok=true`
+- `mise exec -- just security-javascript` -> exit 0, `build/security/javascript.json` has `ok=true`
+- `mise exec -- just check-abi` -> exit 0
+New tests added:
+- `JavaScriptEvaluatorTest.normalizesHostResultsNestedInsideGuestValues`
+- `JavaScriptEvaluatorTest.rejectsUnsupportedHostResultsNestedInsideGuestValues`
+- `JavaScriptEvaluatorTest.rejectsCyclicHostResultsNestedInsideGuestValues`
+- Nested JavaScript host array/object/data assertions in `Tests/C/native_eval_smoke.c`
+- Nested JavaScript host array/object/data assertions in
+  `EcritumEvalTests.testArtifactBackedJavaScriptEvalCallsRegisteredSwiftHostFunctions`
+Negative paths tested:
+- Unsupported host object return nested inside a JavaScript object.
+- Cyclic host list and cyclic host object array returns.
+- Existing unsupported JavaScript promise, top-level await, `Map`, function,
+  symbol, bigint, `NaN`, and `Infinity` rejection tests still pass.
+Size impact:
+- Native image rebuilt at 152.18MB total file size; no release budget decision
+  changed in this task.
+Sanitizers:
+- `mise exec -- just test-native-eval-smoke-asan` -> exit 0
+Not verified:
+- Public release signing/notarization and hosted consumer smoke; outside this
+  debt cleanup and still owned by M7 release gates.
+#+end_src
+
 ** DONE Milestone M5: Lua Feasibility and Runtime Decision
 
 Goal: decide whether Lua ships in the default artifact through LuaJ or another

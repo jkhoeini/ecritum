@@ -68,27 +68,6 @@ not done if it introduced debt without an entry.
   license-report`, `mise exec -- just check-dep-delta`, and documented
   Core/Full decision.
 
-- ID: ECRITUM-DEBT-0010
-- Source task: M4-002
-- Introduced by: GraalJS smoke path
-- Owner persona: Clean Code and Functional Core Engineer
-- Date: 2026-06-05
-- Impact: JavaScript host callback return values are verified as top-level
-  results, but host-returned proxy arrays/data nested inside a JavaScript object
-  currently normalize as `unsupported JavaScript result type`.
-- Reason accepted: M4-002 is the smoke path for scalar/collection/data eval,
-  host calls, stdlib facades, and deny-by-default security. The public ABI is
-  unchanged, top-level host return values work, and nested host proxy conversion
-  can be fixed by extracting a dedicated JavaScript value codec instead of
-  growing `JavaScriptEvaluator`.
-- Resolve-by phase: M4.5
-- Exit condition: `JavaScriptValueCodec` converts host-returned arrays, objects,
-  and data whether they are returned top-level or nested inside guest-created
-  objects, with Java/native/Swift tests.
-- Removal task: M4.5 JavaScript value-codec cleanup
-- Verification required: `mise exec -- just test-java`,
-  `mise exec -- just test-swift`, and a Clean Code persona review.
-
 - ID: ECRITUM-DEBT-0009
 - Source task: M4-002
 - Introduced by: GraalJS smoke path
@@ -192,6 +171,27 @@ not done if it introduced debt without an entry.
   language-runtime delta table.
 
 ## Resolved Debt
+
+- ID: ECRITUM-DEBT-0010
+- Source task: M4-002
+- Introduced by: GraalJS smoke path
+- Owner persona: Clean Code and Functional Core Engineer
+- Date: 2026-06-05
+- Resolved in: M4.5-003
+- Resolution: JavaScript host callback return values now materialize host
+  lists/arrays as real guest JavaScript arrays, host maps as null-prototype
+  guest JavaScript objects, and byte data as `Uint8Array` before returning to
+  guest code. Nested host-returned arrays, objects, and data now normalize
+  correctly inside guest-created JavaScript objects and arrays. Unsupported host
+  values and cyclic host collections remain rejected. The planned separate
+  `JavaScriptValueCodec` extraction was not required; Clean Code review
+  accepted the narrower internal boundary fix because it avoids broad proxy
+  normalization and does not alter public ABI/API or support claims.
+- Verification: M4.5-003 records Java regression tests, native C smoke and ASan
+  smoke, rebuilt Native Image and XCFramework artifacts, Swift artifact-backed
+  tests, JavaScript conformance/security gates, ABI check, and Clean
+  Code/TDD persona reviews. Claude CLI reviews were attempted directly and
+  timed out with no output; the timeout is recorded in PROJECT.org.
 
 - ID: ECRITUM-DEBT-0005
 - Source task: M1-007

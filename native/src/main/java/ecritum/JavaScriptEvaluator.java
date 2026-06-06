@@ -273,7 +273,7 @@ final class JavaScriptEvaluator {
             }
         }
         if (value.hasMembers()) {
-            if (!isPlainObject(value)) {
+            if (!isPlainObject(context, value)) {
                 throw scriptException("unsupported JavaScript result type");
             }
             rejectCycles(context, value);
@@ -308,6 +308,10 @@ final class JavaScriptEvaluator {
     }
 
     private static Object toGuestValue(Context context, Object value) {
+        return toGuestValue(context, value, newHostIdentitySet());
+    }
+
+    private static Object toGuestValue(Context context, Object value, Set<Object> seen) {
         if (value == null
             || value instanceof Boolean
             || value instanceof Number
@@ -319,24 +323,61 @@ final class JavaScriptEvaluator {
             return context.eval("js", "(bytes) => new Uint8Array(bytes)").execute(ProxyArray.fromArray(boxBytes(data)));
         }
         if (value instanceof List<?> list) {
-            return ProxyArray.fromList(list.stream().map(item -> toGuestValue(context, item)).toList());
+            return toGuestArray(context, list, seen);
         }
         if (value instanceof Map<?, ?> map) {
-            LinkedHashMap<String, Object> object = new LinkedHashMap<>();
-            for (Map.Entry<?, ?> entry : map.entrySet()) {
-                object.put(String.valueOf(entry.getKey()), toGuestValue(context, entry.getValue()));
-            }
-            return ProxyObject.fromMap(object);
+            return toGuestObject(context, map, seen);
         }
         if (value.getClass().isArray()) {
-            int length = Array.getLength(value);
-            ArrayList<Object> items = new ArrayList<>(length);
-            for (int index = 0; index < length; index++) {
-                items.add(toGuestValue(context, Array.get(value, index)));
-            }
-            return ProxyArray.fromList(items);
+            return toGuestJavaArray(context, value, seen);
         }
         throw scriptException("unsupported host value type");
+    }
+
+    private static Value toGuestArray(Context context, List<?> list, Set<Object> seen) {
+        if (!seen.add(list)) {
+            throw scriptException("cyclic host value");
+        }
+        try {
+            Value array = context.eval("js", "[]");
+            for (int index = 0; index < list.size(); index++) {
+                array.setArrayElement(index, toGuestValue(context, list.get(index), seen));
+            }
+            return array;
+        } finally {
+            seen.remove(list);
+        }
+    }
+
+    private static Value toGuestObject(Context context, Map<?, ?> map, Set<Object> seen) {
+        if (!seen.add(map)) {
+            throw scriptException("cyclic host value");
+        }
+        try {
+            Value object = context.eval("js", "Object.create(null)");
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                object.putMember(String.valueOf(entry.getKey()), toGuestValue(context, entry.getValue(), seen));
+            }
+            return object;
+        } finally {
+            seen.remove(map);
+        }
+    }
+
+    private static Value toGuestJavaArray(Context context, Object source, Set<Object> seen) {
+        if (!seen.add(source)) {
+            throw scriptException("cyclic host value");
+        }
+        try {
+            Value array = context.eval("js", "[]");
+            int length = Array.getLength(source);
+            for (int index = 0; index < length; index++) {
+                array.setArrayElement(index, toGuestValue(context, Array.get(source, index), seen));
+            }
+            return array;
+        } finally {
+            seen.remove(source);
+        }
     }
 
     private static Object[] boxBytes(byte[] data) {
@@ -392,9 +433,21 @@ final class JavaScriptEvaluator {
         return buffer.array();
     }
 
-    private static boolean isPlainObject(Value value) {
+    private static boolean isPlainObject(Context context, Value value) {
         String name = metaName(value);
-        return name.equals("Object") || name.startsWith("org.graalvm.polyglot.proxy.ProxyObject");
+        if (name.equals("Object") || name.startsWith("org.graalvm.polyglot.proxy.ProxyObject")) {
+            return true;
+        }
+        try {
+            return context.eval("js", """
+                (value) => {
+                  const prototype = Object.getPrototypeOf(value);
+                  return prototype === Object.prototype || prototype === null;
+                }
+                """).execute(value).asBoolean();
+        } catch (PolyglotException | UnsupportedOperationException | IllegalStateException ex) {
+            return false;
+        }
     }
 
     private static void rejectCycles(Context context, Value value) {
@@ -606,6 +659,10 @@ final class JavaScriptEvaluator {
     }
 
     private static Set<Value> newIdentitySet() {
+        return Collections.newSetFromMap(new IdentityHashMap<>());
+    }
+
+    private static Set<Object> newHostIdentitySet() {
         return Collections.newSetFromMap(new IdentityHashMap<>());
     }
 

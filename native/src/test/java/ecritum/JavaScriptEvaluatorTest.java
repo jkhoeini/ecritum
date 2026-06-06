@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -116,6 +117,95 @@ final class JavaScriptEvaluatorTest {
 
         assertEquals(EcritumStatus.OK, result.status(), result.message());
         assertEquals(List.of(41L, "done"), result.value());
+    }
+
+    @Test
+    void normalizesHostResultsNestedInsideGuestValues() {
+        SciEvalResult result = JavaScriptEvaluator.evaluate(
+            """
+            ({
+              nestedArray: ecritum.app.items(),
+              nestedObject: ecritum.app.record(),
+              nestedData: ecritum.app.blob(),
+              mixed: [ecritum.app.items(), {record: ecritum.app.record(), blob: ecritum.app.blob()}]
+            })
+            """,
+            "host-nested.js",
+            List.of(
+                new HostProjection("app", "items"),
+                new HostProjection("app", "record"),
+                new HostProjection("app", "blob")
+            ),
+            (namespace, function, arguments) -> {
+                assertEquals("app", namespace);
+                assertEquals(List.of(), arguments);
+                return switch (function) {
+                    case "items" -> List.of(1L, "two", true);
+                    case "record" -> Map.of("answer", 42L, "items", List.of("x", "y"));
+                    case "blob" -> new byte[] {0, 1, 2, -1};
+                    default -> throw new AssertionError("unexpected function: " + function);
+                };
+            }
+        );
+
+        assertEquals(EcritumStatus.OK, result.status(), result.message());
+        Map<?, ?> object = assertInstanceOf(Map.class, result.value());
+        assertEquals(List.of(1L, "two", true), object.get("nestedArray"));
+        assertEquals(Map.of("answer", 42L, "items", List.of("x", "y")), object.get("nestedObject"));
+        assertArrayEquals(new byte[] {0, 1, 2, -1}, (byte[]) object.get("nestedData"));
+
+        List<?> mixed = assertInstanceOf(List.class, object.get("mixed"));
+        assertEquals(List.of(1L, "two", true), mixed.get(0));
+        Map<?, ?> nested = assertInstanceOf(Map.class, mixed.get(1));
+        assertEquals(Map.of("answer", 42L, "items", List.of("x", "y")), nested.get("record"));
+        assertArrayEquals(new byte[] {0, 1, 2, -1}, (byte[]) nested.get("blob"));
+    }
+
+    @Test
+    void rejectsUnsupportedHostResultsNestedInsideGuestValues() {
+        SciEvalResult result = JavaScriptEvaluator.evaluate(
+            "({bad: ecritum.app.bad()})",
+            "host-unsupported.js",
+            List.of(new HostProjection("app", "bad")),
+            (namespace, function, arguments) -> new Object()
+        );
+
+        assertEquals(EcritumStatus.SCRIPT, result.status(), result.message());
+        assertEquals("runtime", result.category());
+        assertTrue(result.message().contains("unsupported host value type"));
+    }
+
+    @Test
+    void rejectsCyclicHostResultsNestedInsideGuestValues() {
+        SciEvalResult result = JavaScriptEvaluator.evaluate(
+            "({cycle: ecritum.app.cycle()})",
+            "host-cycle.js",
+            List.of(new HostProjection("app", "cycle")),
+            (namespace, function, arguments) -> {
+                ArrayList<Object> values = new ArrayList<>();
+                values.add(values);
+                return values;
+            }
+        );
+
+        assertEquals(EcritumStatus.SCRIPT, result.status(), result.message());
+        assertEquals("runtime", result.category());
+        assertTrue(result.message().contains("cyclic host value"));
+
+        SciEvalResult arrayResult = JavaScriptEvaluator.evaluate(
+            "({cycle: ecritum.app.cycle()})",
+            "host-array-cycle.js",
+            List.of(new HostProjection("app", "cycle")),
+            (namespace, function, arguments) -> {
+                Object[] values = new Object[1];
+                values[0] = values;
+                return values;
+            }
+        );
+
+        assertEquals(EcritumStatus.SCRIPT, arrayResult.status(), arrayResult.message());
+        assertEquals("runtime", arrayResult.category());
+        assertTrue(arrayResult.message().contains("cyclic host value"));
     }
 
     @Test

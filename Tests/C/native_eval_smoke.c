@@ -169,6 +169,76 @@ static void assert_data(ecritum_value_t value, const uint8_t *expected, size_t e
     CHECK(memcmp(actual.data, expected, expected_len) == 0);
 }
 
+static ecritum_value_t array_value_at(ecritum_value_t array, size_t index) {
+    int kind = -1;
+    size_t count = 0;
+    ecritum_value_t value = 0;
+    ecritum_error_t error = 0;
+    CHECK(array != 0);
+    if (array == 0) {
+        return 0;
+    }
+    CHECK(ecritum_value_kind(array, &kind) == ECRITUM_OK);
+    CHECK(kind == ECRITUM_VALUE_KIND_ARRAY);
+    CHECK(ecritum_value_count(array, &count) == ECRITUM_OK);
+    CHECK(index < count);
+    if (index >= count) {
+        return 0;
+    }
+    CHECK(ecritum_value_array_get(array, index, &value, &error) == ECRITUM_OK);
+    CHECK(value != 0);
+    return value;
+}
+
+static ecritum_value_t object_value_for_key(ecritum_value_t object, const char *expected_key) {
+    int kind = -1;
+    size_t count = 0;
+    ecritum_error_t error = 0;
+    CHECK(object != 0);
+    if (object == 0) {
+        return 0;
+    }
+    CHECK(ecritum_value_kind(object, &kind) == ECRITUM_OK);
+    CHECK(kind == ECRITUM_VALUE_KIND_OBJECT);
+    CHECK(ecritum_value_count(object, &count) == ECRITUM_OK);
+    for (size_t index = 0; index < count; index++) {
+        ecritum_string_view_t key = {0};
+        ecritum_value_t value = 0;
+        CHECK(ecritum_value_object_entry(object, index, &key, &value, &error) == ECRITUM_OK);
+        if (key.len == strlen(expected_key) && memcmp(key.data, expected_key, key.len) == 0) {
+            CHECK(value != 0);
+            return value;
+        }
+        CHECK(ecritum_value_destroy(&value) == ECRITUM_OK);
+    }
+    CHECK(0 && "missing object key");
+    return 0;
+}
+
+static void assert_host_values_array(ecritum_value_t value) {
+    size_t count = 0;
+    CHECK(ecritum_value_count(value, &count) == ECRITUM_OK);
+    CHECK(count == 3);
+    ecritum_value_t first = array_value_at(value, 0);
+    assert_int(first, 1);
+    CHECK(ecritum_value_destroy(&first) == ECRITUM_OK);
+    ecritum_value_t second = array_value_at(value, 1);
+    assert_string(second, "two");
+    CHECK(ecritum_value_destroy(&second) == ECRITUM_OK);
+    ecritum_value_t third = array_value_at(value, 2);
+    assert_bool(third, 1);
+    CHECK(ecritum_value_destroy(&third) == ECRITUM_OK);
+}
+
+static void assert_host_record_object(ecritum_value_t value) {
+    ecritum_value_t answer = object_value_for_key(value, "answer");
+    assert_int(answer, 42);
+    CHECK(ecritum_value_destroy(&answer) == ECRITUM_OK);
+    ecritum_value_t items = object_value_for_key(value, "items");
+    assert_host_values_array(items);
+    CHECK(ecritum_value_destroy(&items) == ECRITUM_OK);
+}
+
 static ecritum_value_t eval_language(ecritum_context_t context, const char *language, const char *source, const char *source_name) {
     ecritum_job_t job = 0;
     ecritum_error_t error = 0;
@@ -309,6 +379,65 @@ static int host_blob(ecritum_call_t call, ecritum_value_t *out_result, ecritum_e
     return ecritum_value_make_data(data, out_result, out_error);
 }
 
+static int make_host_values(ecritum_value_t *out_result, ecritum_error_t *out_error) {
+    ecritum_value_t items[3] = {0};
+    int status = ecritum_value_make_int(1, &items[0], out_error);
+    if (status == ECRITUM_OK) {
+        status = ecritum_value_make_string(view("two"), &items[1], out_error);
+    }
+    if (status == ECRITUM_OK) {
+        status = ecritum_value_make_bool(1, &items[2], out_error);
+    }
+    if (status == ECRITUM_OK) {
+        status = ecritum_value_make_array(items, 3, out_result, out_error);
+    }
+    for (size_t index = 0; index < 3; index++) {
+        if (items[index] != 0) {
+            CHECK(ecritum_value_destroy(&items[index]) == ECRITUM_OK);
+        }
+    }
+    return status;
+}
+
+static int make_host_record(ecritum_value_t *out_result, ecritum_error_t *out_error) {
+    ecritum_value_t answer = 0;
+    ecritum_value_t items = 0;
+    int status = ecritum_value_make_int(42, &answer, out_error);
+    if (status == ECRITUM_OK) {
+        status = make_host_values(&items, out_error);
+    }
+    if (status == ECRITUM_OK) {
+        ecritum_object_entry_t entries[2] = {
+            {view("answer"), answer},
+            {view("items"), items}
+        };
+        status = ecritum_value_make_object(entries, 2, out_result, out_error);
+    }
+    if (answer != 0) {
+        CHECK(ecritum_value_destroy(&answer) == ECRITUM_OK);
+    }
+    if (items != 0) {
+        CHECK(ecritum_value_destroy(&items) == ECRITUM_OK);
+    }
+    return status;
+}
+
+static int host_values(ecritum_call_t call, ecritum_value_t *out_result, ecritum_error_t *out_error, void *user_data) {
+    (void)user_data;
+    size_t count = 99;
+    CHECK(ecritum_call_argument_count(call, &count, out_error) == ECRITUM_OK);
+    CHECK(count == 0);
+    return make_host_values(out_result, out_error);
+}
+
+static int host_record(ecritum_call_t call, ecritum_value_t *out_result, ecritum_error_t *out_error, void *user_data) {
+    (void)user_data;
+    size_t count = 99;
+    CHECK(ecritum_call_argument_count(call, &count, out_error) == ECRITUM_OK);
+    CHECK(count == 0);
+    return make_host_record(out_result, out_error);
+}
+
 static int host_fail(ecritum_call_t call, ecritum_value_t *out_result, ecritum_error_t *out_error, void *user_data) {
     (void)call;
     (void)out_result;
@@ -324,6 +453,8 @@ int main(void) {
     ecritum_function_t answer_function = 0;
     ecritum_function_t add_one_function = 0;
     ecritum_function_t blob_function = 0;
+    ecritum_function_t values_function = 0;
+    ecritum_function_t record_function = 0;
     ecritum_function_t fail_function = 0;
     ecritum_error_t error = 0;
 
@@ -333,6 +464,8 @@ int main(void) {
     CHECK(ecritum_namespace_register_function(namespace_handle, view("answer"), host_answer, NULL, NULL, &answer_function, &error) == ECRITUM_OK);
     CHECK(ecritum_namespace_register_function(namespace_handle, view("add_one"), host_add_one, NULL, NULL, &add_one_function, &error) == ECRITUM_OK);
     CHECK(ecritum_namespace_register_function(namespace_handle, view("blob"), host_blob, NULL, NULL, &blob_function, &error) == ECRITUM_OK);
+    CHECK(ecritum_namespace_register_function(namespace_handle, view("values"), host_values, NULL, NULL, &values_function, &error) == ECRITUM_OK);
+    CHECK(ecritum_namespace_register_function(namespace_handle, view("record"), host_record, NULL, NULL, &record_function, &error) == ECRITUM_OK);
     CHECK(ecritum_namespace_register_function(namespace_handle, view("fail"), host_fail, NULL, NULL, &fail_function, &error) == ECRITUM_OK);
     CHECK(ecritum_context_create(runtime, empty_bytes(), &context, &error) == ECRITUM_OK);
     CHECK(context != 0);
@@ -442,6 +575,36 @@ int main(void) {
     ecritum_value_t js_host_arg_value = eval_js(context, "ecritum.app.add_one(41)");
     assert_int(js_host_arg_value, 42);
     CHECK(ecritum_value_destroy(&js_host_arg_value) == ECRITUM_OK);
+
+    ecritum_value_t js_nested_host_values = eval_js(
+        context,
+        "({items: ecritum.app.values(), record: ecritum.app.record(), blob: ecritum.app.blob(), mixed: [ecritum.app.values(), {record: ecritum.app.record(), blob: ecritum.app.blob()}]})"
+    );
+    if (js_nested_host_values != 0) {
+        ecritum_value_t js_items = object_value_for_key(js_nested_host_values, "items");
+        assert_host_values_array(js_items);
+        CHECK(ecritum_value_destroy(&js_items) == ECRITUM_OK);
+        ecritum_value_t js_record = object_value_for_key(js_nested_host_values, "record");
+        assert_host_record_object(js_record);
+        CHECK(ecritum_value_destroy(&js_record) == ECRITUM_OK);
+        ecritum_value_t js_blob = object_value_for_key(js_nested_host_values, "blob");
+        assert_data(js_blob, expected_data, sizeof(expected_data));
+        CHECK(ecritum_value_destroy(&js_blob) == ECRITUM_OK);
+        ecritum_value_t js_mixed = object_value_for_key(js_nested_host_values, "mixed");
+        ecritum_value_t mixed_items = array_value_at(js_mixed, 0);
+        assert_host_values_array(mixed_items);
+        CHECK(ecritum_value_destroy(&mixed_items) == ECRITUM_OK);
+        ecritum_value_t mixed_object = array_value_at(js_mixed, 1);
+        ecritum_value_t mixed_record = object_value_for_key(mixed_object, "record");
+        assert_host_record_object(mixed_record);
+        CHECK(ecritum_value_destroy(&mixed_record) == ECRITUM_OK);
+        ecritum_value_t mixed_blob = object_value_for_key(mixed_object, "blob");
+        assert_data(mixed_blob, expected_data, sizeof(expected_data));
+        CHECK(ecritum_value_destroy(&mixed_blob) == ECRITUM_OK);
+        CHECK(ecritum_value_destroy(&mixed_object) == ECRITUM_OK);
+        CHECK(ecritum_value_destroy(&js_mixed) == ECRITUM_OK);
+        CHECK(ecritum_value_destroy(&js_nested_host_values) == ECRITUM_OK);
+    }
 
     expect_failed_eval_status_language(context, "javascript", "ecritum.app.fail()", "callback-source.js", ECRITUM_ERROR_CALLBACK, "callback");
     expect_failed_eval_status_language(context, "javascript", "Java.type('java.lang.System')", "permission-source.js", ECRITUM_ERROR_PERMISSION_DENIED, "permission");

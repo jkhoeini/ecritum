@@ -372,6 +372,17 @@ final class EcritumEvalTests: XCTestCase {
         try app.register(.init("blob")) { _ in
             .data(Data([0, 1, 2, 255]))
         }
+        try app.register(.init("items")) { call in
+            XCTAssertEqual(try call.argumentCount(), 0)
+            return .array([.int(1), .string("two"), .bool(true)])
+        }
+        try app.register(.init("record")) { call in
+            XCTAssertEqual(try call.argumentCount(), 0)
+            return .object([
+                "answer": .int(42),
+                "items": .array([.string("x"), .string("y")]),
+            ])
+        }
         try app.register(.init("fail")) { _ in
             throw EcritumError.callback(EcritumErrorDetails(
                 status: .callback,
@@ -410,6 +421,37 @@ final class EcritumEvalTests: XCTestCase {
             sourceName: "swift-host-blob.js"
         ))
         XCTAssertEqual(blob, .data(Data([0, 1, 2, 255])))
+
+        let nested = try await context.eval(EcritumScript(
+            """
+            ({
+              items: ecritum.app.items(),
+              record: ecritum.app.record(),
+              blob: ecritum.app.blob(),
+              mixed: [ecritum.app.items(), {record: ecritum.app.record(), blob: ecritum.app.blob()}]
+            })
+            """,
+            language: .javascript,
+            sourceName: "swift-host-nested.js"
+        ))
+        XCTAssertEqual(nested, .object([
+            "items": .array([.int(1), .string("two"), .bool(true)]),
+            "record": .object([
+                "answer": .int(42),
+                "items": .array([.string("x"), .string("y")]),
+            ]),
+            "blob": .data(Data([0, 1, 2, 255])),
+            "mixed": .array([
+                .array([.int(1), .string("two"), .bool(true)]),
+                .object([
+                    "record": .object([
+                        "answer": .int(42),
+                        "items": .array([.string("x"), .string("y")]),
+                    ]),
+                    "blob": .data(Data([0, 1, 2, 255])),
+                ]),
+            ]),
+        ]))
 
         do {
             _ = try await context.eval(EcritumScript("ecritum.app.fail()", language: .javascript, sourceName: "swift-host-fail.js"))
