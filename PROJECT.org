@@ -5247,14 +5247,12 @@ Definition of done:
 
 Current blocker:
 
-- Publishing a GitHub Release or tag may push remote state and therefore
-  requires explicit user authorization under AGENTS.md.
-- The final GitHub owner/repository, release tag, and release notes are not
-  recorded in this workspace.
-- Local preflight on 2026-06-07 found `jj git remote list` returned no
-  configured remotes, and `gh repo view --json nameWithOwner,url,defaultBranchRef`
-  failed because the `gh` wrapper could not find the real GitHub CLI
-  (`gh: command not found`).
+- The upstream repository now exists at `https://github.com/jkhoeini/ecritum`,
+  is public, has default branch `main`, and local `origin` is
+  `git@github.com:jkhoeini/ecritum.git`.
+- `main` was pushed to `origin` on 2026-06-07 at commit `09fd5da8`.
+- Remaining blocker: the final Community release tag, release notes, and
+  release asset upload are not recorded in this workspace.
 
 Verification plan:
 
