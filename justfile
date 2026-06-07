@@ -349,11 +349,12 @@ packaged-app-smoke:
 
 test-packaged-app-smoke: packaged-app-smoke
 
-test-release-consumer-smoke artifact_url="" checksum="" release_zip="":
+test-release-consumer-smoke artifact_url="" checksum="" release_zip="" lane="core":
     @args=(); \
     if [ -n "{{artifact_url}}" ]; then args+=(--artifact-url "{{artifact_url}}"); fi; \
     if [ -n "{{checksum}}" ]; then args+=(--checksum "{{checksum}}"); fi; \
     if [ -n "{{release_zip}}" ]; then args+=(--release-zip "{{release_zip}}"); fi; \
+    if [ -n "{{lane}}" ]; then args+=(--lane "{{lane}}"); fi; \
     python3 scripts/test-release-consumer-smoke.py "${args[@]}"
 
 examples: example-swift example-c packaged-app-smoke

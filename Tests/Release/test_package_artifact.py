@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import hashlib
+import importlib.util
 import json
 import os
 import platform
@@ -295,6 +296,39 @@ class PackageArtifactTest(unittest.TestCase):
         self.assertNotEqual(completed.returncode, 0)
         self.assertIn("64-character lowercase", completed.stderr)
 
+    def test_release_consumer_smoke_core_source_omits_javascript(self):
+        smoke = self.load_release_consumer_smoke()
+
+        source = smoke.main_swift("core")
+
+        self.assertIn("languages: [.clojure]", source)
+        self.assertIn("lane=core clojure=42", source)
+        self.assertNotIn(".javascript", source)
+        self.assertNotIn("release-consumer-smoke.js", source)
+
+    def test_release_consumer_smoke_full_source_includes_javascript(self):
+        smoke = self.load_release_consumer_smoke()
+
+        source = smoke.main_swift("full")
+
+        self.assertIn("languages: [.clojure, .javascript]", source)
+        self.assertIn("lane=full clojure=42 javascript=42", source)
+        self.assertIn("language: .javascript", source)
+        self.assertIn("release-consumer-smoke.js", source)
+
+    def test_release_consumer_smoke_defaults_to_core_lane(self):
+        smoke = self.load_release_consumer_smoke()
+
+        args = smoke.parse_args([
+            "--artifact-url",
+            "https://example.invalid/EcritumRuntime.xcframework.zip",
+            "--checksum",
+            "0" * 64,
+            "--manifest-only",
+        ])
+
+        self.assertEqual(args.lane, "core")
+
     def test_release_consumer_smoke_rejects_stale_local_release_zip(self):
         release_zip = self.root / "release.zip"
         release_zip.write_text("stale")
@@ -343,6 +377,22 @@ class PackageArtifactTest(unittest.TestCase):
         self.assertNotEqual(completed.returncode, 0)
         self.assertIn("package manifest checksum does not match", completed.stderr)
 
+    def test_release_consumer_smoke_rejects_package_manifest_lane_mismatch(self):
+        release_zip = self.root / "release.zip"
+        release_zip.write_text("artifact")
+        checksum = sha256(release_zip)
+        Path(str(release_zip) + ".json").write_text(json.dumps({
+            "sha256": checksum,
+            "swiftPackageChecksum": checksum,
+            "releaseLane": "full",
+            "artifactReleaseLane": "full",
+        }))
+
+        completed = self.run_release_consumer_smoke_preflight(release_zip, checksum)
+
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("releaseLane 'full' does not match requested lane 'core'", completed.stderr)
+
     def test_release_consumer_smoke_manifest_only_validates_release_binary_target(self):
         completed = subprocess.run(
             [
@@ -354,6 +404,8 @@ class PackageArtifactTest(unittest.TestCase):
                 "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
                 "--release-zip",
                 str(self.root / "missing-release.zip"),
+                "--lane",
+                "core",
                 "--manifest-only",
             ],
             cwd=ROOT,
@@ -368,6 +420,7 @@ class PackageArtifactTest(unittest.TestCase):
         self.assertTrue(payload["manifestOnly"])
         self.assertTrue(payload["binaryTargetPath"].startswith("remote/archive/"))
         self.assertTrue(payload["binaryTargetPath"].endswith(".zip"))
+        self.assertEqual(payload["releaseLane"], "core")
 
     def test_release_consumer_smoke_manifest_only_accepts_remote_archive_basename_from_url(self):
         completed = subprocess.run(
@@ -448,6 +501,17 @@ class PackageArtifactTest(unittest.TestCase):
         self.assertTrue(payload["ok"])
         expected_framework = (Path(artifact["path"]) / f"macos-{platform.machine()}" / "EcritumRuntime.framework").resolve()
         self.assertEqual(payload["downloadedFramework"], str(expected_framework))
+        self.assertEqual(payload["releaseLane"], "core")
+
+    def test_release_consumer_smoke_workspace_state_rejects_lane_mismatch(self):
+        swift_build = self.root / "swift-build"
+        artifact = self.remote_workspace_artifact(swift_build, release_lane="full")
+        self.write_workspace_state(swift_build, [artifact])
+
+        completed = self.run_workspace_state_validation(swift_build)
+
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("does not match requested lane 'core'", completed.stderr)
 
     def test_release_consumer_smoke_workspace_state_rejects_bad_artifacts(self):
         cases = [
@@ -584,6 +648,12 @@ class PackageArtifactTest(unittest.TestCase):
             check=False,
         )
 
+    def load_release_consumer_smoke(self):
+        spec = importlib.util.spec_from_file_location("release_consumer_smoke", RELEASE_CONSUMER_SMOKE)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
     def write_workspace_state(self, swift_build, artifacts):
         swift_build.mkdir(parents=True, exist_ok=True)
         (swift_build / "workspace-state.json").write_text(json.dumps({
@@ -595,9 +665,12 @@ class PackageArtifactTest(unittest.TestCase):
             "version": 7,
         }))
 
-    def remote_workspace_artifact(self, swift_build, name="EcritumRuntime", source="remote"):
+    def remote_workspace_artifact(self, swift_build, name="EcritumRuntime", source="remote", release_lane="core"):
         artifact_root = swift_build / "artifacts" / "ecritum" / name / "EcritumRuntime.xcframework"
-        (artifact_root / f"macos-{platform.machine()}" / "EcritumRuntime.framework").mkdir(parents=True, exist_ok=True)
+        framework = artifact_root / f"macos-{platform.machine()}" / "EcritumRuntime.framework"
+        resources = framework / "Resources"
+        resources.mkdir(parents=True, exist_ok=True)
+        (resources / "ecritum-runtime-lane.json").write_text(json.dumps({"formatVersion": 1, "releaseLane": release_lane}) + "\n")
         artifact = {
             "kind": {"xcframework": {}},
             "packageRef": {

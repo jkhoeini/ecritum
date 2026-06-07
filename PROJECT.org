@@ -4643,7 +4643,7 @@ Verification:
   docs/release-gates.md.
 - No source/runtime artifact changed in this task.
 
-** TODO Milestone M8: Release Candidate Closure
+** DONE Milestone M8: Release Candidate Closure
 
 Goal: close the remaining product blockers before Ecritum can be treated as a
 release candidate rather than a local Full candidate.
@@ -5227,7 +5227,7 @@ Not verified:
 - Hosted GitHub Releases consumer validation was not run because no final
   tag-specific GitHub release URL exists yet. Owner: Release; tracked by M8-006.
 
-*** IN-PROGRESS M8-006 Publish GitHub-hosted Community release
+*** DONE M8-006 Publish GitHub-hosted Community release
 
 Lead persona: Release.
 Reviewer personas: Security, Swift DX, Tests, Unix.
@@ -5248,16 +5248,19 @@ Definition of done:
   evidence uses the public release version `0.1.0`, not `0.1.0-dev` or
   `0.1.0-SNAPSHOT`.
 
-Current blocker:
+Outcome:
 
 - The upstream repository now exists at `https://github.com/jkhoeini/ecritum`,
   is public, has default branch `main`, and local `origin` is
   `git@github.com:jkhoeini/ecritum.git`.
-- `main` was pushed to `origin` on 2026-06-07. The initial release-prep push
-  was commit `09fd5da8`; subsequent project-note follow-ups were also pushed to
-  `main`.
-- Remaining blocker: the final Community release tag, release notes, and
-  release asset upload are not recorded in this workspace.
+- Release tag: `v0.1.0`.
+- Release URL: `https://github.com/jkhoeini/ecritum/releases/tag/v0.1.0`.
+- Hosted Core artifact URL:
+  `https://github.com/jkhoeini/ecritum/releases/download/v0.1.0/EcritumRuntime.xcframework.zip`.
+- Uploaded assets: Core zip, checksum sidecar, SPDX SBOM, and package manifest.
+- Community release status: not Developer ID signed, notarized, or stapled by
+  design. The Community release gate records this as an explicit skipped public
+  signing tier, not as a hidden release dependency.
 
 Assignment:
 
@@ -5292,8 +5295,19 @@ Progress:
   `dist/local`, focused release tests, and no live `0.1.0-dev`/`SNAPSHOT`
   references outside historical/build output. Implemented. Claude timed out
   after 60 seconds with no output.
+- Initial hosted `release-check-community core` failed at the clean SwiftPM
+  consumer because `scripts/test-release-consumer-smoke.py` assumed the Full
+  artifact and evaluated JavaScript against the Core release. Fixed by making
+  the smoke lane-aware, defaulting it to Core, passing the release lane through
+  `just` and `scripts/release-check.sh`, and requiring the package manifest plus
+  downloaded framework `ecritum-runtime-lane.json` to match the requested lane.
+- Release/Unix persona review accepted the lane-aware fix and identified the
+  need to move `v0.1.0` from the pre-fix release commit to the fixed `main`.
+  Accepted.
+- TDD persona review accepted the source-generation and release-check tests and
+  requested manifest-only lane evidence. Implemented.
 
-Verification so far:
+Verification:
 
 - `mise exec -- just native-core` -> PASS; Maven project built as `0.1.0`,
   Core Native Image size `30.67MB`.
@@ -5317,27 +5331,31 @@ Verification so far:
 - `mise exec -- just sbom build/release/core/licenses.spdx.json core` and
   `command cp -f ... dist/release/core/EcritumRuntime.xcframework.zip.spdx.json`
   -> PASS.
-- `mise exec -- just test-release-tools` -> PASS, 85 tests.
+- `python3 -m py_compile scripts/test-release-consumer-smoke.py
+  Tests/Release/test_package_artifact.py Tests/Release/test_release_check.py`
+  and `bash -n scripts/release-check.sh` -> PASS.
+- `python3 -B -m unittest Tests/Release/test_package_artifact.py
+  Tests/Release/test_release_check.py` -> PASS, 39 tests.
+- `mise exec -- just test-release-tools` -> PASS, 91 tests.
 - `SOURCE_DATE_EPOCH=0 python3 scripts/license-report.py --notices --lane full
   | cmp - THIRD_PARTY_NOTICES.md` -> PASS.
 - `rg -n "0\.1\.0-dev|0\.1\.0-SNAPSHOT|SNAPSHOT" --glob "!PROJECT.org"
   --glob "!build/**" --glob "!dist/**" --glob "!.jj/**" .` -> no matches.
 - `mise exec -- just release-check core` -> PASS.
-
-Verification plan:
-
-- `jj status`
-- `mise exec -- just native-core`
-- `mise exec -- just xcframework-core`
-- `mise exec -- just package-artifact dist/core/EcritumRuntime.xcframework
-  dist/release/core/EcritumRuntime.xcframework.zip core`
-- `gh release create <tag> dist/release/core/EcritumRuntime.xcframework.zip
-  dist/release/core/EcritumRuntime.xcframework.zip.checksum
-  dist/release/core/EcritumRuntime.xcframework.zip.spdx.json --repo OWNER/ecritum
-  --title <tag> --notes-file <notes>`
-- `ECRITUM_CONSUMER_ARTIFACT_URL=https://github.com/OWNER/ecritum/releases/download/<tag>/EcritumRuntime.xcframework.zip
-  ECRITUM_CONSUMER_ARTIFACT_CHECKSUM=$(cat dist/release/core/EcritumRuntime.xcframework.zip.checksum)
-  mise exec -- just release-check-community core`
+- `ECRITUM_CONSUMER_ARTIFACT_URL=https://github.com/jkhoeini/ecritum/releases/download/v0.1.0/EcritumRuntime.xcframework.zip
+  ECRITUM_CONSUMER_ARTIFACT_CHECKSUM=$(tr -d "[:space:]" <
+  dist/release/core/EcritumRuntime.xcframework.zip.checksum)
+  mise exec -- just release-check-community core` -> PASS; clean consumer
+  evidence has `ok: true`, `releaseLane: core`, checksum
+  `f2cc8401e0012039b56cf41cc62b0388457cf6d502ccf672f40475732dd7f223`, and
+  output `ReleaseConsumerSmoke version=0.1.0 lane=core clojure=42`.
+- `gh release view v0.1.0 --repo jkhoeini/ecritum --json
+  tagName,targetCommitish,url,isDraft,isPrerelease,assets` -> PASS; release is
+  public, non-draft, non-prerelease, target commitish `main`, and has uploaded
+  zip/checksum/SBOM/package-manifest assets.
+- Claude post-change diff review: direct `claude -p` attempt timed out after 90
+  seconds with no output (`CLAUDE_STATUS=124`). Release/Unix and TDD persona
+  reviews were used as fallback.
 
 * ADR Backlog
 

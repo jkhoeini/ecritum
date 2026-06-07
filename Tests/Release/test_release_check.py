@@ -102,6 +102,7 @@ class ReleaseCheckTest(unittest.TestCase):
                     "https://example.invalid/EcritumRuntime.xcframework.zip",
                     self.release_zip_checksum(),
                     str(self.release_zip),
+                    "full",
                 ],
             },
             log_entries,
@@ -330,10 +331,61 @@ class ReleaseCheckTest(unittest.TestCase):
                     "https://example.invalid/EcritumRuntime.xcframework.zip",
                     "a" * 64,
                     str(self.release_zip),
+                    "full",
                 ],
             },
             log_entries,
         )
+
+    def test_core_community_release_runs_core_hosted_consumer(self):
+        lane_metadata = self.artifact / "macos-arm64" / "EcritumRuntime.framework" / "Resources" / "ecritum-runtime-lane.json"
+        lane_metadata.write_text('{"formatVersion":1,"releaseLane":"core"}\n')
+        release_zip = self.root / "release" / "core" / "EcritumRuntime.xcframework.zip"
+        env = os.environ.copy()
+        env["JUST"] = str(self.fake_bin / "fake-just")
+        env["JUST_LOG"] = str(self.log)
+        env["REPO_ROOT"] = str(ROOT)
+        env["PATH"] = str(self.fake_bin) + os.pathsep + env["PATH"]
+        env["ECRITUM_CONSUMER_ARTIFACT_URL"] = "https://example.invalid/EcritumRuntime.xcframework.zip"
+        env["ECRITUM_CONSUMER_ARTIFACT_CHECKSUM"] = "b" * 64
+
+        completed = subprocess.run(
+            [
+                "bash",
+                str(RELEASE_CHECK),
+                "--lane",
+                "core",
+                "--output-dir",
+                str(self.output_dir),
+                "--artifact",
+                str(self.artifact),
+                "--release-zip",
+                str(release_zip),
+                "--community",
+            ],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        log_entries = [json.loads(line) for line in self.log.read_text().splitlines()]
+        self.assertIn(
+            {
+                "target": "test-release-consumer-smoke",
+                "args": [
+                    "https://example.invalid/EcritumRuntime.xcframework.zip",
+                    "b" * 64,
+                    str(release_zip),
+                    "core",
+                ],
+            },
+            log_entries,
+        )
+        self.assertEqual(json.loads((self.output_dir / "package.json").read_text())["releaseLane"], "core")
 
     def test_release_mode_cannot_be_both_public_and_community(self):
         completed = subprocess.run(
@@ -412,6 +464,7 @@ class ReleaseCheckTest(unittest.TestCase):
                     "https://example.invalid/EcritumRuntime.xcframework.zip",
                     self.release_zip_checksum(),
                     str(self.release_zip),
+                    "full",
                 ],
             },
             log_entries,

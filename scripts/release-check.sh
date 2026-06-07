@@ -128,7 +128,7 @@ ECRITUM_RELEASE_RUNTIME_REQUIRED=1 \
   ECRITUM_RUNTIME_CHECKSUM="$release_manifest_checksum" \
   swift package describe --type json > "$output_dir/release-manifest.json"
 if [ -n "${ECRITUM_CONSUMER_ARTIFACT_URL:-}" ]; then
-  "$just_bin" test-release-consumer-smoke "$ECRITUM_CONSUMER_ARTIFACT_URL" "${ECRITUM_CONSUMER_ARTIFACT_CHECKSUM:-$release_checksum}" "$release_zip" > "$output_dir/clean-consumer.json"
+  "$just_bin" test-release-consumer-smoke "$ECRITUM_CONSUMER_ARTIFACT_URL" "${ECRITUM_CONSUMER_ARTIFACT_CHECKSUM:-$release_checksum}" "$release_zip" "$lane" > "$output_dir/clean-consumer.json"
 elif [ -n "${ECRITUM_CONSUMER_ARTIFACT_CHECKSUM:-}" ]; then
   echo "ECRITUM_CONSUMER_ARTIFACT_CHECKSUM requires ECRITUM_CONSUMER_ARTIFACT_URL" >&2
   exit 1
