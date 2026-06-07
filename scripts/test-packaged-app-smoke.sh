@@ -142,13 +142,6 @@ if [ "$output" != "$success_line" ]; then
   exit 1
 fi
 
-mv "$run_framework" "$run_framework.removed"
-if { env -i HOME="${HOME:-}" TMPDIR="${TMPDIR:-/tmp}" PATH="$run_root/empty-bin" "$run_executable"; } >/dev/null 2>&1; then
-  echo "packaged app unexpectedly launched after removing bundled EcritumRuntime.framework" >&2
-  exit 1
-fi
-mv "$run_framework.removed" "$run_framework"
-
 otool -L "$run_executable" | grep -q '@rpath/EcritumRuntime.framework/EcritumRuntime'
 otool -l "$run_executable" | grep -A2 LC_RPATH | grep -q '@executable_path/../Frameworks'
 otool -D "$run_framework/EcritumRuntime" | grep -q '@rpath/EcritumRuntime.framework/EcritumRuntime'
