@@ -13,7 +13,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 
-SUCCESS_LINE = "ReleaseConsumerSmoke version=0.1.0-dev clojure=42 javascript=42"
+SUCCESS_LINE = "ReleaseConsumerSmoke version=0.1.0 clojure=42 javascript=42"
 CHECKSUM_RE = re.compile(r"^[0-9a-f]{64}$")
 
 

@@ -10,7 +10,7 @@ int main(void) {
         fprintf(stderr, "CHost status=%d\n", status);
         return 1;
     }
-    if (strcmp(buffer, "0.1.0-dev") != 0) {
+    if (strcmp(buffer, "0.1.0") != 0) {
         fprintf(stderr, "CHost version mismatch: %s\n", buffer);
         return 1;
     }

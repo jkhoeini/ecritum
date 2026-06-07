@@ -325,7 +325,7 @@ The accepted M3-002B dependency tree from
 -Dscope=runtime` is:
 
 ```text
-dev.ecritum:ecritum-native:jar:0.1.0-SNAPSHOT
+dev.ecritum:ecritum-native:jar:0.1.0
 +- org.graalvm.sdk:nativeimage:jar:25.0.2:compile
 |  \- org.graalvm.sdk:word:jar:25.0.2:compile
 \- org.babashka:sci:jar:0.12.51:compile

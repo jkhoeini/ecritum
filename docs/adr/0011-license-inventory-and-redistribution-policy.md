@@ -68,7 +68,7 @@ The first-party Ecritum code is licensed under MIT through the top-level
 reported as:
 
 - package: `EcritumRuntime.xcframework`
-- version: `0.1.0-dev`
+- version: `0.1.0`
 - scope: `shipped`
 - license: `MIT`
 - license source: `LICENSE`

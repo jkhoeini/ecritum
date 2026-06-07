@@ -5227,7 +5227,7 @@ Not verified:
 - Hosted GitHub Releases consumer validation was not run because no final
   tag-specific GitHub release URL exists yet. Owner: Release; tracked by M8-006.
 
-*** BLOCKED M8-006 Publish GitHub-hosted Community release
+*** IN-PROGRESS M8-006 Publish GitHub-hosted Community release
 
 Lead persona: Release.
 Reviewer personas: Security, Swift DX, Tests, Unix.
@@ -5244,6 +5244,9 @@ Definition of done:
   consumer, package, license, SBOM, vulnerability, ABI, or size gates.
 - Release notes clearly state that the Community artifact is not Developer ID
   signed, notarized, or stapled.
+- Runtime, Maven, SPDX, notice, smoke-test, and dependency-delta version
+  evidence uses the public release version `0.1.0`, not `0.1.0-dev` or
+  `0.1.0-SNAPSHOT`.
 
 Current blocker:
 
@@ -5255,6 +5258,71 @@ Current blocker:
   `main`.
 - Remaining blocker: the final Community release tag, release notes, and
   release asset upload are not recorded in this workspace.
+
+Assignment:
+
+- Lead persona: Release, Licensing, and Distribution Engineer.
+- Reviewer personas: TDD/Verification, Swift DX, Unix.
+- Write scope: `docs/releases/`, `PROJECT.org`, version constants and release
+  smoke expectations, release tooling baselines, `native/pom.xml`, release
+  artifacts under `dist/release/core`, and GitHub release state.
+- ADR requirement: no new ADR; ADR-010 already owns Community vs Trusted release
+  policy, and ADR-012 defines `ecritum_version` as product/runtime version
+  rather than ABI compatibility.
+- Claude plan review: direct `claude -p` attempt on the M8-006 plan timed out
+  after 90 seconds with no output (`CLAUDE_STATUS=124`), so it is not counted
+  as signoff.
+
+Progress:
+
+- Selected release tag: `v0.1.0`.
+- Added release notes: `docs/releases/v0.1.0-community.md`.
+- Finalized public version strings from `0.1.0-dev`/`0.1.0-SNAPSHOT` to
+  `0.1.0` in runtime, Maven, smoke scripts, SPDX/PURL baselines, notices, and
+  release security state.
+- Built Core release zip:
+  `dist/release/core/EcritumRuntime.xcframework.zip`.
+- SwiftPM checksum:
+  `f2cc8401e0012039b56cf41cc62b0388457cf6d502ccf672f40475732dd7f223`.
+- Package manifest artifact SHA-256:
+  `6cf0b48b396042ad4738c9e3ab89b81294945c44a34f92c5789ddfd15a07b7fe`.
+- Release persona review recommended uploading the zip, `.checksum`,
+  `.spdx.json`, and `.zip.json` package manifest assets. Accepted.
+- TDD/Swift reviewer required version finalization, rebuilding stale
+  `dist/local`, focused release tests, and no live `0.1.0-dev`/`SNAPSHOT`
+  references outside historical/build output. Implemented. Claude timed out
+  after 60 seconds with no output.
+
+Verification so far:
+
+- `mise exec -- just native-core` -> PASS; Maven project built as `0.1.0`,
+  Core Native Image size `30.67MB`.
+- `mise exec -- just xcframework-core` -> PASS.
+- `mise exec -- just check-abi dist/core/EcritumRuntime.xcframework` -> PASS.
+- `mise exec -- just size dist/core/EcritumRuntime.xcframework core` -> PASS;
+  artifact `31,146,081` bytes, no violations.
+- `mise exec -- just check-dep-delta core` -> PASS.
+- `python3 -B -m unittest Tests/Release/test_license_report.py
+  Tests/Release/test_vulnerability_response.py
+  Tests/Release/test_check_dep_delta.py` -> PASS, 28 tests.
+- `mise exec -- just test-swift-scaffold` -> PASS, 65 tests, expected
+  artifact-backed skips.
+- `mise exec -- just native-full` -> PASS; refreshed Full native runtime as
+  `0.1.0` for local rollup tests.
+- `mise exec -- just xcframework` -> PASS; refreshed `dist/local`.
+- `mise exec -- just test-swift` -> PASS, 65 tests.
+- `mise exec -- just package-artifact
+  dist/core/EcritumRuntime.xcframework
+  dist/release/core/EcritumRuntime.xcframework.zip core` -> PASS.
+- `mise exec -- just sbom build/release/core/licenses.spdx.json core` and
+  `command cp -f ... dist/release/core/EcritumRuntime.xcframework.zip.spdx.json`
+  -> PASS.
+- `mise exec -- just test-release-tools` -> PASS, 85 tests.
+- `SOURCE_DATE_EPOCH=0 python3 scripts/license-report.py --notices --lane full
+  | cmp - THIRD_PARTY_NOTICES.md` -> PASS.
+- `rg -n "0\.1\.0-dev|0\.1\.0-SNAPSHOT|SNAPSHOT" --glob "!PROJECT.org"
+  --glob "!build/**" --glob "!dist/**" --glob "!.jj/**" .` -> no matches.
+- `mise exec -- just release-check core` -> PASS.
 
 Verification plan:
 

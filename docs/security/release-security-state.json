@@ -85,7 +85,7 @@
         },
         {
           "id": "first-party-runtime",
-          "purl": "pkg:generic/ecritum/EcritumRuntime.xcframework@0.1.0-dev",
+          "purl": "pkg:generic/ecritum/EcritumRuntime.xcframework@0.1.0",
           "appliesToScopes": [
             "shipped"
           ],

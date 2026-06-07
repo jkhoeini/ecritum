@@ -43,7 +43,7 @@ run_app="$run_root/EcritumSmoke.app"
 run_executable="$run_app/Contents/MacOS/$executable_name"
 run_framework="$run_app/Contents/Frameworks/EcritumRuntime.framework"
 run_private_runtime="$run_framework/Resources/libecritum_graal.dylib"
-success_line="EcritumSmokeApp version=0.1.0-dev clojure=42 javascript=42"
+success_line="EcritumSmokeApp version=0.1.0 clojure=42 javascript=42"
 
 trap 'rm -rf "$run_root"' EXIT
 
