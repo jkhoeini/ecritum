@@ -5251,8 +5251,8 @@ Current blocker:
   is public, has default branch `main`, and local `origin` is
   `git@github.com:jkhoeini/ecritum.git`.
 - `main` was pushed to `origin` on 2026-06-07. The initial release-prep push
-  was commit `09fd5da8`; the project-note follow-up moved remote `main` to
-  commit `39956aa5`.
+  was commit `09fd5da8`; subsequent project-note follow-ups were also pushed to
+  `main`.
 - Remaining blocker: the final Community release tag, release notes, and
   release asset upload are not recorded in this workspace.
 
