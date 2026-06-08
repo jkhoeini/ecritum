@@ -13,14 +13,71 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 
-SUCCESS_LINE = "ReleaseConsumerSmoke version=0.1.0 clojure=42 javascript=42 lua=42"
-DEFAULT_INCLUDED_RUNTIMES = ["clojure", "javascript", "lua"]
+LOCAL_INCLUDED_RUNTIMES = ["clojure", "javascript", "lua", "python", "ruby"]
+# Ruby mirrors Python's hosted treatment: it is a first-class local/default
+# artifact runtime but is excluded from the hosted default runtime set until a
+# hosted artifact ships it (M12-002).
+HOSTED_DEFAULT_INCLUDED_RUNTIMES = ["clojure", "javascript", "lua"]
 CHECKSUM_RE = re.compile(r"^[0-9a-f]{64}$")
+EVAL_SOURCES = {
+    "clojure": {
+        "source": "(+ 40 (- (app/answer) 40))",
+        "source_name": "release-consumer-smoke.clj",
+    },
+    "javascript": {
+        "source": "40 + (ecritum.app.answer() - 40)",
+        "source_name": "release-consumer-smoke.js",
+    },
+    "lua": {
+        "source": "return 40 + (ecritum.app.answer() - 40)",
+        "source_name": "release-consumer-smoke.lua",
+    },
+    "python": {
+        "source": "40 + (ecritum.app.answer() - 40)",
+        "source_name": "release-consumer-smoke.py",
+    },
+    "ruby": {
+        "source": "40 + (ecritum.app.answer() - 40)",
+        "source_name": "release-consumer-smoke.rb",
+    },
+}
 
 
 def fail(message):
     print(message, file=sys.stderr)
     raise SystemExit(1)
+
+
+def expected_runtimes(use_default_package_runtime):
+    if use_default_package_runtime:
+        return HOSTED_DEFAULT_INCLUDED_RUNTIMES
+    return LOCAL_INCLUDED_RUNTIMES
+
+
+def success_line(included_runtimes):
+    runtime_values = " ".join(f"{runtime}=42" for runtime in included_runtimes)
+    return f"ReleaseConsumerSmoke version=0.1.0 {runtime_values}"
+
+
+def swift_language_list(included_runtimes):
+    return ", ".join(f".{runtime}" for runtime in included_runtimes)
+
+
+def swift_eval_blocks(included_runtimes):
+    blocks = []
+    for runtime in included_runtimes:
+        spec = EVAL_SOURCES[runtime]
+        blocks.append(
+            f"""\
+                    let {runtime} = try await context.eval(EcritumScript(
+                        {json.dumps(spec["source"])},
+                        language: .{runtime},
+                        sourceName: {json.dumps(spec["source_name"])}
+                    ))
+                    try expectInt({runtime}, equals: 42, label: {json.dumps(runtime)})
+"""
+        )
+    return "\n".join(blocks).rstrip()
 
 
 def run(command, *, cwd=None, env=None):
@@ -145,8 +202,13 @@ def package_swift(repo_root, dependency_url=None, dependency_exact=None):
     )
 
 
-def main_swift():
-    return textwrap.dedent(
+def main_swift(included_runtimes=None):
+    if included_runtimes is None:
+        included_runtimes = LOCAL_INCLUDED_RUNTIMES
+    language_list = swift_language_list(included_runtimes)
+    eval_blocks = swift_eval_blocks(included_runtimes)
+    expected_output = success_line(included_runtimes)
+    source = textwrap.dedent(
         """\
         import Ecritum
         import Foundation
@@ -160,7 +222,7 @@ def main_swift():
                     }
 
                     let version = try Ecritum.version
-                    let runtime = try EcritumRuntime(.init(languages: [.clojure, .javascript, .lua]))
+                    let runtime = try EcritumRuntime(.init(languages: [__LANGUAGE_LIST__]))
                     let namespace = try runtime.namespace(.init("app"))
                     try namespace.register(.init("answer")) { call in
                         guard try call.argumentCount() == 0 else {
@@ -175,28 +237,9 @@ def main_swift():
                         try? runtime.close()
                     }
 
-                    let clojure = try await context.eval(EcritumScript(
-                        "(+ 40 (- (app/answer) 40))",
-                        language: .clojure,
-                        sourceName: "release-consumer-smoke.clj"
-                    ))
-                    try expectInt(clojure, equals: 42, label: "clojure")
+__EVAL_BLOCKS__
 
-                    let javascript = try await context.eval(EcritumScript(
-                        "40 + (ecritum.app.answer() - 40)",
-                        language: .javascript,
-                        sourceName: "release-consumer-smoke.js"
-                    ))
-                    try expectInt(javascript, equals: 42, label: "javascript")
-
-                    let lua = try await context.eval(EcritumScript(
-                        "return 40 + (ecritum.app.answer() - 40)",
-                        language: .lua,
-                        sourceName: "release-consumer-smoke.lua"
-                    ))
-                    try expectInt(lua, equals: 42, label: "lua")
-
-                    print("ReleaseConsumerSmoke version=0.1.0 clojure=42 javascript=42 lua=42")
+                    print("__EXPECTED_OUTPUT__")
                     _ = version
                 } catch {
                     fputs("ReleaseConsumerSmoke failed: \\(error)\\n", stderr)
@@ -220,6 +263,12 @@ def main_swift():
         }
         """
     )
+    return (
+        source
+        .replace("__LANGUAGE_LIST__", language_list)
+        .replace("__EVAL_BLOCKS__", eval_blocks)
+        .replace("__EXPECTED_OUTPUT__", expected_output)
+    )
 
 
 def is_within(path, root):
@@ -236,7 +285,7 @@ def require_file(path, label):
     return path
 
 
-def validate_framework_runtime_metadata(framework):
+def validate_framework_runtime_metadata(framework, required_runtimes):
     resources = framework / "Resources"
     metadata_path = resources / "ecritum-runtime.json"
     legacy_path = resources / "ecritum-runtime-lane.json"
@@ -248,7 +297,7 @@ def validate_framework_runtime_metadata(framework):
             fail(f"invalid default runtime metadata in {metadata_path}: {metadata}")
         if not isinstance(included, list):
             fail(f"invalid includedRuntimes in {metadata_path}: {metadata}")
-        missing = [runtime for runtime in DEFAULT_INCLUDED_RUNTIMES if runtime not in included]
+        missing = [runtime for runtime in required_runtimes if runtime not in included]
         if missing:
             fail(f"default runtime metadata is missing required runtimes {missing}: {metadata_path}")
         return {
@@ -264,7 +313,7 @@ def validate_framework_runtime_metadata(framework):
     return {
         "artifactKind": "default",
         "implementationProfile": profile,
-        "includedRuntimes": DEFAULT_INCLUDED_RUNTIMES,
+        "includedRuntimes": required_runtimes,
         "metadataSource": str(legacy_path),
     }
 
@@ -343,6 +392,7 @@ def main(argv=None):
     repo_root = Path(args.package_root).resolve()
     if not (repo_root / "Package.swift").is_file():
         fail(f"missing Ecritum Package.swift: {repo_root / 'Package.swift'}")
+    required_runtimes = expected_runtimes(args.use_default_package_runtime)
 
     build_dir = Path(args.build_dir).resolve()
     release_zip = Path(args.release_zip).resolve()
@@ -365,7 +415,7 @@ def main(argv=None):
                 fail(f"package manifest artifactKind is not default: {package_manifest}")
             included = manifest.get("includedRuntimes")
             if isinstance(included, list):
-                missing = [runtime for runtime in DEFAULT_INCLUDED_RUNTIMES if runtime not in included]
+                missing = [runtime for runtime in required_runtimes if runtime not in included]
                 if missing:
                     fail(f"package manifest includedRuntimes is missing required runtimes {missing}: {package_manifest}")
 
@@ -386,6 +436,7 @@ def main(argv=None):
                 "binaryTargetPath": runtime_target.get("path"),
                 "checksum": args.checksum,
                 "defaultPackageRuntime": args.use_default_package_runtime,
+                "expectedRuntimes": required_runtimes,
                 "manifestOnly": True,
                 "ok": True,
             },
@@ -395,7 +446,7 @@ def main(argv=None):
         return 0
     if args.validate_workspace_state:
         _, framework = validate_workspace_runtime_artifact(Path(args.validate_workspace_state).resolve(), repo_root, slice_name)
-        runtime_metadata = validate_framework_runtime_metadata(framework)
+        runtime_metadata = validate_framework_runtime_metadata(framework, required_runtimes)
         print(json.dumps(
             {
                 "artifactKind": runtime_metadata["artifactKind"],
@@ -403,6 +454,7 @@ def main(argv=None):
                 "checksum": args.checksum,
                 "defaultPackageRuntime": args.use_default_package_runtime,
                 "downloadedFramework": str(framework),
+                "expectedRuntimes": required_runtimes,
                 "includedRuntimes": runtime_metadata["includedRuntimes"],
                 "ok": True,
                 "workspaceState": str(Path(args.validate_workspace_state).resolve() / "workspace-state.json"),
@@ -416,7 +468,7 @@ def main(argv=None):
     source_dir.mkdir(parents=True)
     empty_bin.mkdir(parents=True)
     (consumer_dir / "Package.swift").write_text(package_swift(repo_root, args.dependency_url, args.dependency_exact))
-    (source_dir / "main.swift").write_text(main_swift())
+    (source_dir / "main.swift").write_text(main_swift(required_runtimes))
     env = build_env(args.artifact_url, args.checksum, build_dir, args.use_default_package_runtime)
 
     run([tool("swift"), "build", "--build-path", str(swift_build_dir), "--configuration", "debug", "--quiet"], cwd=consumer_dir, env=env)
@@ -426,7 +478,7 @@ def main(argv=None):
         fail(f"missing release consumer executable: {executable}")
 
     _, framework = validate_workspace_runtime_artifact(swift_build_dir, repo_root, slice_name)
-    runtime_metadata = validate_framework_runtime_metadata(framework)
+    runtime_metadata = validate_framework_runtime_metadata(framework, required_runtimes)
     local_artifact = (repo_root / "dist" / "local" / "EcritumRuntime.xcframework").resolve()
     if is_within(framework, local_artifact):
         fail(f"release consumer resolved the local artifact instead of the remote archive: {framework}")
@@ -447,7 +499,8 @@ def main(argv=None):
     if completed.returncode != 0:
         fail("release consumer failed under isolated runtime environment\nstdout:\n" + completed.stdout + "\nstderr:\n" + completed.stderr)
     output = completed.stdout.strip()
-    if output != SUCCESS_LINE:
+    expected_output = success_line(required_runtimes)
+    if output != expected_output:
         fail(f"unexpected release consumer output: {output}")
 
     link_payload = "\n".join(
@@ -470,6 +523,7 @@ def main(argv=None):
         "dependencyExact": args.dependency_exact,
         "dependencyUrl": args.dependency_url,
         "downloadedFramework": str(framework),
+        "expectedRuntimes": required_runtimes,
         "includedRuntimes": runtime_metadata["includedRuntimes"],
         "ok": True,
         "output": output,

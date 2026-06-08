@@ -79,6 +79,10 @@ def embedded_runtimes(private_symbols, has_wrapper):
         runtimes.append("GraalJS")
     if "_ecritum_graal_eval_lua_with_stdlib" in private_symbols:
         runtimes.append("LuaJ JME")
+    if "_ecritum_graal_eval_python_with_stdlib" in private_symbols:
+        runtimes.append("GraalPy")
+    if "_ecritum_graal_eval_ruby_with_stdlib" in private_symbols:
+        runtimes.append("TruffleRuby")
     if has_wrapper:
         runtimes.append("Ecritum C wrapper")
     return runtimes
@@ -101,7 +105,7 @@ def runtime_metadata(framework):
             "artifactKind": "default" if profile == "full" else "internal",
             "formatVersion": 1,
             "implementationProfile": profile,
-            "includedRuntimes": ["clojure", "javascript", "lua"] if profile == "full" else ["clojure"],
+            "includedRuntimes": ["clojure", "javascript", "lua", "python", "ruby"] if profile == "full" else ["clojure"],
             "metadataSource": str(legacy_path),
         }
     return {

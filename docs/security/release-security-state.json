@@ -57,6 +57,12 @@
           "kind": "vendor-advisory"
         },
         {
+          "id": "truffleruby-releases",
+          "url": "https://github.com/oracle/truffleruby/releases",
+          "kind": "vendor-advisory",
+          "note": "ADR-0027/ADR-0028: TruffleRuby has an INDEPENDENT release/security cadence tracked separately from GraalVM CPU updates. Monitoring owner for the shipped dev.truffleruby:* coordinates (Ruby is a default shipped language; LLVM excluded). Vulnerability blocking for these maven purls is enforced by the maven-components rule."
+        },
+        {
           "id": "ecritum-security",
           "url": "SECURITY.md",
           "kind": "first-party-intake"

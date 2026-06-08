@@ -19,7 +19,34 @@ not done if it introduced debt without an entry.
 
 ## Active Debt
 
+- ECRITUM-DEBT-0016 (M12-004 -> M12-002, Release/Licensing): SUPERSEDED. Ruby is now a default shipped language (M12-002 Slice 2) with LLVM excluded per ADR-0028; the license-report/check-dep-delta/check-license-texts/SBOM/notices inventory reflects the LLVM-excluded shipped Ruby set. The candidate-only `--artifact-kind ruby-candidate` mode, recipes, and bundle were retired. Remaining artifact-level package reproducibility for the Ruby-enabled XCFramework zip is tracked with the artifact-coupled work (M12-002 Slice 3 / build-xcframework + size-artifact), not as a candidate-only concern.
+
 ## Resolved Debt
+
+- ID: ECRITUM-DEBT-0015
+- Source task: M11-001
+- Introduced by: Internal GraalPy probe deny guard
+- Owner persona: Security and Sandboxing Engineer
+- Date: 2026-06-08
+- Resolved in: M11-003
+- Resolution: Python no longer relies on lexical deny patterns as the only
+  public-support gate. M11-003 added deny-by-default GraalVM context
+  permissions, an Ecritum-owned Python sandbox prelude that replaces dangerous
+  builtins including `__import__`, `open`, `eval`, `exec`, and `compile`,
+  effective-config `executionTimeoutNanos` propagation into the evaluator,
+  GraalVM resource limits/watchdog interruption for Python timeout, a strict
+  Python-native abuse provider, and strict Python-native conformance coverage
+  for stdlib and timeout. The lexical guard remains only as defense in depth.
+- Boundary: Public docs and checked-in hosted SwiftPM defaults still must not
+  claim Python until M14 publishes and verifies a Python-capable hosted
+  artifact. If future strict Python abuse probes discover a denial bypass,
+  Python remains unreleased until a stronger enforcement mechanism or narrowing
+  ADR lands.
+- Verification: `mise exec -- just conformance-python-native` -> PASS, 14
+  strict cases with 0 pending; `mise exec -- just security-python` -> PASS, 68
+  strict cases with 0 pending; `mise exec -- just test-native-eval-smoke` and
+  `mise exec -- just test-native-eval-smoke-asan` -> PASS; ADR-008 and ADR-013
+  record the accepted enforcement mechanism and bypass escalation rule.
 
 - ID: ECRITUM-DEBT-0014
 - Source task: M10-001

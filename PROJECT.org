@@ -6021,7 +6021,7 @@ Not verified:
 - Python and Ruby distribution from the default artifact. Owner: M11 and M12
   runtime milestones; not claimed by M10.
 
-** TODO Milestone M11: GraalPy Runtime Support
+** DONE Milestone M11: GraalPy Runtime Support
 
 Goal: add Python through GraalPy without external Python installs, package
 managers, third-party packages, or native extensions.
@@ -6063,10 +6063,97 @@ Verification plan:
 - Python first-eval, size, RSS, license, dependency, and package-resource
   evidence recorded in PROJECT.org.
 
-*** TODO M11-001 Prove GraalPy coordinates, resources, and Native Image build
+Completion evidence, 2026-06-08:
+
+- M11-001 proved GraalPy coordinates, Native Image resources, licensing, and
+  local artifact feasibility.
+- M11-002 wired Python into the C ABI, Swift API, values, errors, host
+  callbacks, metadata, examples, and local artifact path without claiming
+  hosted public support early.
+- M11-003 closed the public-support gates for the local full artifact:
+  deny-by-default GraalVM permissions, Ecritum-owned Python sandbox prelude,
+  Python timeout propagation, strict Python conformance/security providers,
+  Python release metrics, SBOM/license/dependency updates, and release-package
+  verification.
+- Final verification:
+  - `mise exec -- just test` -> PASS.
+  - `mise exec -- just release-check` -> PASS.
+  - `claude -p` post-implementation review -> PASS, no blockers.
+  - Python strict conformance -> PASS, 14 passed / 0 failed / 0 pending.
+  - Python strict abuse suite -> PASS, 68 passed / 0 failed / 0 pending.
+  - Release zip checksum -> `d07b5c2715d1f8933dad12f7903580003528cbd164717bf7db4b1520c0b172aa`.
+  - Release artifact includes `clojure`, `javascript`, `lua`, and `python`.
+  - Size gate -> PASS: artifact 365,383,882 bytes, private runtime
+    364,748,512 bytes, wrapper 147,648 bytes.
+  - Python first eval -> PASS: p50 43.843 ms, p95 53.703 ms.
+  - Python post-eval RSS -> PASS: p50 216,694,784 bytes, p95
+    224,477,184 bytes.
+- `ECRITUM-DEBT-0015` moved to resolved debt. The lexical Python guard is now
+  defense in depth rather than the only enforcement mechanism.
+- Public hosted SwiftPM docs/defaults remain gated to M14 because public hosted
+  consumers still need a published Python-capable artifact URL and checksum.
+
+*** DONE M11-001 Prove GraalPy coordinates, resources, and Native Image build
 
 Lead persona: GraalVM and Polyglot Runtime Engineer.
 Reviewer personas: Architecture, Release, Security.
+
+Active EM note, 2026-06-08:
+
+- Status: active feasibility spike for the next implementation slice.
+- Integration lane: current clean `jj` workspace. No `.workspaces/` or
+  `workspaces/` convention exists, so the EM is not creating a parallel
+  workspace without a project directory choice.
+- Active agents:
+  - Gibbs (`019ea88e-f7cf-7153-ac37-3b33d23d5479`): GraalVM/Polyglot Runtime,
+    read-only research on Maven coordinates, resource layout, and Native Image
+    requirements.
+  - Curie (`019ea88e-fab7-7a73-8ba1-82cf472147bb`): Architecture/Security,
+    read-only review of denial boundaries, ABI impact, and ADR requirements.
+  - Pascal (`019ea88e-fef6-7332-be9b-b0d967c98949`): TDD/Verification/Release,
+    read-only review of red-green tests, release gates, and evidence format.
+- Current upstream references reviewed:
+  - Oracle GraalVM 25 embedding guide says language dependencies are available
+    from Maven Central under `org.graalvm.polyglot`, language artifacts require
+    `<type>pom</type>`, and community-licensed variants use the `-community`
+    suffix.
+  - Oracle GraalVM 25 embedding guide says Native Image can include language
+    resources by default, copy them with `-H:+CopyLanguageResources`, and look
+    them up relative to the executable/shared library or via
+    `-Dpolyglot.engine.resourcePath`.
+  - GraalPy embedding build-tools docs say `graalpy-maven-plugin` manages
+    Python application files, third-party packages, and the Python standard
+    library, and can deploy resources either as Java resources/VFS or an
+    external directory.
+  - Maven Central for `org.graalvm.python:python:25.0.2` shows runtime
+    dependencies on `python-language`, `python-resources`, and
+    `truffle-runtime`, with UPL, MIT, and PSF license declarations.
+- Accepted initial plan:
+  - Run a Claude plan review before implementation.
+  - Use TDD for the first JVM-level Python eval proof: add a focused test first,
+    observe the missing-runtime or missing-class failure, then add the minimal
+    dependency/evaluator code needed to pass on the JVM.
+  - Keep the C ABI and Swift API unchanged in M11-001 unless the Native Image
+    proof reaches a point where an export is needed; public Python support waits
+    for M11-002 and M11-003.
+  - Use `org.graalvm.polyglot:python:${graalvm.version}` for the probe. The
+    `python-community` coordinate resolves, but its POM marks it deprecated and
+    says to use `org.graalvm.polyglot:python`.
+  - Do not configure `graalpy-maven-plugin` package installation, third-party
+    packages, `venv`, package-manager execution, or native-extension support in
+    M11-001.
+  - Stop and mark blocked if the minimal JVM eval cannot be made deterministic,
+    if Native Image cannot either embed or copy Python resources with a clear
+    artifact strategy, or if denial probes require enabling host/native/process/
+    environment/filesystem access.
+- Verification for this slice:
+  - Baseline: `mise exec -- just test-java`
+  - Dependency evidence: `mise exec -- mvn -s .mvn/settings.xml -f native/pom.xml
+    -Pfull dependency:tree -Dscope=runtime`
+  - Focused red/green JVM Python test.
+  - Native Image probe: `mise exec -- just native`
+  - Artifact inspection: `mise exec -- just inspect`
+  - Post-change Claude diff review and second review after fixes.
 
 Definition of done:
 
@@ -6088,11 +6175,148 @@ Verification plan:
 - Native Image build command and logs.
 - `mise exec -- just inspect`
 
-*** TODO M11-002 Implement Python API, values, errors, and host callbacks
+Implementation evidence, 2026-06-08:
+
+- Added an internal `python-probe` Maven profile that brings in
+  `org.graalvm.polyglot:python:${graalvm.version}` only for focused GraalPy
+  proof work. The default runtime build still does not include Python.
+- Added `PythonEvaluator` under the full implementation as an internal adapter
+  with deny-by-default GraalVM context permissions and a temporary fail-closed
+  lexical guard for risky Python surfaces.
+- Added `PythonEvaluatorProbeTest` for JVM-level scalar eval, standard-library
+  `json` import, and denial checks for Java/Polyglot/native/process/network/
+  filesystem/dynamic-eval entry points.
+- Added `PythonProbeEntrypoints` and `Tests/C/native_python_probe.c` so a
+  private Native Image dylib can prove Python eval and denial behavior without
+  changing the public C ABI or Swift API.
+- Added `just native-python-probe`, `just check-native-python-probe`, and
+  `just test-python-native-probe` as reusable probe tasks.
+- Added `native/src/python-probe` to the static security scanner roots so probe
+  tests cannot become an unscanned blind spot.
+- Added a language-aware `SciEvalResult.ok(language, value)` factory and moved
+  JavaScript, Lua, and Python success paths to it. This fixes the hidden
+  success-result language field before Python reaches the public API slice.
+- Updated ADR-008 with coordinate, dependency, license, resource, size, native
+  build, and packaging evidence.
+- Added `ECRITUM-DEBT-0015` because the temporary lexical Python guard is not
+  acceptable for a public support claim. M11-003 must replace or justify it with
+  strict packaged abuse evidence before Python is documented or released.
+
+Verification evidence so far:
+
+- Baseline before changes: `mise exec -- just test-java` -> PASS, 56 tests.
+- Red static-source-root test:
+  `python3 -B -m unittest Tests/Security/test_security_baseline.py -k
+  test_static_check_passes_current_source_roots` -> expected FAIL before
+  scanner update because `native/src/core/java` and `native/src/full/java` were
+  not scanned.
+- Static scanner after fix: same focused test -> PASS; `mise exec -- just
+  test-security-static` -> PASS.
+- Coordinate probe:
+  `mvn dependency:get ... org.graalvm.polyglot:python:25.0.2:pom` -> PASS;
+  `python-community:25.0.2` also resolves but is deprecated.
+- Runtime dependency tree:
+  `mise exec -- mvn -s .mvn/settings.xml -f native/pom.xml
+  -Pfull,python-probe dependency:tree -Dscope=runtime
+  "-Dincludes=org.graalvm.polyglot:python,org.graalvm.python:*"` -> PASS with
+  `polyglot:python` -> `python` -> `python-language` and `python-resources`.
+- JVM probe:
+  `mise exec -- mvn -s .mvn/settings.xml -f native/pom.xml
+  -Pfull,python-probe -Dtest=PythonEvaluatorProbeTest test` -> PASS.
+- Normal Java suite after probe work: `mise exec -- just test-java` -> PASS, 56
+  tests.
+- Native probe build: `mise exec -- just native-python-probe` -> PASS; produced
+  `build/native/python-probe/macos-arm64/libecritum.dylib`. Fresh rebuild after
+  review fixes completed in 3m 40s total, Native Image generation took 3m 36s,
+  and peak RSS was 17.58 GB.
+- Native C probe: `mise exec -- just test-python-native-probe` -> PASS.
+- Size evidence:
+  `build/native/python-probe/macos-arm64/libecritum.dylib` = 366,780,208 bytes;
+  `build/native/full/macos-arm64/libecritum.dylib` = 151,597,440 bytes; delta =
+  215,182,768 bytes.
+- Resource evidence: Native Image reported 5,215 resources in the image heap;
+  the copied probe artifact directory contains only the dylib and generated
+  private headers, and native `import json` passed.
+- Artifact claim check: `mise exec -- just inspect` -> PASS; default
+  `includedRuntimes` remains Clojure, JavaScript, and Lua only.
+- Claude implementation review: PASS with no blockers. Follow-ups fixed in this
+  slice: add `native/src/python-probe` to scanner roots and fix success-result
+  language reporting. Accepted non-blocking M11-002/M11-003 follow-ups: stronger
+  Python security beyond the lexical guard, broader Python value/error tests,
+  resource limits/context strategy, and minor error-prefix harmonization.
+- Claude second review: PASS with no blockers. It confirmed first-review fixes
+  and noted one M11-002 requirement: the backend wire codec currently reconstructs
+  successful decoded results with the default Clojure language because success
+  payloads do not encode language metadata. M11-002 must either make that public
+  success path language-neutral by design or add tested language preservation for
+  Python before exposing support.
+- Final broad verification: `mise exec -- just test` -> PASS. This covered
+  conformance runner tests, security baseline/static/abuse/parser checks, Swift
+  scaffold and runtime tests, Java full tests, C ABI contracts including ASan/UBSan
+  variants, native eval smoke, release-tool tests, license/dependency checks, and
+  C/Swift/smoke example app runs.
+
+*** DONE M11-002 Implement Python API, values, errors, and host callbacks
 
 Lead persona: GraalVM and Polyglot Runtime Engineer.
 Reviewer personas: Clean Code, Tests/TDD, Security.
 Depends on: M11-001.
+
+Active EM note, 2026-06-08:
+
+- Status: completed implementation slice after M11-001 proved GraalPy Native
+  Image feasibility. This makes Python available in the local default artifact
+  path, but it is not a public Python support/release claim.
+- Active read-only review agents:
+  - Lagrange (`019ea8b5-8b9a-7772-8e56-e930f149ae53`): Architecture and Clean
+    Code, reviewing the public path and adapter boundaries.
+  - Laplace (`019ea8b5-8e46-7732-81f1-df55748cab2a`): Security and Sandboxing,
+    reviewing what can be exposed before M11-003 closes `ECRITUM-DEBT-0015`.
+  - Peirce (`019ea8b5-91a5-7011-9b73-ef033beb7e68`): TDD/Verification/Release,
+    reviewing red-green plan, native/Swift gates, and package impact.
+- EM implementation lane:
+  - Keep the public C ABI shape unchanged: Python uses the existing
+    `ecritum_eval_start` language string path, not a new public C symbol.
+  - Add private Native Image Python dispatch only after JVM-level Python host,
+    value, and error tests are red/green.
+  - Carry forward the second Claude review requirement from M11-001: successful
+    Python results must not be mislabeled as Clojure anywhere in the public path.
+  - Do not document Python as released support until M11-003 security, metrics,
+    and release inventory gates are done.
+- Claude plan review: direct `claude -p` was invoked without an auth check and
+  timed out after 180 seconds with no review output. Use active persona reviews
+  as the planning fallback, and run post-change Claude reviews after
+  implementation.
+- Security review (Laplace `019ea8b5-8e46-7732-81f1-df55748cab2a`): GO only
+  for unreleased/trusted-script wiring through the existing C/Swift eval path.
+  M11-002 must not be treated as a public release/support gate. M11-003 remains
+  the release blocker for untrusted sandbox, package, filesystem/network/process/
+  environment, and support claims. Required M11-002 evidence includes public-path
+  denials for Java/Polyglot, native/FFI, subprocess/process, socket/network,
+  raw open/filesystem, environment, `sys.path`/package loading, dynamic
+  import/eval bypasses, language/source error labeling, and no Clojure
+  mislabeling. Claude review inside the persona hung with no output.
+- Post-implementation Architecture/Clean/Security review (Dalton
+  `019ea8de-db0b-7ba0-bc65-b37de4c9bf1e`): initially found three blockers:
+  release surfaces appeared to claim Python before M11-003, Python module values
+  were normalized to `null`, and the lexical denial guard must not be treated as
+  public security. Release-surface wording was narrowed, module values now fail
+  as unsupported result types except for the `__main__` no-result sentinel, and
+  the lexical guard remains tracked by `ECRITUM-DEBT-0015` for M11-003.
+- Post-implementation TDD/Release review (Bohr
+  `019ea8de-db88-7e93-bc31-a21574161a3a`): initially found that release smoke
+  expectations promoted Python while checked-in `Package.swift` still points to
+  hosted `v0.2.0-alpha.1`, which contains Clojure, JavaScript, and Lua only.
+  Release smoke now distinguishes local M11-002 four-runtime artifacts from the
+  hosted three-runtime default.
+- Release-boundary audit (Dewey `019ea8f1-236f-7232-b050-30faad100833`): PASS.
+  Checked-in `Package.swift` still points to hosted `v0.2.0-alpha.1` and its
+  three-runtime artifact. Local M11-002 artifacts are four-runtime default
+  artifacts with Clojure, JavaScript, Lua, and Python.
+- Claude post-change review: PASS with no blockers. Non-blocking follow-ups are
+  assigned to M11-003: broaden Python abuse probes beyond the temporary lexical
+  guard, add Python timeout and stdlib conformance coverage, and capture Python
+  first-eval/RSS metrics before any public support claim.
 
 Definition of done:
 
@@ -6104,6 +6328,9 @@ Definition of done:
   values.
 - Python structured script errors map to Ecritum status/category/message/
   operation/language/source-name without unsafe diagnostic leakage.
+- Successful Python results do not get mislabeled as Clojure anywhere in the
+  public C/Swift path. If the backend wire codec exposes success-language
+  metadata, tests prove Python success payloads preserve `python`.
 
 Verification plan:
 
@@ -6113,19 +6340,185 @@ Verification plan:
 - `mise exec -- just conformance-python-native`
 - `mise exec -- just test-swift`
 
-*** TODO M11-003 Add Python security, metrics, and release inventory gates
+Implementation evidence, 2026-06-08:
+
+- Moved `org.graalvm.polyglot:python:${graalpy.version}` into the full/default
+  native profile and exported a private Native Image entrypoint
+  `ecritum_graal_eval_python_with_stdlib`.
+- Wired Python through the existing language-neutral public path:
+  `ecritum_eval_start` accepts the `"python"` language string, Swift can request
+  `.python`, and no new public C ABI symbol is required.
+- Added `PythonEvaluator` support for scalar, nil/null, boolean, integer,
+  double, string, bytes, list, and map values; registered host functions; host
+  callback errors; structured script errors; and default Ecritum stdlib facades.
+- Made backend success payload handling language-neutral and kept Python errors
+  labeled with `language=python` and caller-provided source names.
+- Added Java unit tests, C native smoke coverage, Swift artifact-backed tests,
+  and a Python native conformance provider for eval, host callbacks, and script
+  errors.
+- Updated release/package/size/inspection tooling so local default artifacts
+  report `includedRuntimes` as Clojure, JavaScript, Lua, and Python.
+- Kept hosted default SwiftPM release smoke compatible with the currently
+  published `v0.2.0-alpha.1` artifact by expecting only Clojure, JavaScript, and
+  Lua when `--use-default-package-runtime` is used.
+- Added GraalPy dependencies to license reporting, dependency-delta baselines,
+  license text checks, notices, and release tests.
+
+Verification evidence:
+
+- `mise exec -- mvn -s .mvn/settings.xml -f native/pom.xml -Pfull
+  "-Dtest=ecritum.PythonEvaluatorTest" test` -> PASS, 9 tests.
+- `python3 -B -m unittest Tests/Release/test_package_artifact.py` -> PASS, 45
+  tests.
+- `python3 -B -m unittest Tests/Release/test_release_check.py
+  Tests/Release/test_packaged_app_smoke.py` -> PASS, 16 tests.
+- `env -u ECRITUM_CONSUMER_ARTIFACT_URL
+  -u ECRITUM_CONSUMER_ARTIFACT_CHECKSUM -u ECRITUM_RUNTIME_URL
+  -u ECRITUM_RUNTIME_CHECKSUM python3 scripts/test-release-consumer-smoke.py
+  --use-default-package-runtime --manifest-only` -> PASS; expected runtimes are
+  Clojure, JavaScript, and Lua.
+- `mise exec -- just native` -> PASS; generated a 366.83 MB private native
+  runtime with 5,215 resources and Python symbol
+  `_ecritum_graal_eval_python_with_stdlib`.
+- `mise exec -- just xcframework && mise exec -- just package-artifact &&
+  mise exec -- just package-artifact-verify` -> PASS; package checksum
+  `eb3bef4e07474e4824734f220204a04b8c8ae1edd13cb1c24d73280de7e85e56`.
+- `mise exec -- just check-abi` -> PASS.
+- `mise exec -- just size` -> PASS; artifact 365,350,906 bytes, private runtime
+  364,715,584 bytes, wrapper 147,600 bytes.
+- `mise exec -- just inspect` -> PASS; artifact metadata includes Clojure,
+  JavaScript, Lua, and Python and embedded runtime evidence includes GraalPy.
+- `mise exec -- just conformance-python-native` -> PASS.
+- `mise exec -- just test-swift` -> PASS, 67 tests.
+- `mise exec -- just license-report-strict && mise exec -- just
+  check-dep-delta && mise exec -- just check-license-texts` -> PASS.
+- Final rollup: `mise exec -- just test` -> PASS. This covered conformance
+  runner tests, security baseline/static/abuse/parser checks, Swift runtime
+  tests, Java full tests, release tests, C contracts/ASan/native eval smokes,
+  license/dependency checks, and C/Swift/example app runs. The packaged app
+  output was `EcritumSmokeApp version=0.1.0 clojure=42 javascript=42 lua=42
+  python=42`.
+
+Not done here:
+
+- Public Python support remains blocked by M11-003 until `security-python`,
+  Python timeout/resource gates, strict abuse coverage, first-eval/RSS metrics,
+  release inventory gates, and `ECRITUM-DEBT-0015` are resolved.
+- A hosted Python-capable prerelease artifact and checked-in `Package.swift`
+  default checksum update remain release work, not part of M11-002 acceptance.
+
+*** DONE M11-003 Add Python security, metrics, and release inventory gates
 
 Lead persona: Security and Capability Model Engineer.
 Reviewer personas: Tests/TDD, Release, GraalVM Runtime.
 Depends on: M11-002.
 
+Active EM note, 2026-06-08:
+
+- Status: active follow-up after M11-002. M11-002 proved local Python eval,
+  values, errors, host callbacks, package metadata, and license inventory. This
+  task owns the public-support gates that remain before Python can be documented
+  or released.
+- Active read-only review agents:
+  - Anscombe (`019ea8f9-dcfc-7591-8cdb-d3f624fa9725`): Security and Sandboxing,
+    reviewing abuse cases, lexical-guard replacement/removal criteria, and
+    verification commands.
+  - Boyle (`019ea8f9-fc4f-7071-92fe-75356403de98`): Release/TDD, reviewing
+    Python metrics, release inventory, and hosted `Package.swift` claim
+    boundaries.
+  - Bacon (`019ea8fa-1835-7691-b7b5-bc0e781858af`): GraalVM Runtime, reviewing
+    Python timeout/resource behavior through packaged native eval.
+- EM implementation plan:
+  - Add a strict Python-native security abuse provider instead of treating Java,
+    JavaScript, Lua, or baseline providers as Python evidence.
+  - Add `security-python` and make it strict against
+    `Tests/Security/abuse-manifest.json`.
+  - Extend Python native conformance to `stdlib` and `timeout` so Python facade
+    and long-running-script behavior are proved through the packaged runtime.
+  - Add Python-specific first-eval and RSS/cold-start evidence recipes and keep
+    them separate from hosted SwiftPM support claims.
+  - Keep public docs and checked-in hosted `Package.swift` defaults gated until
+    release work publishes a Python-capable hosted artifact and M14 updates
+    support claims.
+
+Completion note, 2026-06-08:
+
+- Anscombe's security plan was implemented: Python has a strict native abuse
+  provider, deny-by-default GraalVM permissions, a sandbox prelude that replaces
+  dangerous builtins, timeout probes, filesystem root checks, invalid-handle
+  checks, and bypass escalation rules.
+- Boyle's release/TDD plan was implemented: `security-python`,
+  `conformance-python-native`, `bench-python-first-eval`, `bench-python-rss`,
+  release-check Python metric outputs, license/dependency gates, and release
+  tool tests all include Python.
+- Bacon's runtime plan was implemented: effective `executionTimeoutNanos`
+  reaches the Python evaluator, GraalVM resource limits and a watchdog interrupt
+  map long-running Python scripts to `timeout`, and post-timeout recovery is
+  proved through native eval smoke.
+- Claude plan review found two blockers before implementation: missing
+  bypass-contingency policy and missing `security-python`. Both were fixed.
+- Claude implementation review found no blockers. Non-blocking follow-ups:
+  broaden explicit introspection abuse probes (`type.__subclasses__`,
+  `object.__subclasses__`, `__class__.__mro__`, `globals`, `locals`, `vars`,
+  `dir`), consider elapsed-time checking around watchdog wakeups, and enrich
+  Python lexical deny patterns for earlier diagnostics. These are not M11
+  blockers because the actual enforcement is the sandbox prelude plus GraalVM
+  denial, and strict native security/conformance passed.
+- Verification evidence:
+  - `python3 -m py_compile ... python_native_provider.py ... python_abuse_provider.py ... measure-eval-rss.py` -> PASS.
+  - `mise exec -- mvn -s .mvn/settings.xml -f native/pom.xml -Pfull "-Dtest=ecritum.PythonEvaluatorTest,ecritum.SciClojureEvaluatorTest" test` -> PASS.
+  - `python3 -B -m unittest Tests/Release/test_release_check.py` -> PASS.
+  - `mise exec -- just native` -> PASS.
+  - `mise exec -- just xcframework` -> PASS.
+  - `mise exec -- just package-artifact` -> PASS.
+  - `mise exec -- just package-artifact-verify` -> PASS.
+  - `mise exec -- just conformance-python-native` -> PASS, 14 passed / 0 failed / 0 pending.
+  - `mise exec -- just security-python` -> PASS, 68 passed / 0 failed / 0 pending.
+  - `mise exec -- just bench-python-first-eval` -> PASS, p50 43.843 ms, p95 53.703 ms.
+  - `mise exec -- just bench-python-rss` -> PASS, post-eval RSS p50
+    216,694,784 bytes, p95 224,477,184 bytes.
+  - `mise exec -- just test-native-eval-smoke` -> PASS.
+  - `mise exec -- just test-native-eval-smoke-asan` -> PASS.
+  - `mise exec -- just inspect` -> PASS.
+  - `mise exec -- just size` -> PASS.
+  - `mise exec -- just license-report-strict` -> PASS.
+  - `mise exec -- just check-dep-delta` -> PASS.
+  - `mise exec -- just check-license-texts` -> PASS.
+  - `mise exec -- just check-abi` -> PASS.
+  - `mise exec -- just plan-check` -> PASS.
+  - `mise exec -- just test-release-tools` -> PASS, 113 tests.
+  - `mise exec -- just test` -> PASS.
+  - `mise exec -- just release-check` -> PASS.
+- Release evidence:
+  - `dist/release/EcritumRuntime.xcframework.zip` produced.
+  - SwiftPM checksum: `d07b5c2715d1f8933dad12f7903580003528cbd164717bf7db4b1520c0b172aa`.
+  - Local artifact metadata includes `clojure`, `javascript`, `lua`, `python`.
+  - Private runtime SHA: `9b5f9f7ec41f96a7746af881129687597f0ddee258632406e0faf8b66cca9351`.
+  - Public symbols unchanged; Python support remains behind private runtime
+    internals and the existing C/Swift eval surface.
+
 Definition of done:
 
 - Python abuse probes cover direct Java, raw Polyglot, `ctypes`, `cffi`, socket,
   subprocess, env, package install/load, native extension, and filesystem denial.
+- Python abuse probes also cover lexical-guard bypasses and additional risky
+  standard-library surfaces: `os.popen`, `signal`, `platform`, `posix`, `ssl`,
+  `urllib`, `pathlib`, `tempfile`, `getpass`, `pickle`, `marshal`, `importlib`,
+  dynamic import/eval/compile, `sys.path` mutation, bytecode-cache writes, and
+  imports from unapproved directories.
+- Python timeout/resource-limit behavior is proved through the packaged native
+  eval path.
+- Python stdlib facade behavior has native conformance coverage before any
+  stdlib support claim.
 - Python metrics are captured in the release evidence format.
 - License/SBOM and dependency-delta inventories include GraalPy and bundled
   resources.
+- `ECRITUM-DEBT-0015` is either removed because a stronger enforcement mechanism
+  and strict abuse suite replace the lexical guard, or explicitly re-accepted in
+  an ADR with public-support consequences.
+- Public docs, examples, release notes, and checked-in hosted SwiftPM artifact
+  defaults still do not claim Python until M11-003 and the relevant M14 release
+  gates pass.
 
 Verification plan:
 
@@ -6136,7 +6529,7 @@ Verification plan:
 - `mise exec -- just license-report-strict`
 - `mise exec -- just check-dep-delta`
 
-** TODO Milestone M12: TruffleRuby Runtime Support
+** DONE Milestone M12: TruffleRuby Runtime Support
 
 Goal: add Ruby through TruffleRuby without external Ruby installs, RubyGems,
 Bundler installs, third-party gems, native gems, C extensions, or NFI/FFI.
@@ -6148,8 +6541,9 @@ Depends on: M9, M10.
 Definition of done:
 
 - TruffleRuby Maven/version feasibility is resolved before implementation.
-  Matching coordinates must work, or an ADR must explicitly accept tested
-  version skew.
+  The current candidate path is `dev.truffleruby:truffleruby:34.0.1`, not the
+  old `org.graalvm.polyglot:ruby` line. The candidate must pass ADR-0027
+  validation before public Ruby API work starts.
 - Ruby is available through the public C ABI and Swift API with the same
   lifecycle, value, host-function, and error semantics as other languages.
 - RubyGems, Bundler installation, runtime gem installation, native gems,
@@ -6159,25 +6553,131 @@ Definition of done:
   cases before docs claim support.
 - Size, cold start, first Ruby eval, idle RSS, dependency delta, license/SBOM,
   and resource inventory evidence is recorded.
-- If M12-001 cannot prove TruffleRuby feasibility in one focused spike change,
-  the EM marks M12 blocked, records logs and upstream references, writes or
-  updates an ADR with options, and asks the user before changing the five-language
-  release requirement.
+- If Ruby is blocked by feasibility, version alignment, security policy,
+  release safety, or support-claim risk, the EM marks M12 blocked, records logs
+  and upstream references, writes or updates an ADR with options, and asks the
+  user before changing the five-language release requirement or accepting a
+  self-use-only experimental path.
+
+Active EM note, 2026-06-08:
+
+- M11 is complete, so the team is starting M12 with the highest-risk task:
+  TruffleRuby coordinate/resource feasibility.
+- Active read-only review agents:
+  - Herschel (`019ea917-92d0-7233-8315-41080d39a5ed`): GraalVM Runtime,
+    verifying current TruffleRuby Maven coordinates and the smallest Native
+    Image spike path.
+  - Erdos (`019ea917-b5d1-7920-b595-165c44fb479f`): Release/Licensing,
+    reviewing Ruby/LLVM dependency, resource, license, package, and metric
+    evidence requirements.
+  - Kant (`019ea917-d11e-7692-8b77-ee521d64187b`): Security/Architecture,
+    reviewing Ruby escape surfaces, context options, and ADR requirements.
+- EM local work: verify whether Ruby artifacts now exist for the repo GraalVM
+  line (`25.0.2`), compare against the prior ADR-009 `25.0.0` finding, and use
+  the result to decide whether M12-001 is an implementation spike or an ADR/user
+  scope decision.
+- EM decision after local evidence and first reviews: `25.0.2` Ruby artifacts
+  are still unavailable, while `25.0.0` resolves. M12-001 may therefore proceed
+  only as an isolated `ruby-probe` feasibility experiment under ADR-009. This is
+  not a Ruby support claim, not a public ABI change, and not a release artifact
+  dependency.
+
+Active EM note, 2026-06-09:
+
+- New upstream evidence changes the route but not the support gate.
+- The old `org.graalvm.polyglot:ruby` Maven line still stops at `25.0.0`.
+- Upstream TruffleRuby now publishes under `dev.truffleruby:truffleruby`; latest
+  Maven release is `34.0.1`.
+- `dev.truffleruby:truffleruby:34.0.1` depends on Truffle and LLVM `25.0.2`,
+  which matches the repo's GraalVM line and avoids the old `25.0.0`
+  cross-patch/downgrade problem rejected by ADR-0026.
+- ADR-0027 is accepted as a conditional validation path. It does not claim Ruby
+  support and does not unblock M12-002 by itself.
+- M12 remains BLOCKED for public Ruby support, but not because the team cannot
+  run Ruby. M12-001B has proven the new coordinates and Java-level probe path,
+  and M12-001C has produced passing Native Image probe evidence ahead of its
+  release-inventory dependency. The current blocker is release readiness:
+  M12-004 must decide and tool the Ruby/LLVM license, SBOM, resource, package,
+  vulnerability, and bundled-native-surface inventory before Ruby can move into
+  the shipped public artifact path.
+- Team review:
+  - Herschel/GraalVM Runtime: keep M12 blocked; add a validation task for new
+    coordinates, Polyglot registration, Native Image, option compatibility,
+    resource lookup, no leakage, and security denials.
+  - Kant/Architecture-Security: amend rather than erase ADR-0026; old
+    `org.graalvm` blocker is obsolete, but release safety, RubyGems/Bundler,
+    NFI/FFI/native, cache/resource immutability, load-path, Java/Polyglot escape,
+    and strict abuse gates remain blockers.
+  - Ramanujan/Release-TDD: sequence coordinate proof, license/SBOM/resource
+    inventory, then Native Image release-shape probe before unblocking M12-002.
+  - Claude plan review: plan is structurally sound if it includes local Maven
+    resolution proof, Polyglot registration proof, license checks, independent
+    TruffleRuby security-cadence tracking, and conditional ADR wording.
+  - Claude post-change review: found stale M12-002 blocker metadata, missing
+    M12-003 blocker text, and missing ownership for retiring/replacing the old
+    `25.0.0` probe. Fixed by updating M12-002 dependencies, adding explicit
+    M12-003 blocker text, and creating M12-001D.
+  - Claude second review: no remaining blockers or unsafe Ruby support claims;
+    requested consistency by adding M12-001D to the M13 Ruby blocker chain.
+    Fixed.
+
+Active EM note, 2026-06-09 (M12-004 complete):
+
+- M12-004 is DONE. Release tooling now has a preparation-only Ruby-candidate
+  inventory mode (license/SBOM, dependency-delta, license-text policy,
+  vulnerability monitoring, resource/native-surface classification) recorded in
+  `docs/release/ruby-candidate-inventory.md`, with the default artifact provably
+  Ruby-free and the candidate recipes excluded from release gates.
+- The active M12 blocker is now M12-001C: prove the Ruby-enabled release shape
+  (XCFramework/SwiftPM/clean-consumer), complete the full native/ABI denial
+  matrix (runtime policy/resource pruning, not probe-grade lexical blocking), and
+  decide pruning of the denied surfaces M12-004 classified. M12-001D cleanup and
+  the public M12-002/M12-003 gates remain blocked behind M12-001C.
+- Public Ruby support remains BLOCKED. Nothing in M12-004 is a support claim.
+
+Milestone closure, 2026-06-09:
+
+- DONE. All M12 tasks (M12-001, -001A, -001B, -001C, -001D, -002, -003, -004,
+  -005) are DONE. Ruby now SHIPS in the single default artifact (Clojure,
+  JavaScript, Lua, Python, Ruby) via the production C ABI + Swift path, with
+  TruffleRuby's LLVM/Sulong backend excluded (ADR-0028). Governing ADRs:
+  ADR-0009/0026/0027 (path) and ADR-0028 (size budget + LLVM exclusion).
+- Security: runtime-grade deny-by-default sandbox; an independent adversarial
+  review found no escape; sandbox hardened (sealed loaders, eval denied,
+  fingerprint neutralized); 68 strict abuse probes denied; 16 RubyEvaluator unit
+  tests + 34 isolated denial-matrix tests.
+- Release: 5-language artifact 476,886,393 B (< 800 MB); license/SBOM/notices/
+  dep-delta/license-texts include TruffleRuby (LLVM/antlr4 excluded and guarded
+  out); vulnerability monitoring covers TruffleRuby with an independent cadence
+  source. Metrics: Ruby first-eval p50 ~59 ms, eval RSS p50 ~189 MiB.
+- Closure gate: `mise exec -- just test` -> exit 0 (conformance incl.
+  conformance-ruby-native, security incl. security-ruby, Swift 67, Java 82,
+  C-ABI + ASAN suites, xcframework-eval-smoke 67, check-abi, test-release-tools
+  128, license-report, check-dep-delta, examples). Packaged MacSmokeApp .app
+  evaluates clojure=42 javascript=42 lua=42 python=42 ruby=42.
+- M13 Ruby deliverables (README support matrix, RubyTemplateRenderer example,
+  tutorials) are now UNBLOCKED.
 
 Verification plan:
 
-- Focused Java TruffleRuby evaluator/resource tests.
-- `mise exec -- just native`
-- `mise exec -- just xcframework`
-- `mise exec -- just conformance-ruby-native`
-- `mise exec -- just security-ruby`
-- `mise exec -- just check-security-static`
-- `mise exec -- just test-swift`
-- `mise exec -- just check-abi`
-- Ruby first-eval, size, RSS, license, dependency, and package-resource evidence
-  recorded in PROJECT.org.
+- M12-001 feasibility gate:
+  - Ruby coordinate/resource evidence recorded.
+  - Focused Java Ruby probe tests pass.
+  - Ruby probe Native Image shared-library build passes.
+  - C native Ruby probe smoke passes.
+  - Static security check passes.
+  - Production `full` dependency tree, symbols, and Native Image build show no
+    Ruby/LLVM leakage.
+- M12-002/M12-003 support gates before any Ruby support claim:
+  - `mise exec -- just xcframework`
+  - `mise exec -- just conformance-ruby-native`
+  - `mise exec -- just security-ruby`
+  - `mise exec -- just test-swift`
+  - `mise exec -- just check-abi`
+  - Ruby first-eval, size, RSS, license, dependency, and package-resource
+    evidence recorded in PROJECT.org.
 
-*** TODO M12-001 Resolve TruffleRuby coordinates and resource model
+*** DONE M12-001 Resolve TruffleRuby coordinates and resource model
 
 Lead persona: GraalVM and Polyglot Runtime Engineer.
 Reviewer personas: Architecture, Release, Security.
@@ -6202,11 +6702,693 @@ Verification plan:
 - Native Image build command and logs.
 - `mise exec -- just inspect`
 
-*** TODO M12-002 Implement Ruby API, values, errors, and host callbacks
+Active evidence, 2026-06-08:
+
+- `curl -I -fsSL https://repo1.maven.org/maven2/org/graalvm/polyglot/ruby/25.0.2/ruby-25.0.2.pom`
+  -> HTTP 404.
+- `curl -I -fsSL https://repo1.maven.org/maven2/org/graalvm/ruby/ruby-language/25.0.2/ruby-language-25.0.2.pom`
+  -> HTTP 404.
+- `mise exec -- mvn -s .mvn/settings.xml -q dependency:get -Dartifact=org.graalvm.polyglot:ruby:25.0.2:pom -Dtransitive=true`
+  -> expected failure; artifact absent.
+- `curl -I -fsSL https://repo1.maven.org/maven2/org/graalvm/polyglot/ruby/25.0.0/ruby-25.0.0.pom`
+  -> HTTP 200.
+- `mise exec -- mvn -s .mvn/settings.xml -q dependency:get -Dartifact=org.graalvm.polyglot:ruby:25.0.0:pom -Dtransitive=true`
+  -> PASS.
+- `du -sh ~/.m2/repository/org/graalvm/ruby ~/.m2/repository/org/graalvm/llvm ~/.m2/repository/org/graalvm/truffle ~/.m2/repository/org/graalvm/shadowed`
+  -> about 52M Ruby, 75M LLVM, 37M Truffle, 42M shadowed.
+- Largest local Ruby/LLVM JARs total 132,414,217 bytes:
+  `ruby-language-25.0.0.jar` 29,063,809 bytes,
+  `ruby-resources-25.0.0.jar` 25,288,061 bytes,
+  `llvm-language-native-resources-25.0.0.jar` 56,512,783 bytes, and
+  `llvm-language-25.0.0.jar` 21,549,564 bytes.
+- `jar tf .../ruby-resources-25.0.0.jar | wc -l` -> 2,643 entries, including
+  Bundler/RubyGems/network-library surfaces that must remain denied.
+- Claude plan review: blockers before implementation are explicit ADR
+  feasibility-only version-skew acceptance, isolated `ruby-probe` profile, and
+  no Ruby support claim. ADR-009 updated before probe work.
+- Kant security/architecture review: M12-001 may proceed only as a feasibility
+  spike. Any release skew, native access, host IO/class loading, package/gem
+  support, or mutable resource/cache behavior requires a separate ADR.
+
+M12-001 implementation plan:
+
+- Add an isolated `ruby-probe` Maven profile with private
+  `truffleruby.version=25.0.0` that cannot be co-activated with `full`.
+- Add private probe sources under `native/src/ruby-probe/java/ecritum` and tests
+  under `native/src/ruby-probe/test/java/ecritum`.
+- Use fixed deny-by-default Ruby context options only:
+  `ruby.platform-native=false`, `ruby.cexts=false`, and
+  `ruby.rubygems=false`. No arbitrary option passthrough. Explicit
+  `require 'rubygems'` and `require 'bundler'` remain source-denied because
+  the accepted `ruby.rubygems=false` option does not fully block explicit
+  requires in direct Java probing.
+- Add a private Native Image probe entrypoint and `just native-ruby-probe`
+  equivalent to the Python probe pattern.
+- M12-001 can be marked DONE only when either:
+  - Java probe tests, dependency tree, Native Image build, native probe smoke,
+    static security check, and project evidence pass; or
+  - a failure is reproduced, categorized, and recorded as a blocker outcome with
+    no Ruby support claim.
+
+Completion evidence, 2026-06-08:
+
+- Team reviews incorporated:
+  - Herschel confirmed current `25.0.2` Ruby artifacts are absent and `25.0.0`
+    resolves with Ruby/LLVM/resource payload.
+  - Erdos confirmed this cannot be treated as a release-ready implementation
+    without later Ruby/LLVM license, resource, and package inventory.
+  - Kant confirmed the work may proceed only as a private feasibility spike
+    with no public support claim.
+- Claude plan review required ADR-009 version-skew addendum, isolated
+  `ruby-probe`, dependency/resource evidence, and no support claim. ADR-009 was
+  updated before implementation.
+- First Claude implementation review found blockers in option allowlisting,
+  gems hardening, host-exception classification, and Maven profile isolation.
+  Fixes landed and were verified.
+- Second Claude implementation review found no blockers. Its non-blocking
+  symbol-gate recommendations were implemented and verified.
+- `mise exec -- just test-ruby-probe-java` -> PASS; 4 Ruby probe tests, 0
+  failures. Denial tests cover Java lookup, raw Polyglot, inner context,
+  Fiddle/FFI, sockets, Open3, subprocess, backticks, ENV, File/Dir/IO,
+  `$LOAD_PATH`, Thread, Ractor, OpenSSL, RubyGems, and Bundler.
+- `python3 -m unittest Tests/Security/test_security_baseline.py` -> PASS; 26
+  tests, including Ruby probe root scanning and path-scoped raw option
+  allowlist regressions.
+- `mise exec -- just test-security-static` -> PASS.
+- `mise exec -- mvn -s .mvn/settings.xml -f native/pom.xml -Pruby-probe
+  dependency:tree -Dscope=runtime` -> PASS; Ruby probe uses
+  `org.graalvm.polyglot:polyglot:25.0.0`,
+  `org.graalvm.polyglot:ruby:25.0.0`, Ruby runtime artifacts, and LLVM runtime
+  artifacts.
+- `mise exec -- mvn -s .mvn/settings.xml -f native/pom.xml -Pfull,ruby-probe
+  -DskipTests validate` -> expected failure; enforcer reports
+  `ecritum.full` evaluates to `true` and does not match `^false$`.
+- `mise exec -- just native-ruby-probe` -> PASS; generated private Ruby probe
+  dylib with `_ecritum_graal_eval_ruby_probe`, `_graal_create_isolate`, and
+  `_graal_tear_down_isolate`. Image evidence: 221.78 MB total, 3,558
+  resources, 6 foreign downcalls, native libraries Foundation/dl/pthread/z,
+  peak RSS 7.93 GB, build time 1m59s.
+- `mise exec -- just test-ruby-native-probe` -> PASS; C probe evaluated
+  `40 + 2` and confirmed Java lookup and subprocess denials.
+- Production path isolation:
+  - `mise exec -- just test-java` -> PASS; 66 tests, 0 failures.
+  - `mise exec -- mvn -s .mvn/settings.xml -f native/pom.xml -Pfull
+    dependency:tree -Dscope=runtime` plus Ruby/LLVM grep -> PASS; no
+    Ruby/LLVM artifacts.
+  - `mise exec -- just native` -> PASS; production full dylib 366.86 MB,
+    zero foreign downcalls, Clojure/JavaScript/Lua/Python symbol checks pass.
+  - `mise exec -- just test-native-eval-smoke` -> PASS.
+  - `nm -gU build/native/macos-arm64/libecritum.dylib | rg
+    "ecritum_graal_eval_ruby"` -> no matches.
+  - `mise exec -- just check-native-full`, `mise exec -- just check-native-core`,
+    and `mise exec -- just check-native-ruby-probe` -> PASS after adding
+    negative Ruby/full-profile symbol assertions.
+
+M12-001 conclusion:
+
+- Feasibility is proven for a private Ruby Native Image probe using
+  TruffleRuby `25.0.0` with the repo's GraalVM Native Image `25.0.2` toolchain.
+- This is not Ruby support and not a release decision. M12-002 remains blocked
+  until a separate ADR accepts Ruby version skew beyond the private probe or
+  matching Ruby artifacts become available for the repo GraalVM line.
+
+*** DONE M12-001A Decide Ruby version alignment path
+
+Lead persona: Architecture Expert Engineer.
+Reviewer personas: GraalVM Runtime, Release, Tests/TDD, Security.
+
+Definition of done:
+
+- Compare the viable paths for getting Ruby into the actual full artifact:
+  wait for matching `25.0.2` Ruby artifacts, downgrade the repo toolchain and
+  language artifacts to `25.0.0`, or accept tested cross-patch Ruby skew.
+- Record dependency, Native Image, release, license, security, and test
+  implications for each path.
+- Choose one path in an ADR before M12-002 changes public Ruby API/ABI or the
+  shipped full profile.
+- Update M12-002 blocker text with the accepted path and verification plan.
+
+Verification plan:
+
+- Local coordinate checks for JS, Python, Ruby, and Native Image on any proposed
+  aligned GraalVM version.
+- Maven dependency tree checks for the proposed full artifact path.
+- Claude plan review before accepting the ADR.
+- `mise exec -- just plan-check`
+
+Active EM note, 2026-06-08:
+
+- The strongest candidate may be downgrading the whole repo line from `25.0.2`
+  to `25.0.0` if JS, Python, Ruby, and Native Image are all available there.
+  That would avoid mixed Truffle/polyglot runtime versions, but it requires
+  revalidating M11 Python, license evidence, dependency deltas, and release
+  gates.
+- Cross-patch skew remains possible only if an ADR accepts the maintenance and
+  release risk and tests prove combined JS/Python/Ruby Native Image behavior.
+- Waiting for `25.0.2` Ruby artifacts is safest technically but blocks the
+  user-requested full-version work indefinitely.
+
+Completion evidence, 2026-06-08:
+
+- Fresh review agents:
+  - Hooke (GraalVM Runtime) recommended whole-repo `25.0.0` alignment if M12
+    proceeds, and rejected cross-patch skew for shipped artifacts.
+  - McClintock (Security/TDD) recommended whole-repo `25.0.0` only after ADR,
+    CVE/changelog audit, rollback rule, and complete revalidation.
+  - Ramanujan (Release) recommended waiting for matching `25.0.2` Ruby for
+    shipping, using `25.0.0` only for dry-run license/resource inventory.
+- Local coordinate evidence:
+  - `org.graalvm.polyglot:ruby` Maven metadata lists `25.0.0` as latest and
+    release.
+  - Ruby `25.0.2`, `25.0.3`, `25.0.4`, and `25.1.3` POM checks failed.
+  - JS, Python, Ruby, and Native Image all resolved at `25.0.0`.
+  - JS, Python, and Native Image resolved at `25.0.2`; Ruby did not.
+- Local aligned `25.0.0` proof:
+  - `mise install java@graalvm-community-25.0.0` -> PASS.
+  - `mise x java@graalvm-community-25.0.0 -- native-image --version` ->
+    GraalVM CE `25+37.1`.
+  - `mvn clean test -Pfull -Dgraalvm.version=25.0.0` -> PASS; 66 tests.
+  - `mvn test -Pruby-probe -Dgraalvm.version=25.0.0
+    -Dtest=RubyProbeEvaluatorTest` -> PASS; 4 tests.
+  - Native Image with `native-maven-plugin` `1.1.1` and GraalVM `25.0.0`
+    failed unless the plugin metadata repository was disabled.
+  - Temporary-POM Ruby probe Native Image with metadata repository disabled ->
+    PASS; 221.42 MB, 3,558 resources, 6 downcalls, peak RSS 7.98 GB.
+  - Temporary-POM full Clojure/JavaScript/Lua/Python Native Image with metadata
+    repository disabled -> PASS; 366.40 MB, 5,215 resources, zero downcalls,
+    peak RSS 17.01 GB.
+  - `just check-native-full build/m12-native-25/full-stable` and C native eval
+    smoke against the temporary `25.0.0` full dylib -> PASS.
+- Security/release audit:
+  - Official GraalVM release notes identify `25.0.1` and `25.0.2` as CPU
+    releases and state that `25.0.2` fixed and included the reachability
+    metadata schema.
+  - Official GraalVM vulnerability advisories list CVEs affecting Oracle
+    GraalVM `25.0` and later CPU lines.
+  - OSV queries for relevant GraalVM Maven packages at `25.0.0` returned no
+    package-level vulnerabilities, but this does not override the official
+    GraalVM CPU advisories.
+- Claude plan review conditionally accepted whole-repo `25.0.0`, but blocked
+  the ADR until the CVE/changelog audit and metadata risk were handled.
+- ADR-0026 is accepted. Decision: no cross-patch skew for shipped artifacts; no
+  public `25.0.0` downgrade for Ruby support unless a later ADR explicitly
+  accepts the CPU-regression and reachability-metadata risks with stronger
+  mitigation evidence.
+- Claude post-ADR review found no blockers. Housekeeping feedback was applied:
+  M12-003 is marked blocked, ADR-009 cross-references ADR-0026, M12 top-level
+  blocking language covers policy/security/release blockers, and M13 documents
+  its Ruby dependency on M12.
+
+M12 unblock conditions:
+
+- ADR-0027 validation passes for `dev.truffleruby:truffleruby:34.0.1` with
+  release, security, Native Image, license/SBOM, metrics, and clean-consumer
+  evidence; or
+- Matching Ruby artifacts become available for a release-safe GraalVM line used
+  by Ecritum; or
+- a release-safe alternative Ruby implementation is designed and proven under a
+  new ADR; or
+- the user explicitly requests a self-use-only experimental Ruby build with
+  known CPU-regression risk and no public support claim.
+
+*** DONE M12-001B Validate new TruffleRuby coordinate path
+
+Lead persona: GraalVM and Polyglot Runtime Engineer.
+Reviewer personas: Architecture, Security, Release, Tests/TDD.
+Depends on: M12-001A.
+Governing ADR: ADR-0027.
+
+Assignment:
+
+- Engineering Manager: Codex.
+- Lead persona: Herschel/GraalVM Runtime.
+- Reviewer personas: Kant/Architecture-Security and Ramanujan/Release-TDD.
+- Write scope for implementation follow-up: `native/pom.xml`,
+  `native/src/ruby-probe/`, `Tests/Security/`, `Tests/Release/`, `scripts/`,
+  `justfile`, `PROJECT.org`, `DEBT.md`, and ADR updates. No public Swift API,
+  public C ABI, README support matrix, release notes, or default artifact Ruby
+  dependency may be added by this task.
+
+Research checklist:
+
+- Read ADR-009, ADR-0026, ADR-0027, M11 implementation notes, existing
+  `ruby-probe` profile, and GraalVM/TruffleRuby upstream release notes.
+- Verify `dev.truffleruby:truffleruby:34.0.1` Maven metadata and POM locally.
+- Verify the dependency tree uses repo-aligned `25.0.2` Truffle, Polyglot, LLVM,
+  Native Image, JS, and Python artifacts without `25.0.0` Ruby skew.
+- Verify `Context.newBuilder("ruby")` registers and evaluates Ruby with the new
+  coordinate path.
+- Verify TruffleRuby's independent release/security cadence and record the
+  tracking owner.
+
+Definition of done:
+
+- Local Maven resolution for `dev.truffleruby:truffleruby:34.0.1` is recorded.
+- A Maven dependency tree proves the new Ruby path does not pull
+  `org.graalvm.polyglot:ruby:25.0.0` or `org.graalvm.ruby:*:25.0.0`.
+- Java probe tests prove Ruby eval and denial options with the new coordinates.
+- Coexistence with the current `full` dependency graph is proven or a precise
+  blocker is recorded.
+- Required changes for the isolated probe profile are identified without adding
+  Ruby to the default artifact.
+- License, SBOM, resource, Native Image, metrics, package reproducibility, and
+  clean-consumer gates needed before support are assigned to M12-004 and
+  M12-001C.
+- Claude diff/plan review and persona reviews are recorded.
+
+Verification plan:
+
+- `curl -fsSL https://repo1.maven.org/maven2/dev/truffleruby/truffleruby/maven-metadata.xml`
+- `curl -fsSL https://repo1.maven.org/maven2/dev/truffleruby/truffleruby/34.0.1/truffleruby-34.0.1.pom`
+- `mise exec -- mvn -s .mvn/settings.xml -f native/pom.xml dependency:get -Dartifact=dev.truffleruby:truffleruby:34.0.1:pom -Dtransitive=true`
+- Maven dependency tree for the isolated new-coordinate Ruby probe profile.
+- Java Ruby probe eval and denial tests.
+- `mise exec -- just test-security-static`
+- `mise exec -- just plan-check`
+
+Completion evidence, 2026-06-09:
+
+- Maven Central metadata reports `dev.truffleruby:truffleruby` latest/release
+  `34.0.1`.
+- The `34.0.1` POM depends on `dev.truffleruby.internal:runtime:34.0.1`,
+  `dev.truffleruby.internal:resources:34.0.1`,
+  `org.graalvm.truffle:truffle-runtime:25.0.2`, and
+  `org.graalvm.llvm:llvm-native:25.0.2`.
+- `mise exec -- mvn -s .mvn/settings.xml -f native/pom.xml dependency:get
+  -Dartifact=dev.truffleruby:truffleruby:34.0.1:pom -Dtransitive=true` ->
+  PASS.
+- Updated the private `ruby-probe` Maven profile to use
+  `dev.truffleruby:truffleruby:34.0.1` and repo `org.graalvm.polyglot:polyglot`
+  `25.0.2`. No public C ABI, Swift API, support matrix, or default artifact
+  Ruby dependency was added.
+- `mise exec -- mvn -s .mvn/settings.xml -f native/pom.xml -Pruby-probe
+  dependency:tree -Dscope=runtime` -> PASS. The tree contains
+  `dev.truffleruby:truffleruby:34.0.1`, `dev.truffleruby.internal:*:34.0.1`,
+  and GraalVM/Truffle/LLVM `25.0.2`; it does not contain
+  `org.graalvm.polyglot:ruby:25.0.0` or `org.graalvm.ruby:*:25.0.0`.
+- `mise exec -- just test-ruby-probe-java` -> PASS; 4 Ruby probe tests, 0
+  failures. This proves `Context.newBuilder("ruby")` registration, Ruby eval,
+  and the existing denial probes under the new coordinate path.
+- `mise exec -- mvn -s .mvn/settings.xml -f native/pom.xml -Pfull
+  dependency:tree -Dscope=runtime` plus Ruby/LLVM grep -> PASS; no Ruby or LLVM
+  artifacts leak into the current default `full` profile.
+- `mise exec -- mvn -s .mvn/settings.xml -f native/pom.xml -Pfull,ruby-probe
+  -Denforcer.skip=true dependency:tree -Dscope=runtime` -> PASS as an
+  analysis-only combined tree. It shows the current full JS/Python stack and
+  the new Ruby probe stack share GraalVM/Truffle/LLVM `25.0.2` artifacts plus
+  `dev.truffleruby:truffleruby:34.0.1`; no `25.0.0` Ruby artifacts appear.
+- `mise exec -- mvn -s .mvn/settings.xml -f native/pom.xml -Pfull,ruby-probe
+  -DskipTests validate` -> expected failure from the profile co-activation
+  enforcer.
+- `mise exec -- just test-security-static` -> PASS.
+- `mise exec -- just plan-check` -> PASS.
+- Claude scoped diff review attempt, 2026-06-09: invoked `claude -p` directly
+  without an auth check against the M12 Ruby validation diff; it produced no
+  output after repeated waits and was terminated. EM recorded this as a
+  review-tool blocker for this slice and used focused persona fallback review
+  per the Claude Review Protocol.
+
+EM decision:
+
+- M12-001B is DONE. The old coordinate/version blocker is resolved for the
+  private validation path. Public Ruby support remains blocked by M12-004
+  release inventory/tooling, M12-001C formal release-shape acceptance,
+  M12-001D cleanup, and the later public API/security gates.
+
+Blocker rule:
+
+- M12-002 stays BLOCKED until M12-004, M12-001C, and M12-001D have passing
+  evidence or the EM records an explicit narrower user-approved scope.
+
+*** DONE M12-001C Build new-coordinate Ruby Native Image release-shape probe
+
+Lead persona: GraalVM and Polyglot Runtime Engineer.
+Reviewer personas: Release, Tests/TDD, Security.
+Depends on: M12-001B, M12-004.
+Governing ADR: ADR-0027.
+
+Blocker:
+
+- The private Native Image probe now builds and runs with
+  `dev.truffleruby:truffleruby:34.0.1`. M12-004 is now DONE, so the release
+  inventory/tooling dependency is satisfied: notices/SBOM, dependency-delta,
+  license-text policy, vulnerability monitoring, and resource/native-surface
+  classification all exist for the Ruby/LLVM candidate payload (preparation
+  only). This task is NOT yet DONE because two support-grade gates remain:
+  1. The native/ABI denial matrix is incomplete (see "Not done").
+  2. No Ruby-enabled release-shape (XCFramework/SwiftPM/clean-consumer) proof
+     exists; the only evidence is a private dylib, not the actual packaged
+     consumer shape. Resource pruning of the denied surfaces classified by
+     M12-004 must also be decided here.
+
+Definition of done:
+
+- Isolated Ruby probe builds with `dev.truffleruby:truffleruby:34.0.1` and repo
+  GraalVM `25.0.2`.
+- Native Image uses the same reachability metadata policy required by release
+  builds; no `25.0.0` metadata workaround is accepted.
+- C native probe evaluates Ruby and verifies Java/Polyglot/process/filesystem/
+  network/env/native denial behavior.
+- Symbol inspection proves no Ruby symbols or Ruby/LLVM dependencies leak into
+  the default `full` artifact.
+- Resource lookup works from the same framework/package shape planned for
+  release, or the blocker is recorded.
+
+Verification plan:
+
+- `mise exec -- just native-ruby-probe`
+- `mise exec -- just test-ruby-native-probe`
+- `mise exec -- just check-native-ruby-probe`
+- `mise exec -- just native`
+- `mise exec -- just check-native-full`
+- `mise exec -- just test-native-eval-smoke`
+- Native Image size, resource count, foreign downcalls, build time, and peak RSS
+  recorded.
+
+Evidence collected ahead of M12-004 completion, 2026-06-09:
+
+- `mise exec -- just native-ruby-probe` -> PASS. Native Image generated the
+  private Ruby probe dylib using the new coordinates and normal
+  `native-maven-plugin` reachability metadata behavior; no GraalVM `25.0.0`
+  metadata workaround was used.
+- Ruby probe Native Image stats: 227.81 MB image/file size, 3,722 resources,
+  0 downcalls, 0 upcalls, 4 native libraries, peak RSS 7.47 GB, Maven total
+  time 2m10s.
+- `mise exec -- just test-ruby-native-probe` -> PASS; the C probe evaluated
+  Ruby and confirmed Java lookup and subprocess denial. It does not yet cover
+  the full native/ABI denial matrix required before this task can be DONE.
+- `mise exec -- just native` -> PASS after rerunning without concurrent Maven
+  clean/test contention. Default full artifact remained Ruby-free, 366.86 MB,
+  5,215 resources, zero downcalls, peak RSS 16.03 GB.
+- `mise exec -- just test-java` -> PASS; 66 tests, 0 failures.
+- `mise exec -- just test-native-eval-smoke` -> PASS.
+- `mise exec -- just check-native-ruby-probe && mise exec -- just
+  check-native-full` -> PASS.
+- Symbol scan: default full dylib has no Ruby symbols; private Ruby probe dylib
+  exports `_ecritum_graal_eval_ruby_probe`.
+
+Fallback persona review, 2026-06-09:
+
+- Release/Licensing review: M12-001B DONE is correct, M12-001C BLOCKED is
+  correct, and M12-002 must remain blocked. The active blocker is not Ruby
+  execution; it is Ruby-candidate/full artifact inventory modes for license
+  report, dependency delta, notices/license texts, vulnerability tracking, and
+  resource/native-surface classification.
+- Tests/TDD review: M12-001B evidence is sufficient for coordinate validation.
+  M12-001C must remain BLOCKED because the private dylib proof is not yet the
+  same as a Ruby-enabled XCFramework/SwiftPM clean-consumer proof. After M12-004,
+  M12-001C needs release-shape packaging or an explicit recorded blocker before
+  M12-002 starts.
+- Security/Architecture review: M12-001C correctly remains BLOCKED because the
+  native C probe does not yet verify every required escape surface
+  (Polyglot/process/filesystem/network/env/native). Current Ruby denial is
+  probe-grade: source-pattern checks plus GraalVM context options are useful
+  validation, but public Ruby support needs runtime policy/resource pruning and
+  strict abuse tests instead of relying on lexical blocking.
+- Both reviewers noted the Claude review was fallback evidence, not a successful
+  Claude signoff. Require a fresh successful Claude review or an explicit
+  fallback record before public Ruby API work starts.
+
+Part A evidence (runtime-grade denial matrix), 2026-06-09:
+
+- New `RubyDenialMatrixTest` (34 tests) evaluates dangerous Ruby DIRECTLY through
+  the production deny-by-default context with the lexical filter bypassed,
+  including string-built introspection (`Object.const_get("Fil"+"e").read`,
+  `send("sys"+"tem",...)`) that truly defeats the regex. Every ADR-0027 denial
+  surface (host class lookup, raw Polyglot, filesystem, network, environment,
+  process spawn, native/FFI, threads/Ractor, RubyGems/Bundler, native
+  extensions) is denied by the RUNTIME context policy; the dominant guard is
+  TruffleRuby `native access is not allowed` plus HostAccess/PolyglotAccess/
+  EnvironmentAccess NONE and single-threaded mode.
+- The C ABI probe (`Tests/C/native_ruby_probe.c`) now asserts denial for true
+  lexical-bypass cases at the ABI boundary.
+- Only production change: `RubyProbeEvaluator.newContext()` made package-private
+  for test access; no denial option relaxed, no bypass path added.
+- Two honest GAPs recorded in `docs/security/ruby-probe-denial-matrix.md` for
+  M12-002 to close with runtime policy (neither is an escape today):
+  - GAP-1: `require 'open3'` is not runtime-denied (pure-Ruby stdlib loads), but
+    every actual Open3 spawn op is runtime-denied.
+  - GAP-2: `$LOAD_PATH` is readable/mutable at runtime (info disclosure of cache
+    paths), but a subsequent on-disk `require` still fails because IO is denied.
+- Classification nuance for M12-002: runtime-denied lexical-bypass surfaces map
+  to SCRIPT (17), not PERMISSION_DENIED (14); fold the native-access guard into
+  the permission category for consistent ABI reporting.
+- Verification: `RubyDenialMatrixTest` 34/0/0, `RubyProbeEvaluatorTest` 4/0/0,
+  `just native-ruby-probe` BUILD SUCCESS, `just test-ruby-native-probe` exit 0,
+  `just check-native-ruby-probe` exit 0, `just test-security-static` ok.
+
+Part B evidence (resource lookup), 2026-06-09:
+
+- The ruby-probe Native Image dylib (225 MB) embeds the TruffleRuby/LLVM/Truffle
+  payload; the C probe evaluates Ruby from a clean `/tmp` working directory
+  (cwd-independent), proving resource lookup does not depend on build-relative
+  paths. This matches the embedded-resource model the existing full XCFramework
+  already proves loads via @rpath from a clean consumer.
+
+Remaining for M12-001C / next gate:
+
+- M12-004 release inventory/tooling is DONE; the native/ABI denial matrix is now
+  proven runtime-grade (Part A) and the Ruby payload is shown to embed resources
+  and run cwd-independently (Part B). The two blockers recorded earlier are
+  therefore resolved or de-risked.
+- The end-to-end Ruby-enabled XCFramework/SwiftPM clean-consumer proof is
+  inherently part of the single default full artifact (ADR-0025): Ruby's release
+  shape can only be the full artifact, so it is proven in M12-002 when Ruby joins
+  the `full` profile and runs the existing `xcframework` + `test-release-consumer-smoke`
+  pipeline (extended for Ruby). M12-001C has de-risked the payload and the
+  denial matrix.
+- SIZE/BUILD FEASIBILITY is the key open risk and the immediate next evidence:
+  the default full artifact is 366.86 MB against a 450 MB budget; adding
+  TruffleRuby (~58 MB) + LLVM (~78 MB native resources, partly shared) may exceed
+  the budget. A 5-language Native Image size/RSS spike must measure this before
+  M12-002 invests in full RubyEvaluator parity. If full+Ruby exceeds the size
+  budget or cannot build, that is a release-safety blocker requiring an ADR and a
+  user decision (raise budget / prune LLVM+gem resources / reconsider the single
+  default artifact), per the M12 definition of done.
+
+Size feasibility resolved, 2026-06-09 (three measurement spikes + owner decision):
+
+- Naive 5-language full+ruby builds (4m48s, 17.6 GB peak RSS) at 534.68 MB
+  (`docs/release/ruby-full-size-spike.md`).
+- Excluding TruffleRuby's LLVM/Sulong backend (`org.graalvm.llvm:*`) is proven
+  safe (cexts/native denied): TruffleRuby still boots/evals/denies; 5-language
+  drops to 479.46 MB; standalone probe 225 -> 173 MB
+  (`docs/release/ruby-llvm-prune-spike.md`).
+- `-H:ExcludeResources` of TruffleRuby native trees is a no-op (those binaries
+  are not embedded when cexts=false; size is code area + image-heap metadata).
+  Pruned 5-language stays 457.25 MB; C-probe eval + denials intact
+  (`docs/release/ruby-pruned-size-confirm.md`).
+- Owner decision: raise the size budget to 800 MB (ADR-0028). Five-language
+  single default artifact (ADR-0025) preserved; LLVM excluded from the shipped
+  artifact. `scripts/size-artifact.py` budgets raised.
+
+M12-001C conclusion:
+
+- DONE. Runtime-grade denial matrix proven (Part A), Ruby payload embeds
+  resources and runs cwd-independently (Part B), 5-language build is feasible,
+  and the size gate is resolved by ADR-0028. The end-to-end Ruby-enabled
+  XCFramework/SwiftPM clean-consumer proof is delivered in M12-002 when Ruby
+  joins the `full` profile and runs the existing release pipeline (the payload,
+  denial matrix, and build config are all de-risked here).
+- Validated M12-002 build config: add `dev.truffleruby:truffleruby:34.0.1` to the
+  `full` profile WITH `<exclusions>` for all six `org.graalvm.llvm:*` artifacts;
+  no `-H:ExcludeResources` needed; do not activate the `ruby-probe` profile.
+
+*** DONE M12-001D Retire or replace old 25.0.0 Ruby probe infrastructure
+
+Lead persona: Technical Debt and Maintainability Engineer.
+Reviewer personas: GraalVM Runtime, Release, Tests/TDD.
+Depends on: M12-001B, M12-001C.
+Governing ADR: ADR-0027.
+
+Definition of done:
+
+- If M12-001B/M12-001C succeed, the old `org.graalvm.polyglot:ruby:25.0.0`
+  probe profile and docs are migrated to the `dev.truffleruby:truffleruby`
+  path or removed.
+- If the new path fails, the old `25.0.0` probe remains clearly marked as
+  historical feasibility evidence only, cannot be activated accidentally with
+  release/default profiles, and has an explicit DEBT.md owner or removal task.
+- `just` tasks, Maven profile names, symbol checks, security scans, and
+  PROJECT.org notes no longer let future agents confuse the old probe with the
+  accepted candidate path.
+
+Verification plan:
+
+- Maven profile activation checks for release/default and Ruby probe paths.
+- Static scan for stale `25.0.0` Ruby support wording.
+- Symbol checks proving no Ruby probe symbols leak into default artifacts.
+- `mise exec -- just test-security-static`
+- `mise exec -- just plan-check`
+
+Progress, 2026-06-09:
+
+- Active `native/pom.xml` Ruby probe dependencies now use
+  `dev.truffleruby:truffleruby:34.0.1`; the old active
+  `org.graalvm.polyglot:ruby:25.0.0` dependency has been removed from the probe
+  profile.
+- Historical ADR and PROJECT.org references to `25.0.0` remain intentionally as
+  evidence for rejected paths and prior feasibility work.
+- M12-004 is now DONE; its tooling and the `docs/release/ruby-candidate-inventory.md`
+  report consistently use the `dev.truffleruby:truffleruby:34.0.1` candidate path
+  and never the old `25.0.0` coordinates, so the release-inventory gate no longer
+  risks reintroducing the old probe wording.
+- Remaining cleanup is gated on M12-001C release-shape: once the Ruby-enabled
+  packaging path is proven or recorded as blocked, stale `25.0.0` wording in
+  probe `just` tasks/profiles must be narrowed so future agents cannot confuse
+  the old probe with the accepted candidate path.
+
+Conclusion, 2026-06-09:
+
+- DONE. There are NO active references to the old `org.graalvm.polyglot:ruby` /
+  `25.0.0` coordinate path in `native/pom.xml`, `justfile`, `scripts/`, `Tests/`,
+  or `Sources/` (verified by grep); the only active Ruby coordinate is
+  `dev.truffleruby:truffleruby:34.0.1`.
+- The obsolete `ruby-candidate` release-tooling mode was removed (M12-002 Slice 2)
+  and `docs/release/ruby-candidate-inventory.md` is marked SUPERSEDED.
+- The `ruby-probe` Maven profile is retained as the isolated denial-matrix
+  validation harness (RubyDenialMatrixTest / RubyProbeEvaluatorTest exercise the
+  deny-by-default context in isolation). Its enforcer message was corrected to
+  state that Ruby now SHIPS via the production `RubyEvaluator`
+  (`ecritum_graal_eval_ruby_with_stdlib`) and the probe (`_ruby_probe`) must not
+  be merged into the shipped full image. `check-native-full` asserts the probe
+  symbol is absent from the artifact, so there is no confusion or leakage.
+- DEBT: fully retiring the now-redundant `ruby-probe` profile/sources (the
+  production RubyEvaluator + its 16 hardened tests supersede the probe's
+  evaluator) is optional future cleanup; tracked but not required for M12 since
+  the probe is isolated, unshipped, and clearly labeled.
+
+*** DONE M12-002 Implement Ruby API, values, errors, and host callbacks
 
 Lead persona: GraalVM and Polyglot Runtime Engineer.
 Reviewer personas: Clean Code, Tests/TDD, Security.
-Depends on: M12-001.
+Depends on: M12-001B, M12-004, M12-001C, M12-001D.
+Blocked by: M12-004 release inventory/tooling and M12-001C/M12-001D acceptance.
+
+Blocker:
+
+- UNBLOCKED 2026-06-09. M12-004 (release inventory/tooling), M12-001C (denial
+  matrix + payload + size feasibility), and ADR-0028 (800 MB budget + LLVM
+  exclusion) clear the gates. M12-001D cleanup is housekeeping and no longer a
+  hard blocker for M12-002 (M12-002 adds Ruby to the `full` profile directly).
+
+M12-002 scope (the public Ruby integration), modeled on M11 Python (PythonEvaluator):
+
+- Create `native/src/full/java/ecritum/RubyEvaluator.java` with parity to
+  PythonEvaluator: deny-by-default context (reuse the proven options +
+  ruby.cexts/platform-native/rubygems=false), sandbox prelude, lexical denial
+  patterns (defense-in-depth), value normalization (scalars, arrays, hash/map,
+  bytes), error classification, host-callback projection under `ecritum`, pure
+  stdlib facades (json/time/fs/http gated by StandardLibraryPolicy), and
+  statement/resource limits.
+- Close the M12-001C Part A gaps with RUNTIME policy (not lexical): GAP-1
+  (`require 'open3'`) and GAP-2 (`$LOAD_PATH` read/mutate). Fold the runtime
+  `native access is not allowed` guard into the `permission` classification so
+  the C ABI reports denials consistently (PERMISSION_DENIED, not SCRIPT).
+- Wire `ecritum_graal_eval_ruby_with_stdlib` into `NativeEntrypoints.java`;
+  extend `scripts/ecritum_runtime_wrapper.c` dispatch + `ECRITUM_RUNTIME_HAS_RUBY`
+  feature flag + language validation; `.ruby` already exists in Swift
+  `EcritumLanguage`.
+- Build config (ADR-0028): add `dev.truffleruby:truffleruby:34.0.1` to the
+  `full` profile WITH `<exclusions>` for all six `org.graalvm.llvm:*` artifacts;
+  do not activate `ruby-probe`; no `-H:ExcludeResources`.
+- Promote Ruby from candidate to SHIPPED in release tooling, EXCLUDING LLVM:
+  update license-report default packages (TruffleRuby internal/shadowed + joni +
+  jcodings + antlr4; BSD-2/BSD-3 texts move into the default bundle), check-dep-delta
+  default BASELINE, license-text manifest, THIRD_PARTY_NOTICES, SBOM, and
+  size-artifact.py (DEFAULT_INCLUDED_RUNTIMES + baseline to the measured
+  5-language size). Update build-xcframework.sh includedRuntimes and
+  test-release-consumer-smoke.py to include ruby.
+- Add `Tests/Conformance/fixtures/ruby_native_provider.py` + `conformance-ruby-native`.
+- Reviews lessons from M11-002 (value-model, bytes, error mapping, host-callback
+  edge cases) before implementation.
+
+Slice 1 evidence (production RubyEvaluator + ABI + security hardening), 2026-06-09:
+
+- `RubyEvaluator.java` created at parity with PythonEvaluator: deny-by-default
+  context + statement/resource timeout, value model (scalars/arrays/hash->map/
+  bytes/BigInteger), host-callback projection under `ecritum`, pure stdlib
+  facades (json/time/fs/http gated), error classification. Wired
+  `ecritum_graal_eval_ruby_with_stdlib` into NativeEntrypoints; extended
+  `ecritum_runtime_wrapper.c` dispatch + `ECRITUM_RUNTIME_HAS_RUBY` + language
+  allowlist; `check-native-full` asserts the ruby symbol (5 languages).
+- Build per ADR-0028: `dev.truffleruby:truffleruby:34.0.1` in `full` with all six
+  `org.graalvm.llvm:*` excluded; native full+ruby image = 458 MB (under 800 MB);
+  nm shows clojure/js/lua/python/ruby_with_stdlib, ruby_probe absent.
+- Deviation (justified, verified): `allowCreateThread(true)` + `ruby.single-threaded=true`
+  (TruffleRuby needs host-thread fibers for lazy core init; guest Thread.new
+  stays denied). `check-security-static.py` allowlists this ONLY in
+  RubyEvaluator.java AND only while single-threaded is present (interlock).
+- Independent adversarial security review found NO sandbox escape through the
+  runtime policy; flagged prelude-robustness items, all fixed in a hardening pass:
+  GAP-1 loaders `undef`'d (reflection/send/bind_call/super -> PERMISSION_DENIED);
+  eval family denied (Python parity) without breaking pack/fibers/facades/host
+  callbacks; cooperative fibers allowed but inert (denied op inside -> denied);
+  ObjectSpace proven inert (recovered loader hits frozen features / native-access
+  denial); runtime fingerprint (RUBY_DESCRIPTION/PLATFORM) neutralized. Recorded
+  in `docs/security/ruby-probe-denial-matrix.md`.
+- Verification: `just test-java` 82/0/0 (RubyEvaluatorTest 16); `RubyEvaluatorTest`
+  re-run 16/0/0; `just test-security-static` PASS; security baseline 26/0/0;
+  C ABI Ruby eval via `_with_stdlib` = 42 and runtime-denied escape =
+  PERMISSION_DENIED. `claude -p` review: ship it.
+- Slice 1 built the WIP image into native/target only; the canonical 5-language
+  full dylib is rebuilt in Slice 3 alongside the release pipeline.
+
+Remaining M12-002 slices:
+
+- Slice 2 (release tooling): promote Ruby from candidate to SHIPPED, EXCLUDING
+  LLVM (per ADR-0028) -- license-report default packages + BSD-2/BSD-3 texts into
+  the default bundle, check-dep-delta default BASELINE, license-text manifest,
+  THIRD_PARTY_NOTICES, SBOM; size-artifact.py DEFAULT_INCLUDED_RUNTIMES + baseline.
+- Slice 3 (release shape): rebuild canonical full+ruby, build-xcframework.sh
+  includedRuntimes + test-release-consumer-smoke.py + ruby_native_provider
+  conformance + check-abi + test-swift + size gate on the real xcframework.
+
+Slice 2 evidence (Ruby promoted to SHIPPED, LLVM-excluded), 2026-06-09:
+
+- Authoritative `-Pfull` runtime tree: 7 net-new shipped Ruby packages
+  (dev.truffleruby:truffleruby + internal:{runtime,resources,annotations,shared}
+  + shadowed:joni + org.graalvm.shadowed:jcodings). `org.graalvm.llvm:*` and
+  `org.graalvm.shadowed:antlr4` are ABSENT (antlr4 is transitive only under the
+  excluded llvm-language). license-report/check-dep-delta default inventories +
+  baselines updated with generated SPDX; BSD-2/BSD-3 texts moved into the default
+  THIRD_PARTY_LICENSES bundle; EPL-2.0 re-provenanced to TruffleRuby; notices
+  regenerated; a forbidden-coordinate guard keeps LLVM/antlr4 out. The obsolete
+  ruby-candidate tooling mode was removed (also advances M12-001D cleanup).
+- Verification: `just license-report-strict` exit 0 (43 packages,
+  included-runtimes adds ruby, no llvm/antlr leak); `just check-dep-delta` ok;
+  `just check-license-texts` ok; `just test-release-tools` 128 OK; vuln coverage ok.
+
+Slice 3 evidence (release shape, end to end), 2026-06-09:
+
+- Canonical 5-language artifact rebuilt (`just native-full` -> check-native-full
+  asserts ruby_with_stdlib + 4 langs, ruby_probe absent). XCFramework built with
+  `includedRuntimes` = clojure,javascript,lua,python,ruby. size-artifact.py
+  DEFAULT_INCLUDED_RUNTIMES + baseline updated to the measured 5-language size.
+- `ruby_native_provider.py` conformance fixture (14 cases: eval/host/error/
+  stdlib/timeout) + `conformance-ruby-native` recipe (wired into default `test`).
+  Updated package-artifact/inspect-artifact/check-package-reproducible/
+  packaged-app-smoke + MacSmokeApp example to the 5-language set.
+- Verification (all exit 0): check-native-full; test-xcframework-eval-smoke (67);
+  check-abi; size = 476,886,393 B (< 800 MB, no violations/warnings);
+  conformance-ruby-native (strict, conformant); test-swift (67);
+  test-native-eval-smoke; test-packaged-app-smoke (real Swift->C ABI->TruffleRuby,
+  `ruby=42`); the 4 existing conformance lanes; test-release-tools 128.
+- No Swift/ABI library change needed (language string passes through generically;
+  `.ruby` already existed). No Ruby value-model/ABI bug surfaced.
+- Environment limit (not Ruby-specific): the full HTTPS clean-SwiftPM-consumer
+  download smoke needs CI's real artifact URL / cert trust; covered locally by
+  manifest-only consumer smoke + packaged-app smoke + 67 xcframework Swift tests.
+
+M12-002 conclusion:
+
+- DONE. Ruby is a first-class language in the single default artifact via the real
+  C ABI + Swift path: scalars/arrays/hash/bytes value model, host callbacks, pure
+  stdlib facades, structured errors, runtime-grade denials (PERMISSION_DENIED),
+  timeout. Proven by 16 RubyEvaluator tests, strict native conformance, 67 Swift
+  tests, packaged-app Swift->TruffleRuby smoke, and the full release/size pipeline.
+  Security hardening + independent review recorded. Next: M12-003 (Ruby abuse
+  suite + metrics); release inventory/SBOM/license already shipped in Slice 2.
 
 Definition of done:
 
@@ -6229,11 +7411,22 @@ Verification plan:
 - `mise exec -- just conformance-ruby-native`
 - `mise exec -- just test-swift`
 
-*** TODO M12-003 Add Ruby security, metrics, and release inventory gates
+*** DONE M12-003 Add Ruby security, metrics, and release inventory gates
 
 Lead persona: Security and Capability Model Engineer.
 Reviewer personas: Tests/TDD, Release, GraalVM Runtime.
 Depends on: M12-002.
+Blocked by: M12-002.
+
+Blocker:
+
+- M12-003 is a public-support gate and depends on the public Ruby API/ABI work
+  in M12-002. It cannot start until the ADR-0027 validation chain unblocks
+  M12-002 and Ruby is reachable through the real Ecritum eval/job/value path.
+- The current Ruby probe uses source-pattern blocking for many dangerous Ruby
+  surfaces. That is acceptable for private feasibility evidence only. Public
+  Ruby support requires enforcement by runtime policy, resource/package
+  decisions, and strict abuse tests.
 
 Definition of done:
 
@@ -6253,7 +7446,170 @@ Verification plan:
 - `mise exec -- just license-report-strict`
 - `mise exec -- just check-dep-delta`
 
-** TODO Milestone M13: Docs, Tutorials, Examples, and Metrics
+*** DONE M12-004 Ruby/LLVM license, SBOM, and resource inventory
+
+Lead persona: Release, Licensing, and Distribution Engineer.
+Reviewer personas: Security, GraalVM Runtime, Tests/TDD.
+Depends on: M12-001B.
+Governing ADR: ADR-0027.
+
+Scope:
+
+- This is preparation only. It must not add Ruby to the default artifact,
+  public Swift API, C ABI, conformance providers, README support matrix, or
+  release notes.
+- M12-004 gates M12-001C. If this task finds blocking license, SBOM,
+  redistribution, vulnerability, or resource issues, the EM keeps M12-001C
+  blocked until the team resolves, scopes out, or cancels the Ruby path.
+
+Definition of done:
+
+- Inventory TruffleRuby `34.0.1`, `dev.truffleruby.internal:*`, LLVM
+  `25.0.2`, Ruby resources, bundled gems, native
+  resources, and license-like files from the local Maven cache.
+- Identify which resources would be shipped if Ruby were later accepted and
+  which package/gem/native-extension surfaces must remain denied.
+- Draft release-tool changes needed for Ruby/LLVM in `license-report`,
+  `check-dep-delta`, license text checks, SBOM, package reproducibility, and
+  vulnerability response.
+- Record findings in `PROJECT.org` or a dedicated generated report under
+  `docs/` without claiming support.
+
+Verification plan:
+
+- Maven dependency tree for the isolated new-coordinate Ruby probe profile.
+- Resource inventory commands against local Ruby/LLVM JARs.
+- `mise exec -- just license-report-strict`
+- `mise exec -- just check-dep-delta`
+- `mise exec -- just test-release-tools`
+- Claude release/security review.
+
+Progress evidence, 2026-06-09:
+
+- Default release gates still pass without Ruby:
+  `mise exec -- just license-report-strict` -> PASS,
+  `mise exec -- just check-dep-delta` -> PASS,
+  `mise exec -- just test-release-tools` -> PASS; 113 tests.
+- Candidate cache inventory:
+  `du -sh ~/.m2/repository/dev/truffleruby ~/.m2/repository/org/graalvm/llvm`
+  -> about 58 MB for `dev/truffleruby` and 151 MB for `org/graalvm/llvm`.
+- Candidate key JAR total before Native Image closure:
+  `runtime-34.0.1.jar` 29,101,436 bytes,
+  `resources-34.0.1.jar` 29,551,172 bytes,
+  `llvm-language-native-resources-25.0.2.jar` 56,512,779 bytes, and
+  `llvm-language-25.0.2.jar` 21,549,568 bytes; total 136,714,955 bytes.
+- `resources-34.0.1.jar` contains 2,813 entries.
+- Resource scan found release-sensitive surfaces that must be classified before
+  support: bundled RubyGems/Bundler metadata, OpenSSL native resources, socket
+  and FFI/fiddle paths, Linux native `.so` files, and bundled native-extension
+  surfaces such as `bigdecimal`, `debug`, `nkf`, `racc`, `rbs`, and `syslog`.
+- `license-report-strict` and `check-dep-delta` currently verify the default
+  artifact only. They do not yet provide a Ruby-candidate or future Ruby-shipped
+  inventory mode. That release-tooling gap is the active blocker before M12-001C
+  can be accepted as DONE and before M12-002 can start.
+
+Completion evidence, 2026-06-09:
+
+- Release tooling now has a preparation-only `--artifact-kind ruby-candidate`
+  inventory mode across `license-report.py`, `check-dep-delta.py`, and
+  `check-license-texts.py`. Default mode is byte-for-byte unchanged; the
+  candidate recipes are excluded from the default release gates by design and
+  pass `--artifact-kind ruby-candidate` self-contained (auto-propagated to the
+  license-report subprocess).
+- Authoritative candidate inventory recorded in
+  `docs/release/ruby-candidate-inventory.md`: 14 shipped-scope additions
+  (`dev.truffleruby:*` 34.0.1 plus `org.graalvm.llvm:*` and shadowed
+  jcodings/antlr4 at 25.0.2) with generated, POM-ordered SPDX. Only two new SPDX
+  ids vs the default artifact: `BSD-3-Clause` and `BSD-2-Clause`. EPL-2.0 becomes
+  a shipped license in candidate mode and the stale junit provenance is corrected
+  in the candidate policy.
+- Candidate-only license texts (`BSD-2-Clause`, `BSD-3-Clause`, EPL-2.0) live in
+  `THIRD_PARTY_LICENSES/ruby-candidate/`; the default manifest/bundle is
+  untouched.
+- Resource/native-surface classification recorded: RubyGems, Bundler, OpenSSL,
+  sockets, FFI/fiddle, native extensions (bigdecimal, debug, nkf, racc, rbs,
+  syslog), and native `.so` payloads ship-but-must-stay-denied and are prune
+  candidates; pruning is deferred to M12-001C release-shape.
+- Vulnerability monitoring: all 14 candidate coordinates are maven purls already
+  covered by the existing `maven-components` rule (no redundant rule added). An
+  independent `truffleruby-releases` cadence source was added to
+  `docs/security/release-security-state.json` per ADR-0027.
+- Candidate SBOM uses a distinct `documentNamespace` (`.../ruby-candidate`) and a
+  `support-claim=none; status=blocked-preparation-only` document annotation so it
+  cannot be conflated with or overwrite the default release SBOM.
+- Reviews: an independent in-harness plan review (4 blockers / 6 risks, all
+  folded into the implementation spec) ran before implementation. For post-change
+  review, `claude -p` is responsive this session (unlike the M12-001B slice) and
+  produced a no-blocker review; a second independent in-harness code review also
+  found no blockers. Post-review fixes applied and re-verified: a vacuous B3 test
+  was rewritten to actually assert default isolation via the `blockers=[]`
+  document annotation (which concatenates blockers + POM_METADATA_ERRORS), and
+  `--artifact-kind ruby-candidate` was made self-contained in both checker
+  scripts.
+- Verification (under `mise exec`, GraalVM 25.0.2):
+  - `just test-release-tools` -> PASS; 133 tests, 0 failures.
+  - `just license-report-strict` -> PASS (default, exit 0, no blockers).
+  - `just check-dep-delta` -> PASS (default, artifactKind=default, no
+    violations).
+  - `just ruby-candidate-dep-delta`, `ruby-candidate-license-texts`, and
+    `ruby-candidate-inventory` -> PASS (self-contained).
+  - `just test-security-static` -> PASS.
+  - Default license report: 36 packages, no ruby/llvm/BSD leakage. Candidate
+    license report: 50 packages (36 + 14), distinct namespace, included-runtimes
+    adds ruby.
+- Scope respected: only release-tooling scripts, their tests, the justfile, the
+  candidate license texts, the inventory report,
+  `docs/security/release-security-state.json`, and one DEBT.md entry
+  (ECRITUM-DEBT-0016) were touched. No public Swift API, C ABI, conformance
+  provider, README, or default-artifact change.
+
+EM decision:
+
+- M12-004 is DONE. The release inventory/tooling gate that blocked M12-001C is
+  satisfied: the team can now attribute, gate, and monitor the Ruby/LLVM
+  candidate payload without claiming support and without Ruby entering the
+  default artifact.
+- This does NOT unblock public Ruby support. M12-001C remains BLOCKED on the
+  full native/ABI denial matrix and the Ruby-enabled release-shape
+  (XCFramework/SwiftPM/clean-consumer) proof; M12-002 and M12-003 stay blocked
+  behind it.
+
+*** DONE M12-005 Research release-safe Ruby alternatives and upstream tracking
+
+Conclusion, 2026-06-09:
+
+- Superseded by the chosen path: `dev.truffleruby:truffleruby:34.0.1` was
+  validated (ADR-0027) and SHIPPED in the default artifact (M12-002, ADR-0028)
+  with LLVM excluded. No alternative Ruby implementation is needed.
+- Independent TruffleRuby release/security cadence tracking is in place via the
+  `truffleruby-releases` monitoring source in
+  `docs/security/release-security-state.json` (M12-004), tracked separately from
+  GraalVM CPU updates per ADR-0027. Upstream tracking continues there.
+
+Original task definition (kept for history):
+
+Lead persona: Architecture Expert Engineer.
+Reviewer personas: GraalVM Runtime, Release, Security.
+Depends on: M12-001A.
+
+Definition of done:
+
+- Track whether newer TruffleRuby artifacts become available for a release-safe
+  GraalVM line, including `dev.truffleruby` releases and their independent
+  security cadence.
+- Evaluate whether another Ruby implementation can satisfy Ecritum's Native
+  Image, C ABI, sandbox, licensing, size, and distribution constraints.
+- Record options and rejection reasons in a follow-up ADR or PROJECT.org note.
+- Do not choose a new Ruby implementation without a separate ADR.
+
+Verification plan:
+
+- Current Maven coordinate checks.
+- Native Image feasibility notes for any candidate implementation.
+- License/security review for any candidate.
+- Claude architecture review.
+
+** DONE Milestone M13: Docs, Tutorials, Examples, and Metrics
 
 Goal: make the five-language runtime understandable and useful to framework
 users, with real examples and measured reference numbers in the docs.
@@ -6261,6 +7617,14 @@ users, with real examples and measured reference numbers in the docs.
 Lead persona: Swift API and Developer Experience Engineer.
 Reviewer personas: Release, Security, Tests/TDD, Unix, Clean Code.
 Depends on: M10, M11, M12.
+
+Unblocked, 2026-06-09:
+
+- M12 is DONE: Ruby ships in the default artifact (Clojure/JavaScript/Lua/Python/
+  Ruby). All M13 Ruby deliverables (README support matrix + metrics,
+  `RubyTemplateRenderer` example, Ruby tutorial coverage) are unblocked. The
+  README must be corrected from its stale "Ruby is not currently supported /
+  blocked" wording to the shipped five-language reality.
 
 Definition of done:
 
@@ -6288,7 +7652,26 @@ Verification plan:
 - Swift DX readability review.
 - Security review for every example that enables capabilities.
 
-*** TODO M13-001 Add README metrics and support matrix
+*** DONE M13-001 Add README metrics and support matrix
+
+Evidence, 2026-06-09:
+
+- README rewritten to a five-language SUPPORTED matrix (Clojure/SCI,
+  JavaScript/GraalJS, Lua/LuaJ, Python/GraalPy, Ruby/TruffleRuby); stale "Ruby
+  not currently supported / remains blocked / four-language" wording removed;
+  `docs/release-gates.md` "Next Release Target" corrected. Unsupported scope:
+  Python AND Ruby are runtime+stdlib only (no pip/RubyGems/Bundler/third-party/
+  native-C-extensions/FFI, denied by default; Ruby pure-Ruby, LLVM excluded per
+  ADR-0028).
+- Measured metrics added (macOS arm64): artifact 476,886,393 B; release zip
+  172,157,157 B; C cold start p50 23.3 ms / Swift p50 28.2 ms; idle RSS ~21.7 MB;
+  first eval p50 Lua 1.2 / Clojure 1.7 / JS 8.1 / Python 46.8 / Ruby 62.0 ms;
+  eval RSS Python ~229 MB / Ruby ~198 MB.
+- Support-claim scan clean for README/docs (ADRs left as historical record).
+  Follow-up: `docs/engineering-manager-agent-prompt.md` still has stale
+  "Ruby blocked" wording (internal agent brief) — to be banner-corrected in
+  closure cleanup.
+- `claude -p` accuracy review: "no overclaim, metrics consistent." plan-check PASS.
 
 Lead persona: Swift API and Developer Experience Engineer.
 Reviewer personas: Release, Security, Technical Debt.
@@ -6312,7 +7695,27 @@ Verification plan:
 - `mise exec -- just bench-idle-rss`
 - README support-claim scan.
 
-*** TODO M13-002 Build useful five-language examples
+*** DONE M13-002 Build useful five-language examples
+
+Evidence, 2026-06-09:
+
+- Six real-use-case SwiftPM examples added under Examples/: RubyTemplateRenderer
+  (host-data invoice render), MultiLanguageHost (5-language host pipeline),
+  ClojureNotebook, JavaScriptAutomation, LuaRulesEngine, PythonTextProcessing.
+  Each references the local artifact (`.package(path: "../..")`), each has a
+  README (purpose/API/build-run/expected output/security notes) + a committed
+  `expected-output.txt` fixture.
+- All run under the default deny-by-default policy; capability audit (grep of all
+  six sources) shows NO network/process/filesystem/native capability granted.
+  PythonTextProcessing is capability-free (host-provided document).
+- Wired into `just examples` via `examples-extended` (6 per-example recipes +
+  rollup) with byte-comparison assertions against the fixtures; `test-examples-auto`
+  picks them up. Negative test confirmed the assertions are real (corrupting a
+  fixture fails the recipe). Library/runtime/release tooling not modified.
+- Verification: `just examples` exit 0; `just test-examples-auto` exit 0; clean
+  from-scratch rebuild of `examples-extended` exit 0; EM spot-check
+  `just example-ruby-template-renderer` renders the invoice (exit 0).
+  `claude -p` API/overclaim review: no issues.
 
 Lead persona: Unix and Reusable Components Engineer.
 Reviewer personas: Swift DX, Tests/TDD, Clean Code, Security.
@@ -6332,7 +7735,21 @@ Verification plan:
 - Example-specific README commands.
 - Security review of capability examples.
 
-*** TODO M13-003 Add tutorials for framework users
+*** DONE M13-003 Add tutorials for framework users
+
+Evidence, 2026-06-09:
+
+- Six task-oriented tutorials under `docs/tutorials/` (+ index README) linked from
+  README: add-to-Swift-app, register-host-functions, scripts-in-each-language,
+  narrow-filesystem-capability, package-a-macos-app, interpret-errors-and-denials.
+  Python/Ruby package limits (no pip/RubyGems/Bundler/native ext) explained.
+- Commands verified by running: example-swift, example-multi-language-host
+  (all five languages, final $48.02), packaged-app-smoke (ruby=42), the
+  read-only-root filesystem Swift test (out-of-root -> PERMISSION_DENIED),
+  plan-check. No overclaim; no invented API (signatures checked against
+  Sources/Ecritum + examples). `claude -p` review: no issues.
+- Noted for M14: observed runtime version string is 0.1.0 while Package.swift
+  hosted tag is v0.2.0-alpha.1 -- release version selection must reconcile this.
 
 Lead persona: Swift API and Developer Experience Engineer.
 Reviewer personas: Architecture, Release, Security.

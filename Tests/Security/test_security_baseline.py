@@ -1,3 +1,4 @@
+import importlib.util
 import json
 import subprocess
 import sys
@@ -14,6 +15,7 @@ PARSER_CHECK = ROOT / "scripts" / "check-parser-abuse.py"
 ABUSE_MANIFEST = ROOT / "Tests" / "Security" / "abuse-manifest.json"
 PARSER_MANIFEST = ROOT / "Tests" / "Security" / "parser-abuse-manifest.json"
 ABUSE_PROVIDER = ROOT / "Tests" / "Security" / "fixtures" / "abuse_provider.py"
+RUBY_ABUSE_PROVIDER = ROOT / "Tests" / "Security" / "fixtures" / "ruby_abuse_provider.py"
 
 
 REQUIRED_ABUSE_CAPABILITIES = {
@@ -91,6 +93,10 @@ class SecurityBaselineTests(unittest.TestCase):
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["violations"], [])
         self.assertGreater(payload["scanned"]["files"], 0)
+        self.assertIn("native/src/core/java", payload["scanned"]["roots"])
+        self.assertIn("native/src/full/java", payload["scanned"]["roots"])
+        self.assertIn("native/src/python-probe", payload["scanned"]["roots"])
+        self.assertIn("native/src/ruby-probe", payload["scanned"]["roots"])
 
     def test_static_check_detects_forbidden_polyglot_pattern(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -145,6 +151,66 @@ class SecurityBaselineTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
         self.assertTrue(payload["ok"])
+
+    def test_static_check_allows_fixed_ruby_probe_options_only_under_ruby_probe(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "native" / "src" / "ruby-probe" / "java" / "Good.java"
+            path.parent.mkdir(parents=True)
+            path.write_text(
+                textwrap.dedent(
+                    """
+                    class Good {
+                        void good() {
+                            builder
+                                .option("ruby.platform-native", "false")
+                                .option("ruby.cexts", "false")
+                                .option("ruby.rubygems", "false")
+                                .build();
+                        }
+                    }
+                    """
+                ),
+                encoding="utf-8",
+            )
+
+            result = run_script(STATIC_CHECK, "--root", directory)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertTrue(payload["ok"])
+
+    def test_static_check_rejects_fixed_ruby_probe_options_outside_ruby_probe(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "native" / "src" / "full" / "java" / "Bad.java"
+            path.parent.mkdir(parents=True)
+            path.write_text(
+                'class Bad { void bad() { builder.option("ruby.platform-native", "false"); } }\n',
+                encoding="utf-8",
+            )
+
+            result = run_script(STATIC_CHECK, "--root", directory)
+
+        self.assertEqual(result.returncode, 1)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["violations"][0]["rule"], "polyglot.raw_option_passthrough")
+
+    def test_static_check_rejects_unlisted_options_inside_ruby_probe(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "native" / "src" / "ruby-probe" / "java" / "Bad.java"
+            path.parent.mkdir(parents=True)
+            path.write_text(
+                'class Bad { void bad() { builder.option("ruby.allow-all", "true"); } }\n',
+                encoding="utf-8",
+            )
+
+            result = run_script(STATIC_CHECK, "--root", directory)
+
+        self.assertEqual(result.returncode, 1)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["violations"][0]["rule"], "polyglot.raw_option_passthrough")
 
     def test_static_check_scans_maven_config_files(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -483,6 +549,36 @@ class SecurityBaselineTests(unittest.TestCase):
         self.assertIn("test-security-abuse:", justfile)
         self.assertIn("test-security-fuzz:", justfile)
         self.assertIn("--verify-evidence", justfile)
+
+    def test_justfile_exposes_ruby_security_and_metrics_targets(self):
+        justfile = (ROOT / "justfile").read_text(encoding="utf-8")
+
+        self.assertIn("security-ruby:", justfile)
+        self.assertIn("ruby_abuse_provider.py", justfile)
+        self.assertIn("bench-ruby-first-eval:", justfile)
+        self.assertIn("bench-ruby-rss:", justfile)
+
+    def test_ruby_abuse_provider_declares_required_capabilities_and_probes(self):
+        spec = importlib.util.spec_from_file_location(
+            "ruby_abuse_provider_under_test", RUBY_ABUSE_PROVIDER
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        self.assertTrue(REQUIRED_ABUSE_CAPABILITIES.issubset(set(module.CAPABILITIES)))
+        # Every capability must have a denial probe, and every required phase
+        # must have a phase probe, so generated cases never fall through to a
+        # non-denied surface.
+        for capability in REQUIRED_ABUSE_CAPABILITIES:
+            self.assertIn(capability, module.DENIAL_PROBES)
+            self.assertTrue(module.DENIAL_PROBES[capability].strip())
+        for phase in REQUIRED_ABUSE_PHASES - {"normal_eval"}:
+            self.assertIn(phase, module.PHASE_PROBES)
+        # The lexical-bypass introspection vectors must be present so the suite
+        # proves runtime-grade denial, not merely lexical denial.
+        self.assertIn("require.arbitrary_namespace.denied", module.TARGETED_PROBES)
+        self.assertIn("require.refer_denied", module.TARGETED_PROBES)
+        self.assertGreaterEqual(len(module.LEXICAL_BYPASS_PROBES), 3)
 
     def test_release_gates_record_security_requirements(self):
         release_gates = (ROOT / "docs" / "release-gates.md").read_text(encoding="utf-8").lower()

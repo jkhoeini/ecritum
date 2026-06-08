@@ -9,9 +9,13 @@ native_output := "native/target/libecritum.dylib"
 native_stable_dir := "build/native/macos-arm64"
 native_core_stable_dir := "build/native/core/macos-arm64"
 native_full_stable_dir := "build/native/full/macos-arm64"
+native_python_probe_stable_dir := "build/native/python-probe/macos-arm64"
+native_ruby_probe_stable_dir := "build/native/ruby-probe/macos-arm64"
 native_private_headers_dir := "build/native/macos-arm64/include/private"
 native_core_private_headers_dir := "build/native/core/macos-arm64/include/private"
 native_full_private_headers_dir := "build/native/full/macos-arm64/include/private"
+native_python_probe_private_headers_dir := "build/native/python-probe/macos-arm64/include/private"
+native_ruby_probe_private_headers_dir := "build/native/ruby-probe/macos-arm64/include/private"
 
 default:
     @just --list
@@ -68,6 +72,26 @@ native-full:
     just check-native-full
     just check-native
 
+native-python-probe:
+    test -f {{maven_project}}
+    MACOSX_DEPLOYMENT_TARGET={{min_macos}} mvn -s {{maven_settings}} -f {{maven_project}} clean package -Pnative,full,python-probe -Decritum.native.mainClass=ecritum.PythonProbeEntrypoints -Dmaven.test.skip=true
+    test -f {{native_output}}
+    mkdir -p {{native_python_probe_stable_dir}}
+    mkdir -p {{native_python_probe_private_headers_dir}}
+    cp {{native_output}} {{native_python_probe_stable_dir}}/libecritum.dylib
+    cp native/target/graal_isolate.h native/target/graal_isolate_dynamic.h native/target/libecritum.h native/target/libecritum_dynamic.h {{native_python_probe_private_headers_dir}}/
+    just check-native-python-probe
+
+native-ruby-probe:
+    test -f {{maven_project}}
+    MACOSX_DEPLOYMENT_TARGET={{min_macos}} mvn -s {{maven_settings}} -f {{maven_project}} clean package -Pnative,ruby-probe -Decritum.native.mainClass=ecritum.RubyProbeEntrypoints -Dmaven.test.skip=true
+    test -f {{native_output}}
+    mkdir -p {{native_ruby_probe_stable_dir}}
+    mkdir -p {{native_ruby_probe_private_headers_dir}}
+    cp {{native_output}} {{native_ruby_probe_stable_dir}}/libecritum.dylib
+    cp native/target/graal_isolate.h native/target/graal_isolate_dynamic.h native/target/libecritum.h native/target/libecritum_dynamic.h {{native_ruby_probe_private_headers_dir}}/
+    just check-native-ruby-probe
+
 check-native:
     just check-native-full {{native_stable_dir}}
 
@@ -80,6 +104,9 @@ check-native-core dir="build/native/core/macos-arm64":
     nm -gU {{dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_clojure_with_stdlib$'
     ! nm -gU {{dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_javascript_with_stdlib$'
     ! nm -gU {{dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_lua_with_stdlib$'
+    ! nm -gU {{dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_python_with_stdlib$'
+    ! nm -gU {{dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_ruby_with_stdlib$'
+    ! nm -gU {{dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_ruby_probe$'
     nm -gU {{dir}}/libecritum.dylib | grep -q ' _graal_create_isolate$'
     nm -gU {{dir}}/libecritum.dylib | grep -q ' _graal_tear_down_isolate$'
 
@@ -92,6 +119,26 @@ check-native-full dir="build/native/full/macos-arm64":
     nm -gU {{dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_clojure_with_stdlib$'
     nm -gU {{dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_javascript_with_stdlib$'
     nm -gU {{dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_lua_with_stdlib$'
+    nm -gU {{dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_python_with_stdlib$'
+    nm -gU {{dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_ruby_with_stdlib$'
+    ! nm -gU {{dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_ruby_probe$'
+    nm -gU {{dir}}/libecritum.dylib | grep -q ' _graal_create_isolate$'
+    nm -gU {{dir}}/libecritum.dylib | grep -q ' _graal_tear_down_isolate$'
+
+check-native-python-probe dir="build/native/python-probe/macos-arm64":
+    test -f {{dir}}/libecritum.dylib
+    test -f {{dir}}/include/private/libecritum.h
+    nm -gU {{dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_python_probe$'
+    nm -gU {{dir}}/libecritum.dylib | grep -q ' _graal_create_isolate$'
+    nm -gU {{dir}}/libecritum.dylib | grep -q ' _graal_tear_down_isolate$'
+
+check-native-ruby-probe dir="build/native/ruby-probe/macos-arm64":
+    test -f {{dir}}/libecritum.dylib
+    test -f {{dir}}/include/private/libecritum.h
+    nm -gU {{dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_ruby_probe$'
+    ! nm -gU {{dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_javascript_with_stdlib$'
+    ! nm -gU {{dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_lua_with_stdlib$'
+    ! nm -gU {{dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_python_with_stdlib$'
     nm -gU {{dir}}/libecritum.dylib | grep -q ' _graal_create_isolate$'
     nm -gU {{dir}}/libecritum.dylib | grep -q ' _graal_tear_down_isolate$'
 
@@ -104,6 +151,7 @@ check-native-legacy:
     nm -gU {{native_stable_dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_clojure_with_stdlib$'
     nm -gU {{native_stable_dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_javascript_with_stdlib$'
     nm -gU {{native_stable_dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_lua_with_stdlib$'
+    nm -gU {{native_stable_dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_python_with_stdlib$'
     nm -gU {{native_stable_dir}}/libecritum.dylib | grep -q ' _graal_create_isolate$'
     nm -gU {{native_stable_dir}}/libecritum.dylib | grep -q ' _graal_tear_down_isolate$'
 
@@ -154,7 +202,7 @@ test-swift-auto:
 
 conformance:
     mkdir -p build/conformance
-    python3 -m py_compile scripts/run-conformance.py Tests/Conformance/fixtures/provider.py Tests/Conformance/fixtures/clojure_native_provider.py Tests/Conformance/fixtures/javascript_native_provider.py Tests/Conformance/fixtures/lua_native_provider.py
+    python3 -m py_compile scripts/run-conformance.py Tests/Conformance/fixtures/provider.py Tests/Conformance/fixtures/clojure_native_provider.py Tests/Conformance/fixtures/javascript_native_provider.py Tests/Conformance/fixtures/lua_native_provider.py Tests/Conformance/fixtures/python_native_provider.py Tests/Conformance/fixtures/ruby_native_provider.py
     python3 -m unittest Tests/Conformance/test_runner.py
     python3 scripts/run-conformance.py --manifest Tests/Conformance/manifest.json --provider python3 Tests/Conformance/fixtures/provider.py --mode scaffold > build/conformance/scaffold.json
 
@@ -175,6 +223,16 @@ conformance-lua-native:
     mkdir -p build/conformance
     python3 scripts/run-conformance.py --manifest Tests/Conformance/manifest.json --category eval --category host --category error --category stdlib --strict --provider-timeout-seconds 30 --provider python3 Tests/Conformance/fixtures/lua_native_provider.py > build/conformance/lua-native.json
 
+conformance-python-native:
+    test -d dist/local/EcritumRuntime.xcframework
+    mkdir -p build/conformance
+    python3 scripts/run-conformance.py --manifest Tests/Conformance/manifest.json --category eval --category host --category error --category stdlib --category timeout --strict --provider-timeout-seconds 30 --provider python3 Tests/Conformance/fixtures/python_native_provider.py > build/conformance/python-native.json
+
+conformance-ruby-native:
+    test -d dist/local/EcritumRuntime.xcframework
+    mkdir -p build/conformance
+    python3 scripts/run-conformance.py --manifest Tests/Conformance/manifest.json --category eval --category host --category error --category stdlib --category timeout --strict --provider-timeout-seconds 30 --provider python3 Tests/Conformance/fixtures/ruby_native_provider.py > build/conformance/ruby-native.json
+
 test-facades-clojure:
     test -d dist/local/EcritumRuntime.xcframework
     mkdir -p build/facades
@@ -187,7 +245,7 @@ conformance-clojure-facades:
 
 security:
     mkdir -p build/security
-    python3 -m py_compile scripts/check-security-static.py scripts/run-security-abuse.py scripts/check-parser-abuse.py Tests/Security/fixtures/abuse_provider.py Tests/Security/fixtures/javascript_abuse_provider.py Tests/Security/fixtures/lua_abuse_provider.py
+    python3 -m py_compile scripts/check-security-static.py scripts/run-security-abuse.py scripts/check-parser-abuse.py Tests/Security/fixtures/abuse_provider.py Tests/Security/fixtures/javascript_abuse_provider.py Tests/Security/fixtures/lua_abuse_provider.py Tests/Security/fixtures/python_abuse_provider.py Tests/Security/fixtures/ruby_abuse_provider.py
     python3 -m unittest Tests/Security/test_security_baseline.py
     just test-security-static
     just test-security-abuse
@@ -216,6 +274,16 @@ security-lua:
     test -d dist/local/EcritumRuntime.xcframework
     mkdir -p build/security
     python3 scripts/run-security-abuse.py --manifest Tests/Security/abuse-manifest.json --strict --provider-timeout-seconds 30 --provider python3 Tests/Security/fixtures/lua_abuse_provider.py > build/security/lua.json
+
+security-python:
+    test -d dist/local/EcritumRuntime.xcframework
+    mkdir -p build/security
+    python3 scripts/run-security-abuse.py --manifest Tests/Security/abuse-manifest.json --strict --provider-timeout-seconds 30 --provider python3 Tests/Security/fixtures/python_abuse_provider.py > build/security/python.json
+
+security-ruby:
+    test -d dist/local/EcritumRuntime.xcframework
+    mkdir -p build/security
+    python3 scripts/run-security-abuse.py --manifest Tests/Security/abuse-manifest.json --strict --provider-timeout-seconds 30 --provider python3 Tests/Security/fixtures/ruby_abuse_provider.py > build/security/ruby.json
 
 # Parser-abuse-equivalent gate until eval/value/error/callback fuzz surfaces exist.
 test-security-fuzz:
@@ -267,6 +335,21 @@ test-native-eval-smoke:
     clang -I Sources/CEcritum/include -I build/native/macos-arm64/include/private scripts/ecritum_runtime_wrapper.c Tests/C/native_eval_smoke.c -L build/native/macos-arm64 -lecritum -o build/c-abi/native_eval_smoke
     DYLD_LIBRARY_PATH=build/native/macos-arm64 build/c-abi/native_eval_smoke
 
+test-python-native-probe:
+    test -f {{native_python_probe_stable_dir}}/libecritum.dylib
+    mkdir -p build/c-abi
+    clang -I {{native_python_probe_private_headers_dir}} Tests/C/native_python_probe.c -L {{native_python_probe_stable_dir}} -lecritum -o build/c-abi/native_python_probe
+    DYLD_LIBRARY_PATH={{native_python_probe_stable_dir}} build/c-abi/native_python_probe
+
+test-ruby-probe-java:
+    mvn -s {{maven_settings}} -f {{maven_project}} -Pruby-probe -Dtest=RubyProbeEvaluatorTest test
+
+test-ruby-native-probe:
+    test -f {{native_ruby_probe_stable_dir}}/libecritum.dylib
+    mkdir -p build/c-abi
+    clang -I {{native_ruby_probe_private_headers_dir}} Tests/C/native_ruby_probe.c -L {{native_ruby_probe_stable_dir}} -lecritum -o build/c-abi/native_ruby_probe
+    DYLD_LIBRARY_PATH={{native_ruby_probe_stable_dir}} build/c-abi/native_ruby_probe
+
 test-javascript-native-smoke: test-native-eval-smoke
 
 test-lua-native-smoke: test-native-eval-smoke
@@ -299,7 +382,7 @@ test-lifecycle-leak-smoke:
         binary="dist/local/EcritumRuntime.xcframework/$slice/EcritumRuntime.framework/EcritumRuntime"; \
         leaks --atExit -- build/c-abi/framework_lifecycle_smoke "$binary"
 
-test: plan-check conformance security test-swift-auto test-java test-c-abi-lifecycle test-c-abi-asan test-c-abi-host-registration test-c-abi-host-registration-asan test-c-abi-eval test-c-abi-eval-asan test-native-eval-smoke test-native-eval-smoke-asan test-xcframework-eval-smoke test-c-abi-policy-config test-c-abi-policy-config-asan check-abi test-release-tools license-report check-dep-delta test-examples-auto
+test: plan-check conformance security test-swift-auto test-java test-c-abi-lifecycle test-c-abi-asan test-c-abi-host-registration test-c-abi-host-registration-asan test-c-abi-eval test-c-abi-eval-asan test-native-eval-smoke test-native-eval-smoke-asan test-xcframework-eval-smoke test-c-abi-policy-config test-c-abi-policy-config-asan check-abi conformance-python-native security-python conformance-ruby-native security-ruby test-release-tools license-report check-dep-delta test-examples-auto
 
 test-m3-002b: native test-native-eval-smoke test-native-eval-smoke-asan xcframework test-xcframework-eval-smoke check-abi license-report check-dep-delta
 
@@ -312,6 +395,22 @@ test-javascript-xcframework-smoke: test-swift
 bench-lua-first-eval:
     test -d dist/local/EcritumRuntime.xcframework
     python3 scripts/measure-first-eval.py --name lua-first-eval --language lua --source "return 40 + 2" --source-name bench-first-eval.lua --runs 10 > build/perf/lua-first-eval.json
+
+bench-python-first-eval:
+    test -d dist/local/EcritumRuntime.xcframework
+    python3 scripts/measure-first-eval.py --name python-first-eval --language python --source "40 + 2" --source-name bench-first-eval.py --runs 10 > build/perf/python-first-eval.json
+
+bench-python-rss:
+    test -d dist/local/EcritumRuntime.xcframework
+    python3 scripts/measure-eval-rss.py --name python-eval-rss --language python --source "40 + 2" --source-name bench-eval-rss.py --runs 10 > build/perf/python-eval-rss.json
+
+bench-ruby-first-eval:
+    test -d dist/local/EcritumRuntime.xcframework
+    python3 scripts/measure-first-eval.py --name ruby-first-eval --language ruby --source "40 + 2" --source-name bench-first-eval.rb --runs 10 > build/perf/ruby-first-eval.json
+
+bench-ruby-rss:
+    test -d dist/local/EcritumRuntime.xcframework
+    python3 scripts/measure-eval-rss.py --name ruby-eval-rss --language ruby --source "40 + 2" --source-name bench-eval-rss.rb --runs 10 > build/perf/ruby-eval-rss.json
 
 test-m5-001: native test-java test-native-eval-smoke xcframework test-swift conformance-lua-native security-lua check-abi inspect size bench-lua-first-eval license-report check-dep-delta
 
@@ -358,7 +457,49 @@ test-release-consumer-smoke artifact_url="" checksum="" release_zip="" use_defau
     if [ "{{manifest_only}}" = "1" ]; then args+=(--manifest-only); fi; \
     python3 scripts/test-release-consumer-smoke.py "${args[@]}"
 
-examples: example-swift example-c packaged-app-smoke
+# Build, run, and assert the expected output of a SwiftPM example under
+# Examples/<name>. The example must reference the local artifact like SwiftHost
+# (package path "../..") and ship an expected-output.txt fixture matching its
+# README. Output is compared byte-for-byte so CI fails on any drift.
+_example-extended name:
+    @test -d dist/local/EcritumRuntime.xcframework || { echo "missing dist/local/EcritumRuntime.xcframework; run mise exec -- just xcframework first" >&2; exit 1; }
+    @test -f "Examples/{{name}}/expected-output.txt" || { echo "missing Examples/{{name}}/expected-output.txt" >&2; exit 1; }
+    @cd "Examples/{{name}}" && swift package reset
+    @cd "Examples/{{name}}" && swift build --quiet
+    @slice="macos-$(uname -m)"; \
+    binary="Examples/{{name}}/.build/$(uname -m)-apple-macosx/debug/{{name}}"; \
+    actual="$(DYLD_FRAMEWORK_PATH="dist/local/EcritumRuntime.xcframework/$slice" "$binary")"; \
+    expected="$(cat "Examples/{{name}}/expected-output.txt")"; \
+    if [ "$actual" != "$expected" ]; then \
+        echo "Example {{name}} output mismatch" >&2; \
+        echo "--- expected ---" >&2; printf '%s\n' "$expected" >&2; \
+        echo "--- actual ---" >&2; printf '%s\n' "$actual" >&2; \
+        exit 1; \
+    fi; \
+    printf '%s\n' "$actual"
+
+example-ruby-template-renderer:
+    @just _example-extended RubyTemplateRenderer
+
+example-multi-language-host:
+    @just _example-extended MultiLanguageHost
+
+example-clojure-notebook:
+    @just _example-extended ClojureNotebook
+
+example-javascript-automation:
+    @just _example-extended JavaScriptAutomation
+
+example-lua-rules-engine:
+    @just _example-extended LuaRulesEngine
+
+example-python-text-processing:
+    @just _example-extended PythonTextProcessing
+
+# Real-use-case examples, one per language, each asserting its expected output.
+examples-extended: example-ruby-template-renderer example-multi-language-host example-clojure-notebook example-javascript-automation example-lua-rules-engine example-python-text-processing
+
+examples: example-swift example-c packaged-app-smoke examples-extended
 
 test-examples-auto:
     @if [ -d dist/local/EcritumRuntime.xcframework ]; then \
@@ -433,7 +574,7 @@ check-public-signing artifact release_zip notary_submit_json notary_log_json sta
     if [ -n "{{package_manifest}}" ]; then args+=(--package-manifest "{{package_manifest}}"); fi; \
     python3 scripts/check-public-signing.py "${args[@]}"
 
-perf-baseline: size bench-cold-start bench-swift-cold-start bench-idle-rss bench-first-eval check-dep-delta
+perf-baseline: size bench-cold-start bench-swift-cold-start bench-idle-rss bench-first-eval bench-python-first-eval bench-python-rss bench-ruby-first-eval bench-ruby-rss check-dep-delta
 
 perf: perf-baseline
 

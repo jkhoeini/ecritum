@@ -23,6 +23,11 @@ The accepted next-release requirement is:
 > needed to run Clojure, JavaScript, Lua, Python, and Ruby scripts without
 > external GraalVM, JDK, Node, Python, Ruby, or Clojure installs.
 
+Status as of M12: Python has local default-artifact support, but Ruby is not
+currently supported in public artifacts. Ruby remains blocked by release
+inventory/tooling, release-shape packaging proof, old-probe cleanup, public
+API work, and security gates.
+
 The same release intentionally keeps Python and Ruby package support minimal.
 The project does not want to support `pip`, RubyGems, third-party package
 directories, package downloads, package installs, native extensions, native

@@ -69,6 +69,8 @@ class LicenseTextsTest(unittest.TestCase):
         self.assertTrue(payload["ok"])
         self.assertIn("GPL-2.0-only WITH Classpath-exception-2.0", payload["requiredLicenseIds"])
         self.assertIn("MIT", payload["requiredLicenseIds"])
+        self.assertIn("PSF-2.0", payload["requiredLicenseIds"])
+        self.assertIn("LicenseRef-Bouncy-Castle", payload["requiredLicenseIds"])
         self.assertTrue(payload["firstPartyLicenseRequired"])
 
     def test_fails_when_required_license_text_file_is_missing(self):
@@ -157,9 +159,74 @@ class LicenseTextsTest(unittest.TestCase):
 
         self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
 
+    # ---- M12-002 Slice 2: Ruby (TruffleRuby) shipped in the default artifact ----
+
+    def test_default_bundle_ships_bsd_texts_for_truffleruby(self):
+        # M12-002 Slice 2: BSD-2-Clause and BSD-3-Clause are now SHIPPED license
+        # texts (TruffleRuby) carried in the default bundle/manifest, and EPL-2.0
+        # is now a shipped requirement, not merely test scope.
+        completed = self.run_check()
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        manifest = json.loads((self.bundle / "manifest.json").read_text())
+        ids = {item["id"] for item in manifest["licenseTexts"]}
+        self.assertIn("BSD-2-Clause", ids)
+        self.assertIn("BSD-3-Clause", ids)
+        payload = json.loads(completed.stdout)
+        self.assertIn("BSD-2-Clause", payload["requiredLicenseIds"])
+        self.assertIn("BSD-3-Clause", payload["requiredLicenseIds"])
+        self.assertIn("EPL-2.0", payload["requiredLicenseIds"])
+
+    def test_fails_when_new_bsd_text_missing(self):
+        # BSD-3-Clause must be present in the default bundle for the shipped
+        # TruffleRuby coordinates.
+        (self.bundle / "BSD-3-Clause.txt").unlink()
+        report = report_for([package("dev.truffleruby:truffleruby", "shipped", "BSD-3-Clause")])
+        completed = self.run_check_with_report(report)
+
+        self.assertEqual(completed.returncode, 1)
+        self.assertIn("missing manifest license text BSD-3-Clause", completed.stdout)
+
+    def test_fails_when_bsd_text_hash_stale(self):
+        (self.bundle / "BSD-2-Clause.txt").write_text("stale\n")
+        report = report_for([package("dev.truffleruby.internal:resources", "shipped", "BSD-2-Clause AND BSD-3-Clause")])
+        completed = self.run_check_with_report(report)
+
+        self.assertEqual(completed.returncode, 1)
+        self.assertIn("license text hash mismatch for BSD-2-Clause", completed.stdout)
+
+    def test_real_default_report_with_ruby_passes(self):
+        # End-to-end against the real default license report (now includes Ruby).
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(CHECK_LICENSE_TEXTS),
+                "--bundle",
+                str(self.bundle),
+                "--license-report-command",
+                sys.executable,
+                str(LICENSE_REPORT),
+            ],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        payload = json.loads(completed.stdout)
+        self.assertTrue(payload["ok"])
+        self.assertIn("BSD-2-Clause", payload["requiredLicenseIds"])
+        self.assertIn("BSD-3-Clause", payload["requiredLicenseIds"])
+
     def run_check(self, *extra_args):
         return subprocess.run(
-            [sys.executable, str(CHECK_LICENSE_TEXTS), "--bundle", str(self.bundle), *extra_args],
+            [
+                sys.executable,
+                str(CHECK_LICENSE_TEXTS),
+                "--bundle",
+                str(self.bundle),
+                *extra_args,
+            ],
             cwd=ROOT,
             text=True,
             stdout=subprocess.PIPE,

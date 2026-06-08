@@ -15,9 +15,13 @@
 #ifdef ECRITUM_RUNTIME_LANE_CORE
 #define ECRITUM_RUNTIME_HAS_JAVASCRIPT 0
 #define ECRITUM_RUNTIME_HAS_LUA 0
+#define ECRITUM_RUNTIME_HAS_PYTHON 0
+#define ECRITUM_RUNTIME_HAS_RUBY 0
 #else
 #define ECRITUM_RUNTIME_HAS_JAVASCRIPT 1
 #define ECRITUM_RUNTIME_HAS_LUA 1
+#define ECRITUM_RUNTIME_HAS_PYTHON 1
+#define ECRITUM_RUNTIME_HAS_RUBY 1
 #endif
 
 #ifdef ECRITUM_TESTING
@@ -1326,7 +1330,14 @@ static int create_standard_library_manifest_locked(ecritum_handle_slot_t *contex
     if (status == ECRITUM_OK) status = text_builder_append_network_rules(&builder, network_allowed ? network_rules : &empty_set);
     if (status == ECRITUM_OK) status = text_builder_append(&builder, "},\"clock\":{\"mode\":");
     if (status == ECRITUM_OK) status = text_builder_append_json_string(&builder, clock_allowed ? "allowed" : "denied");
-    if (status == ECRITUM_OK) status = text_builder_append(&builder, "},\"resourceLimits\":{}}");
+    if (status == ECRITUM_OK) status = text_builder_append(&builder, "},\"resourceLimits\":{");
+    if (status == ECRITUM_OK && config != NULL && config->limit_present[ECRITUM_LIMIT_EXECUTION_TIMEOUT_NANOS]) {
+        status = text_builder_append(&builder, "\"executionTimeoutNanos\":");
+        if (status == ECRITUM_OK) {
+            status = text_builder_append_u64(&builder, config->limits[ECRITUM_LIMIT_EXECUTION_TIMEOUT_NANOS]);
+        }
+    }
+    if (status == ECRITUM_OK) status = text_builder_append(&builder, "}}");
     if (status != ECRITUM_OK) {
         free(builder.data);
         return status;
@@ -4523,6 +4534,48 @@ static void *eval_worker_main(void *raw_work) {
             &backend_bytes_written
         );
 #endif
+#if ECRITUM_RUNTIME_HAS_PYTHON
+    } else if (backend_status == ECRITUM_OK && work->language != NULL && strcmp(work->language, "python") == 0) {
+        backend_status = ecritum_graal_eval_python_with_stdlib(
+            thread,
+            (char *)work->source,
+            work->source_len,
+            work->source_name,
+            work->source_name_len,
+            work->host_manifest,
+            work->host_manifest_len,
+            host_call_bridge_from_graal,
+            (size_t)work->runtime,
+            work->standard_library_manifest,
+            work->standard_library_manifest_len,
+            standard_library_bridge_from_graal,
+            (size_t)work->context,
+            (char *)backend_buffer,
+            sizeof(backend_buffer),
+            &backend_bytes_written
+        );
+#endif
+#if ECRITUM_RUNTIME_HAS_RUBY
+    } else if (backend_status == ECRITUM_OK && work->language != NULL && strcmp(work->language, "ruby") == 0) {
+        backend_status = ecritum_graal_eval_ruby_with_stdlib(
+            thread,
+            (char *)work->source,
+            work->source_len,
+            work->source_name,
+            work->source_name_len,
+            work->host_manifest,
+            work->host_manifest_len,
+            host_call_bridge_from_graal,
+            (size_t)work->runtime,
+            work->standard_library_manifest,
+            work->standard_library_manifest_len,
+            standard_library_bridge_from_graal,
+            (size_t)work->context,
+            (char *)backend_buffer,
+            sizeof(backend_buffer),
+            &backend_bytes_written
+        );
+#endif
     } else if (backend_status == ECRITUM_OK) {
         backend_status = ECRITUM_ERROR_RUNTIME_UNAVAILABLE;
     }
@@ -4585,6 +4638,12 @@ __attribute__((visibility("default"))) int ecritum_eval_start(
 #endif
 #if ECRITUM_RUNTIME_HAS_LUA
         && !view_equals(language, "lua")
+#endif
+#if ECRITUM_RUNTIME_HAS_PYTHON
+        && !view_equals(language, "python")
+#endif
+#if ECRITUM_RUNTIME_HAS_RUBY
+        && !view_equals(language, "ruby")
 #endif
     ) {
         return fail_with_error(ECRITUM_ERROR_RUNTIME_UNAVAILABLE, "eval_start", "language is not available in this artifact", out_error);

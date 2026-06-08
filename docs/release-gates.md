@@ -74,7 +74,13 @@ GitHub Release URL/checksum for normal tagged SwiftPM consumers.
 
 Final release validation must prove that a clean no-env SwiftPM consumer from
 the tag resolves the hosted default artifact, and that a packaged `.app` runs
-Clojure, JavaScript, Lua, Python, and Ruby from `EcritumRuntime.framework`.
+each supported language from `EcritumRuntime.framework`. The default artifact
+ships all five supported languages — Clojure, JavaScript, Lua, Python, and Ruby
+(see [ADR-0028](adr/0028-ruby-size-budget-and-llvm-exclusion.md)) — so the final
+matrix exercises every one of them. Ruby runs in pure-Ruby sandboxed mode with
+the TruffleRuby LLVM/Sulong backend excluded; like Python it is
+runtime-and-standard-library only (no RubyGems, Bundler, pip, third-party
+packages, or native/C extensions).
 
 Trusted macOS release mode is explicit:
 

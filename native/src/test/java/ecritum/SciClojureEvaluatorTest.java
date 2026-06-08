@@ -250,7 +250,7 @@ final class SciClojureEvaluatorTest {
 
     @Test
     void mapsStandardLibraryBridgeResultsThroughFacades() {
-        StandardLibraryPolicy policy = new StandardLibraryPolicy("read_only", List.of("/tmp/ecritum"), true, false);
+        StandardLibraryPolicy policy = new StandardLibraryPolicy("read_only", List.of("/tmp/ecritum"), true, false, null);
         StandardLibraryBridge bridge = (operation, arguments) -> switch (operation) {
             case "time.now" -> StandardLibraryResult.success("2026-06-06T00:00:00Z");
             case "fs.read_text" -> {
@@ -348,6 +348,7 @@ final class SciClojureEvaluatorTest {
         byte[] encodedValue = BackendResultCodec.encode(SciEvalResult.ok(List.of(1L, Map.of("nested", true))));
         SciEvalResult decodedValue = BackendResultCodec.decode(encodedValue);
         assertEquals(EcritumStatus.OK, decodedValue.status());
+        assertEquals("", decodedValue.language());
         assertEquals(List.of(1L, Map.of("nested", true)), decodedValue.value());
 
         SciEvalResult scriptError = SciEvalResult.scriptError("clojure", "wire.clj", "runtime", "wire.clj: boom");
@@ -362,6 +363,7 @@ final class SciClojureEvaluatorTest {
         byte[] encodedData = BackendResultCodec.encode(SciEvalResult.ok(new byte[] {0, 1, 2, -1}));
         SciEvalResult decodedData = BackendResultCodec.decode(encodedData);
         assertEquals(EcritumStatus.OK, decodedData.status());
+        assertEquals("", decodedData.language());
         assertArrayEquals(new byte[] {0, 1, 2, -1}, (byte[]) decodedData.value());
     }
 
@@ -389,7 +391,7 @@ final class SciClojureEvaluatorTest {
     }
 
     private void assertBridgeFailure(int status, String category) {
-        StandardLibraryPolicy policy = new StandardLibraryPolicy("denied", List.of(), true, false);
+        StandardLibraryPolicy policy = new StandardLibraryPolicy("denied", List.of(), true, false, null);
         SciEvalResult result = SciClojureEvaluator.evaluate(
             "(ecritum.time/now)",
             "bridge-failure.clj",

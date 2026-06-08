@@ -186,6 +186,7 @@ final class LuaEvaluatorTest {
     private Object ok(String source) {
         SciEvalResult result = LuaEvaluator.evaluate(source, "value-source.lua");
         assertEquals(EcritumStatus.OK, result.status(), result.message());
+        assertEquals("lua", result.language());
         return result.value();
     }
 

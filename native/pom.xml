@@ -15,10 +15,16 @@
     <junit.version>5.14.1</junit.version>
     <native.maven.plugin.version>1.1.1</native.maven.plugin.version>
     <build-helper.maven.plugin.version>3.6.1</build-helper.maven.plugin.version>
+    <maven.enforcer.plugin.version>3.6.2</maven.enforcer.plugin.version>
     <sci.version>0.12.51</sci.version>
     <graaljs.version>${graalvm.version}</graaljs.version>
+    <graalpy.version>${graalvm.version}</graalpy.version>
     <luaj.version>3.0.1</luaj.version>
+    <truffleruby.version>34.0.1</truffleruby.version>
     <ecritum.native.mainClass>ecritum.NativeCoreEntrypoints</ecritum.native.mainClass>
+    <ecritum.full>false</ecritum.full>
+    <ecritum.pythonProbe>false</ecritum.pythonProbe>
+    <ecritum.rubyProbe>false</ecritum.rubyProbe>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
 
@@ -65,6 +71,12 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
         <version>3.5.4</version>
+        <configuration>
+          <systemPropertyVariables>
+            <ecritum.pythonProbe>${ecritum.pythonProbe}</ecritum.pythonProbe>
+            <ecritum.rubyProbe>${ecritum.rubyProbe}</ecritum.rubyProbe>
+          </systemPropertyVariables>
+        </configuration>
       </plugin>
     </plugins>
   </build>
@@ -98,6 +110,9 @@
     </profile>
     <profile>
       <id>full</id>
+      <properties>
+        <ecritum.full>true</ecritum.full>
+      </properties>
       <dependencies>
         <dependency>
           <groupId>org.graalvm.polyglot</groupId>
@@ -114,6 +129,52 @@
           <groupId>org.luaj</groupId>
           <artifactId>luaj-jme</artifactId>
           <version>${luaj.version}</version>
+        </dependency>
+        <dependency>
+          <groupId>org.graalvm.polyglot</groupId>
+          <artifactId>python</artifactId>
+          <version>${graalpy.version}</version>
+          <type>pom</type>
+        </dependency>
+        <!--
+          ADR-0028: ship TruffleRuby in pure-Ruby mode. Exclude all six
+          org.graalvm.llvm:* (Sulong) artifacts. Proven safe because Ecritum
+          denies C-extensions and native access (ruby.cexts=false,
+          ruby.platform-native=false, allowNativeAccess(false)); TruffleRuby
+          still boots, evaluates, and enforces every denial without LLVM, and
+          this drops ~55 MB plus the LLVM bitcode interpreter attack surface.
+        -->
+        <dependency>
+          <groupId>dev.truffleruby</groupId>
+          <artifactId>truffleruby</artifactId>
+          <version>${truffleruby.version}</version>
+          <type>pom</type>
+          <exclusions>
+            <exclusion>
+              <groupId>org.graalvm.llvm</groupId>
+              <artifactId>llvm-native</artifactId>
+            </exclusion>
+            <exclusion>
+              <groupId>org.graalvm.llvm</groupId>
+              <artifactId>llvm-api</artifactId>
+            </exclusion>
+            <exclusion>
+              <groupId>org.graalvm.llvm</groupId>
+              <artifactId>llvm-language</artifactId>
+            </exclusion>
+            <exclusion>
+              <groupId>org.graalvm.llvm</groupId>
+              <artifactId>llvm-language-native</artifactId>
+            </exclusion>
+            <exclusion>
+              <groupId>org.graalvm.llvm</groupId>
+              <artifactId>llvm-language-native-resources</artifactId>
+            </exclusion>
+            <exclusion>
+              <groupId>org.graalvm.llvm</groupId>
+              <artifactId>llvm-language-nfi</artifactId>
+            </exclusion>
+          </exclusions>
         </dependency>
       </dependencies>
       <build>
@@ -144,6 +205,113 @@
                 <configuration>
                   <sources>
                     <source>src/full/test/java</source>
+                  </sources>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <profile>
+      <id>python-probe</id>
+      <properties>
+        <ecritum.pythonProbe>true</ecritum.pythonProbe>
+      </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>build-helper-maven-plugin</artifactId>
+            <version>${build-helper.maven.plugin.version}</version>
+            <executions>
+              <execution>
+                <id>add-python-probe-test-sources</id>
+                <phase>generate-test-sources</phase>
+                <goals>
+                  <goal>add-test-source</goal>
+                </goals>
+                <configuration>
+                  <sources>
+                    <source>src/python-probe/test/java</source>
+                  </sources>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <profile>
+      <id>ruby-probe</id>
+      <properties>
+        <truffleruby.version>34.0.1</truffleruby.version>
+        <ecritum.rubyProbe>true</ecritum.rubyProbe>
+      </properties>
+      <dependencies>
+        <dependency>
+          <groupId>org.graalvm.polyglot</groupId>
+          <artifactId>polyglot</artifactId>
+          <version>${graalvm.version}</version>
+        </dependency>
+        <dependency>
+          <groupId>dev.truffleruby</groupId>
+          <artifactId>truffleruby</artifactId>
+          <version>${truffleruby.version}</version>
+          <type>pom</type>
+        </dependency>
+      </dependencies>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-enforcer-plugin</artifactId>
+            <version>${maven.enforcer.plugin.version}</version>
+            <executions>
+              <execution>
+                <id>ban-full-ruby-probe-coactivation</id>
+                <phase>validate</phase>
+                <goals>
+                  <goal>enforce</goal>
+                </goals>
+                <configuration>
+                  <rules>
+                    <requireProperty>
+                      <property>ecritum.full</property>
+                      <regex>^false$</regex>
+                      <message>Do not co-activate the full and ruby-probe profiles. As of M12-002/ADR-0028 Ruby SHIPS in the full artifact via the production RubyEvaluator (ecritum_graal_eval_ruby_with_stdlib); the ruby-probe profile is the separate isolated denial-matrix validation harness (ecritum_graal_eval_ruby_probe) and must not be merged into the shipped full image.</message>
+                    </requireProperty>
+                  </rules>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>build-helper-maven-plugin</artifactId>
+            <version>${build-helper.maven.plugin.version}</version>
+            <executions>
+              <execution>
+                <id>add-ruby-probe-sources</id>
+                <phase>generate-sources</phase>
+                <goals>
+                  <goal>add-source</goal>
+                </goals>
+                <configuration>
+                  <sources>
+                    <source>src/ruby-probe/java</source>
+                  </sources>
+                </configuration>
+              </execution>
+              <execution>
+                <id>add-ruby-probe-test-sources</id>
+                <phase>generate-test-sources</phase>
+                <goals>
+                  <goal>add-test-source</goal>
+                </goals>
+                <configuration>
+                  <sources>
+                    <source>src/ruby-probe/test/java</source>
                   </sources>
                 </configuration>
               </execution>

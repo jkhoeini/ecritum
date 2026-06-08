@@ -1,0 +1,5 @@
+INVOICE INV-2026-0007 for Acme Robotics (USD)
+  Design retainer      1 x  2400.00 =    2400.00
+  Sandbox seats       12 x    45.00 =     540.00
+  Priority support     3 x   150.00 =     450.00
+  TOTAL                                    3390.00

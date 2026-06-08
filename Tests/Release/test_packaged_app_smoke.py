@@ -16,15 +16,17 @@ class PackagedAppSmokeContractTest(unittest.TestCase):
 
     def test_smoke_app_exercises_default_runtime_languages(self):
         self.assertIn("Ecritum.runtimeArtifactAvailable", self.app)
-        self.assertIn("languages: [.clojure, .javascript, .lua]", self.app)
+        self.assertIn("languages: [.clojure, .javascript, .lua, .python, .ruby]", self.app)
         self.assertIn('sourceName: "packaged-smoke.clj"', self.app)
         self.assertIn('sourceName: "packaged-smoke.js"', self.app)
         self.assertIn('sourceName: "packaged-smoke.lua"', self.app)
+        self.assertIn('sourceName: "packaged-smoke.py"', self.app)
+        self.assertIn('sourceName: "packaged-smoke.rb"', self.app)
         self.assertIn("ecritum.app.answer()", self.app)
-        self.assertIn("clojure=42 javascript=42 lua=42", self.app)
+        self.assertIn("clojure=42 javascript=42 lua=42 python=42 ruby=42", self.app)
 
     def test_script_runs_copied_app_with_clean_runtime_environment(self):
-        self.assertIn('success_line="EcritumSmokeApp version=0.1.0 clojure=42 javascript=42 lua=42"', self.script)
+        self.assertIn('success_line="EcritumSmokeApp version=0.1.0 clojure=42 javascript=42 lua=42 python=42 ruby=42"', self.script)
         run_command = re.search(r'output="\$\(env -i ([^\n]+)\)"', self.script)
         self.assertIsNotNone(run_command)
         self.assertIn('PATH="$run_root/empty-bin"', run_command.group(1))

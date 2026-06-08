@@ -88,7 +88,7 @@ cp -R "$license_texts_dir" "$resources_dir/Licenses"
 cp "$first_party_license_file" "$resources_dir/Licenses/Ecritum-LICENSE.txt"
 if [ "$implementation_profile" = "full" ]; then
   artifact_kind="default"
-  included_runtimes='["clojure","javascript","lua"]'
+  included_runtimes='["clojure","javascript","lua","python","ruby"]'
 else
   artifact_kind="internal"
   included_runtimes='["clojure"]'

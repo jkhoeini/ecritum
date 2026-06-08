@@ -7,7 +7,7 @@ Usage: test-packaged-app-smoke.sh [--artifact PATH] [--build-dir PATH]
 
 Build a minimal macOS .app consumer bundle, copy the packaged
 EcritumRuntime.framework into Contents/Frameworks, and verify the app runs
-Clojure, JavaScript, and Lua smoke scripts without DYLD_* runtime overrides.
+Clojure, JavaScript, Lua, Python, and Ruby smoke scripts without DYLD_* runtime overrides.
 USAGE
 }
 
@@ -43,7 +43,7 @@ run_app="$run_root/EcritumSmoke.app"
 run_executable="$run_app/Contents/MacOS/$executable_name"
 run_framework="$run_app/Contents/Frameworks/EcritumRuntime.framework"
 run_private_runtime="$run_framework/Resources/libecritum_graal.dylib"
-success_line="EcritumSmokeApp version=0.1.0 clojure=42 javascript=42 lua=42"
+success_line="EcritumSmokeApp version=0.1.0 clojure=42 javascript=42 lua=42 python=42 ruby=42"
 
 trap 'rm -rf "$run_root"' EXIT
 

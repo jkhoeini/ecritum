@@ -5,14 +5,20 @@ import os
 from pathlib import Path
 
 
+# Budgets raised for the five-language default artifact (Clojure+JS+Lua+Python+
+# Ruby) per ADR-0028. The owner accepted an 800 MB ceiling so the single default
+# artifact (ADR-0025) is not size-blocked. baseline_artifact_bytes and the
+# included-runtime sets reflect the measured five-language artifact integrated in
+# M12-002 (476,886,393 bytes measured locally); warn_artifact_bytes is set ~15%
+# above the measured baseline and remains well below the 800 MB hard cap.
 DEFAULT_BUDGETS = {
-    "max_artifact_bytes": 200_000_000,
+    "max_artifact_bytes": 800_000_000,
     "max_wrapper_bytes": 262_144,
-    "max_private_runtime_bytes": 190_000_000,
-    "warn_artifact_bytes": 175_000_000,
-    "baseline_artifact_bytes": 151_941_677,
+    "max_private_runtime_bytes": 760_000_000,
+    "warn_artifact_bytes": 548_000_000,
+    "baseline_artifact_bytes": 476_886_393,
 }
-DEFAULT_INCLUDED_RUNTIMES = ["clojure", "javascript", "lua"]
+DEFAULT_INCLUDED_RUNTIMES = ["clojure", "javascript", "lua", "python", "ruby"]
 PROFILE_RUNTIMES = {
     "core": ["clojure"],
     "full": DEFAULT_INCLUDED_RUNTIMES,

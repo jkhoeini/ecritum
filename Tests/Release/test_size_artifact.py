@@ -44,7 +44,7 @@ class SizeArtifactTest(unittest.TestCase):
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["artifactKind"], "default")
         self.assertEqual(payload["implementationProfile"], "full")
-        self.assertEqual(payload["includedRuntimes"], ["clojure", "javascript", "lua"])
+        self.assertEqual(payload["includedRuntimes"], ["clojure", "javascript", "lua", "python", "ruby"])
         self.assertEqual(payload["violations"], [])
 
     def test_legacy_full_metadata_is_accepted_until_artifact_rebuild(self):
@@ -67,7 +67,7 @@ class SizeArtifactTest(unittest.TestCase):
         self.assertEqual(completed.returncode, 1)
         payload = json.loads(completed.stdout)
         self.assertIn("artifactKind 'internal' is not 'default'", payload["violations"])
-        self.assertIn("includedRuntimes missing required default runtimes: javascript, lua", payload["violations"])
+        self.assertIn("includedRuntimes missing required default runtimes: javascript, lua, python, ruby", payload["violations"])
 
     def test_missing_private_runtime_is_a_violation(self):
         self.private_runtime.unlink()
@@ -120,7 +120,7 @@ class SizeArtifactTest(unittest.TestCase):
             "artifactKind": "default",
             "formatVersion": 1,
             "implementationProfile": "full",
-            "includedRuntimes": ["clojure", "javascript", "lua"],
+            "includedRuntimes": ["clojure", "javascript", "lua", "python", "ruby"],
         }) + "\n")
 
 

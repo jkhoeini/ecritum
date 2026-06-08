@@ -4,8 +4,8 @@ import Foundation
 import PackageDescription
 
 let localRuntimePath = "dist/local/EcritumRuntime.xcframework"
-let defaultRuntimeURL = "https://github.com/jkhoeini/ecritum/releases/download/v0.2.0-alpha.1/EcritumRuntime.xcframework.zip"
-let defaultRuntimeChecksum = "edfe358e9e98a5133080e147a4069b42a9a8c20a5b1b917464113da61b17358e"
+let defaultRuntimeURL = "https://github.com/jkhoeini/ecritum/releases/download/v0.2.0-alpha.2/EcritumRuntime.xcframework.zip"
+let defaultRuntimeChecksum = "d49bd2e193d910d259ee1688a860ec87749f7e4020eb52b186dc220522a4747a"
 let packageDirectory = URL(fileURLWithPath: #filePath).deletingLastPathComponent().path
 let localRuntimeFullPath = packageDirectory + "/" + localRuntimePath
 let localRuntimeMode = ProcessInfo.processInfo.environment["ECRITUM_LOCAL_RUNTIME"]

@@ -668,6 +668,103 @@ final class EcritumEvalTests: XCTestCase {
         throw XCTSkip("requires local runtime artifact")
         #endif
     }
+
+    func testArtifactBackedPythonEvalReturnsNativeValuesAndErrors() async throws {
+        #if ECRITUM_HAS_RUNTIME_ARTIFACT
+        let runtime = try EcritumRuntime()
+        let context = try runtime.context()
+
+        let value = try await context.eval(EcritumScript(
+            "{'answer': 40 + 2, 'items': [1, 'two', True], 'nil': None, 'flag': True, 'ratio': 3.5, 'text': 'hello', 'blob': bytes([0, 1, 2, 255])}",
+            language: .python,
+            sourceName: "swift-artifact-smoke.py"
+        ))
+
+        XCTAssertEqual(value, .object([
+            "answer": .int(42),
+            "items": .array([.int(1), .string("two"), .bool(true)]),
+            "nil": .null,
+            "flag": .bool(true),
+            "ratio": .double(3.5),
+            "text": .string("hello"),
+            "blob": .data(Data([0, 1, 2, 255])),
+        ]))
+
+        do {
+            _ = try await context.eval(EcritumScript("raise RuntimeError('boom')", language: .python, sourceName: "swift-error.py"))
+            XCTFail("expected eval to throw")
+        } catch let error as EcritumError {
+            XCTAssertEqual(error.status, .script)
+            XCTAssertEqual(error.category, .runtime)
+            XCTAssertEqual(error.details?.language, "python")
+            XCTAssertEqual(error.details?.sourceName, "swift-error.py")
+        }
+
+        do {
+            _ = try await context.eval(EcritumScript("import socket\nsocket.socket()", language: .python, sourceName: "swift-permission.py"))
+            XCTFail("expected permission denial")
+        } catch let error as EcritumError {
+            XCTAssertEqual(error.status, .permissionDenied)
+            XCTAssertEqual(error.category, .permission)
+            XCTAssertEqual(error.details?.language, "python")
+            XCTAssertEqual(error.details?.sourceName, "swift-permission.py")
+        }
+        #else
+        throw XCTSkip("requires local runtime artifact")
+        #endif
+    }
+
+    func testArtifactBackedPythonEvalCallsRegisteredSwiftHostFunctions() async throws {
+        #if ECRITUM_HAS_RUNTIME_ARTIFACT
+        let runtime = try EcritumRuntime()
+        let app = try runtime.namespace(.init("app"))
+        try app.register(.init("answer")) { call in
+            XCTAssertEqual(try call.argumentCount(), 0)
+            return .int(42)
+        }
+        try app.register(.init("blob")) { _ in
+            .data(Data([0, 1, 2, 255]))
+        }
+        try app.register(.init("fail")) { _ in
+            throw EcritumError.callback(EcritumErrorDetails(
+                status: .callback,
+                category: .callback,
+                message: "token=SECRET",
+                operation: "host_callback"
+            ))
+        }
+        let context = try runtime.context()
+
+        let answer = try await context.eval(EcritumScript(
+            "ecritum.app.answer()",
+            language: .python,
+            sourceName: "swift-host-success.py"
+        ))
+        XCTAssertEqual(answer, .int(42))
+
+        let blob = try await context.eval(EcritumScript(
+            "ecritum.app.blob()",
+            language: .python,
+            sourceName: "swift-host-blob.py"
+        ))
+        XCTAssertEqual(blob, .data(Data([0, 1, 2, 255])))
+
+        do {
+            _ = try await context.eval(EcritumScript("ecritum.app.fail()", language: .python, sourceName: "swift-host-fail.py"))
+            XCTFail("expected callback failure")
+        } catch let error as EcritumError {
+            XCTAssertEqual(error.status, .callback)
+            XCTAssertEqual(error.category, .callback)
+            XCTAssertEqual(error.details?.operation, "eval")
+            XCTAssertEqual(error.details?.language, "python")
+            XCTAssertEqual(error.details?.sourceName, "swift-host-fail.py")
+            XCTAssertFalse(error.details?.message.contains("SECRET") ?? false)
+        }
+        _ = app
+        #else
+        throw XCTSkip("requires local runtime artifact")
+        #endif
+    }
 }
 
 private final class FakeEvalABI: EcritumLifecycleABI, EcritumEvalABI {

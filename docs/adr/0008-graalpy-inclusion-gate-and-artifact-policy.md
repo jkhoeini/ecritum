@@ -120,6 +120,172 @@ as omitting SSL, digest, compression libraries, native POSIX, Java inet,
 platform access, and automatic async actions, but only after each omitted
 capability is matched to Ecritum's product surface and abuse tests.
 
+## M11-001 Probe Evidence
+
+On 2026-06-08, M11-001 proved GraalPy is reachable from a GraalVM Native Image
+shared library, but did not promote Python to public Ecritum support.
+
+Coordinate evidence:
+
+- `org.graalvm.polyglot:python:25.0.2` resolves and is the non-deprecated
+  polyglot coordinate for the repo-pinned GraalVM line.
+- `org.graalvm.polyglot:python-community:25.0.2` also resolves, but its POM
+  name is `Python Community Deprecated Polyglot` and its description says to use
+  `org.graalvm.polyglot:python`.
+- Runtime dependency tree for `-Pfull,python-probe`:
+  `org.graalvm.polyglot:python:pom:25.0.2` ->
+  `org.graalvm.python:python:pom:25.0.2` ->
+  `python-language:jar:25.0.2` and `python-resources:jar:25.0.2`.
+- The resolved POMs declare UPL-1.0, MIT, and Python Software Foundation
+  License. The broader transitive graph also includes Truffle, ICU/XZ shaded
+  artifacts, NFI/libffi/Panama NFI, profiler tooling, and Bouncy Castle.
+
+JVM probe evidence:
+
+- `PythonEvaluatorProbeTest` runs only under `-Pfull,python-probe`.
+- `40 + 2` and `import json; json.loads(...)[...]` pass on the JVM.
+- The first run showed `import java` is available in GraalPy by default even
+  with `HostAccess.NONE`, `allowHostClassLookup(name -> false)`,
+  `PolyglotAccess.NONE`, `IOAccess.NONE`, no native access, no process access,
+  no thread creation, and no environment access.
+- M11-001 therefore adds a temporary lexical fail-closed guard for dangerous
+  Python surfaces and records `ECRITUM-DEBT-0015`. This is not sufficient for a
+  public support claim; M11-003 must replace or justify it with strict packaged
+  abuse evidence.
+
+Native Image probe evidence:
+
+- `mise exec -- just native-python-probe` built
+  `build/native/python-probe/macos-arm64/libecritum.dylib` with a private probe
+  entrypoint `ecritum_graal_eval_python_probe`.
+- The build included `python-language-25.0.2.jar` and
+  `python-resources-25.0.2.jar`, completed in 3m 40s total after review fixes,
+  reported peak RSS 17.58 GB, and produced a 366,780,208 byte dylib.
+- The current non-Python full dylib in `build/native/full/macos-arm64` is
+  151,597,440 bytes, so the probe delta is 215,182,768 bytes.
+- Native Image reported 5,215 resources in the image heap. No external Python
+  standard-library directory was copied into
+  `build/native/python-probe/macos-arm64`; the directory contains only the
+  probe dylib and generated private headers.
+- `mise exec -- just test-python-native-probe` executed the native dylib,
+  verified `40 + 2`, verified `import json`, and verified `import java` returns
+  permission denied through the probe.
+
+Decision from the probe:
+
+- GraalPy is technically feasible in the current GraalVM Native Image shared
+  library architecture.
+- M11-002 must wire the language-neutral C/Swift path before Python can leave
+  probe-only status, and M11-003 must replace the temporary denial guard with
+  strict packaged security, release inventory, license, size, first-eval,
+  cold-start, and RSS evidence before any public support claim.
+- The likely packaging strategy for the single default artifact is embedded
+  GraalPy resources inside `libecritum_graal.dylib`, packaged as the private
+  runtime dylib inside `EcritumRuntime.framework/Resources/`. External Python
+  resource directories remain rejected unless a later ADR accepts the deployment
+  cost.
+
+## M11-002 Public-Path Evidence
+
+On 2026-06-08, M11-002 wired Python into Ecritum's existing public eval path for
+local default artifacts, but still did not promote Python to public release
+support.
+
+Implementation evidence:
+
+- The full/default Native Image profile includes
+  `org.graalvm.polyglot:python:${graalpy.version}`.
+- The private Native Image entrypoint
+  `ecritum_graal_eval_python_with_stdlib` is exported and tracked in the ABI
+  inventory as a private symbol. No new public C ABI symbol is required.
+- The public `ecritum_eval_start` language string path dispatches `"python"`
+  through the packaged runtime when the full/default artifact is present.
+- Swift can request `.python` through the existing `EcritumRuntime` and
+  `EcritumScript` APIs.
+- Python values, host callbacks, callback failures, script errors, and default
+  Ecritum stdlib facades have Java unit coverage. Actual Python module values
+  are rejected as unsupported result types; only the `__main__` no-result
+  sentinel maps to `null`.
+- Local artifact metadata now records included runtimes as Clojure, JavaScript,
+  Lua, and Python.
+
+Release-boundary evidence:
+
+- The checked-in hosted SwiftPM default still points at the public
+  `v0.2.0-alpha.1` artifact, which contains Clojure, JavaScript, and Lua only.
+- `scripts/test-release-consumer-smoke.py` now distinguishes local
+  four-runtime artifacts from the hosted three-runtime default so release smoke
+  tests cannot accidentally claim hosted Python support before a new Python
+  prerelease is published.
+- Public Python support remains blocked by `ECRITUM-DEBT-0015` and M11-003.
+  The temporary lexical denial guard is not a sufficient public sandbox.
+
+Verification evidence:
+
+- `mise exec -- just native` -> PASS; generated a 366.83 MB private native
+  runtime with 5,215 resources and `_ecritum_graal_eval_python_with_stdlib`.
+- `mise exec -- just xcframework && mise exec -- just package-artifact &&
+  mise exec -- just package-artifact-verify` -> PASS; package checksum
+  `eb3bef4e07474e4824734f220204a04b8c8ae1edd13cb1c24d73280de7e85e56`.
+- `mise exec -- just size` -> PASS; artifact 365,350,906 bytes, private runtime
+  364,715,584 bytes, wrapper 147,600 bytes.
+- `mise exec -- just inspect` -> PASS; artifact metadata includes Clojure,
+  JavaScript, Lua, and Python and embedded runtime evidence includes GraalPy.
+- `mise exec -- just conformance-python-native` -> PASS.
+- `mise exec -- just test-swift` -> PASS, 67 tests.
+- `mise exec -- just license-report-strict && mise exec -- just
+  check-dep-delta && mise exec -- just check-license-texts` -> PASS.
+- `mise exec -- just test` -> PASS.
+- Claude post-change review returned no blockers. Follow-ups are assigned to
+  M11-003: broaden abuse probes, prove Python timeout/resource behavior, add
+  stdlib conformance, and capture first-eval/RSS metrics.
+
+## M11-003 Security And Metrics Evidence
+
+On 2026-06-08, M11-003 added the Python public-support gates that M11-002 left
+open for local artifacts. This still does not publish a hosted Python-capable
+SwiftPM artifact or update public docs; those release claims remain M14 work.
+
+Accepted enforcement mechanism:
+
+- GraalPy `Context` creation stays deny-by-default across host access, host
+  class lookup/loading, raw Polyglot access, IO, native access, process
+  creation, thread creation, environment access, inner context options, and
+  value sharing.
+- The Python adapter installs an Ecritum-owned sandbox prelude before user code.
+  It replaces dangerous builtins including `__import__`, `open`, `eval`, `exec`,
+  `compile`, `input`, and `breakpoint` with a permission-denied function.
+- Lexical deny patterns remain as defense in depth for high-risk obvious source
+  forms, but they are not the primary public-support sandbox.
+- `executionTimeoutNanos` from the effective C runtime/context configuration is
+  serialized into the private standard-library manifest. The Python evaluator
+  consumes it with GraalVM resource limits and a watchdog that interrupts the
+  context, mapping resource-exhausted/interrupted/cancelled execution to
+  `ECRITUM_ERROR_TIMEOUT`.
+- If future strict Python abuse probes discover a denial bypass, Python remains
+  unreleased until a stronger enforcement mechanism closes the bypass or a new
+  ADR explicitly narrows the Python support claim.
+
+Verification evidence:
+
+- `mise exec -- just conformance-python-native` -> PASS; 14 passed, 0 failed,
+  0 pending, strict mode. This covers eval, host callbacks, script errors,
+  stdlib facades, filesystem allowed-root/default-deny, HTTP default-deny, and
+  timeout.
+- `mise exec -- just security-python` -> PASS; 68 passed, 0 failed, 0 pending,
+  strict mode.
+- `mise exec -- just test-native-eval-smoke` and `mise exec -- just
+  test-native-eval-smoke-asan` -> PASS; C smoke includes Python timeout and
+  post-timeout recovery.
+- `mise exec -- just bench-python-first-eval` -> PASS; p50 49.353 ms, p95
+  59.122 ms across 10 runs.
+- `mise exec -- just bench-python-rss` -> PASS; post-eval RSS p50 218,480,640
+  bytes and p95 228,360,192 bytes across 10 runs.
+- `mise exec -- just inspect` -> PASS; local artifact metadata includes Clojure,
+  JavaScript, Lua, and Python and embedded runtime evidence includes GraalPy.
+- `mise exec -- just size` -> PASS; artifact 365,383,882 bytes, private runtime
+  364,748,512 bytes, wrapper 147,648 bytes.
+
 ## Consequences
 
 M6-001 is an inclusion gate, not a support implementation. It can complete with

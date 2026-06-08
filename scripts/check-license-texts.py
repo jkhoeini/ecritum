@@ -13,15 +13,28 @@ EXPECTED_TEXTS = {
         "sha256": "11a8fe0c63dcff8bd8674b89a5895dfbcf5f7e5453cf0a33566c4b3fb64e404c",
         "source": "GraalVM Community 25.0.2 LICENSE_NATIVEIMAGE.txt",
     },
+    "BSD-2-Clause": {
+        "file": "BSD-2-Clause.txt",
+        "sha256": "f6036f79d054f42e11f2dd52458b4d2282e901d197955e598bf1a23600280cf0",
+        "source": "https://spdx.org/licenses/BSD-2-Clause.txt (dev.truffleruby:truffleruby:34.0.1 redistribution)",
+    },
+    "BSD-3-Clause": {
+        "file": "BSD-3-Clause.txt",
+        "sha256": "9acc4bc871a4742550158e3696dcb381953172ef808d04ca248184f9f6322712",
+        "source": "https://spdx.org/licenses/BSD-3-Clause.txt (dev.truffleruby:truffleruby:34.0.1 redistribution)",
+    },
     "EPL-1.0": {
         "file": "EPL-1.0.txt",
         "sha256": "cc07bd2bd6ba843a9a2865ed891d5a3b5835a64bab6fa90945403ee53965d46f",
         "source": "org.babashka:sci:0.12.51 META-INF/leiningen/org.babashka/sci/LICENSE",
     },
+    # M12-002 Slice 2: EPL-2.0 is now a SHIPPED license carried by the
+    # dev.truffleruby:* artifacts (TruffleRuby), not merely a test-scope license.
+    # Provenance is cited from TruffleRuby redistribution, not junit.
     "EPL-2.0": {
         "file": "EPL-2.0.txt",
         "sha256": "5aa4cd44c111add178d1c2e2fe36d58a484012c80167df925f826cd64d411bf0",
-        "source": "org.junit.jupiter:junit-jupiter:5.14.1 META-INF/LICENSE.md",
+        "source": "dev.truffleruby:truffleruby:34.0.1 Eclipse Public License 2.0 (TruffleRuby redistribution)",
     },
     "ICU": {
         "file": "ICU.txt",
@@ -32,6 +45,16 @@ EXPECTED_TEXTS = {
         "file": "MIT.txt",
         "sha256": "c3b1b78bc8bd3ea13aa4bc9778442d16560270afa235006d816e5e88cef24db4",
         "source": "https://spdx.org/licenses/MIT.txt",
+    },
+    "PSF-2.0": {
+        "file": "GraalVM-THIRD-PARTY-LICENSES.txt",
+        "sha256": "2894dad2ce3342888a1d224be01ed16fc1167f8b70910944e03e10c3889836b4",
+        "source": "GraalVM Community 25.0.2 THIRD_PARTY_LICENSE.txt Python Software Foundation License section",
+    },
+    "LicenseRef-Bouncy-Castle": {
+        "file": "GraalVM-THIRD-PARTY-LICENSES.txt",
+        "sha256": "2894dad2ce3342888a1d224be01ed16fc1167f8b70910944e03e10c3889836b4",
+        "source": "GraalVM Community 25.0.2 THIRD_PARTY_LICENSE.txt Bouncy Castle Licence section",
     },
     "UPL-1.0": {
         "file": "UPL-1.0.txt",

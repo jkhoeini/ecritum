@@ -1,0 +1,7 @@
+Text analysis:
+  characters = 152
+  headline = "RELEASE NOTES FOR ECRITUM"
+  lines = 4
+  topWord = "ecritum"
+  topWordCount = 2
+  words = 24

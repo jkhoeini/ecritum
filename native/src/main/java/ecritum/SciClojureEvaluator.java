@@ -105,7 +105,7 @@ final class SciClojureEvaluator {
                     requireRewrite.aliases()
                 )
             );
-            return SciEvalResult.ok(ClojureValueCodec.normalize(rawValue));
+            return SciEvalResult.ok("clojure", ClojureValueCodec.normalize(rawValue));
         } catch (Throwable ex) {
             StandardLibraryException facadeError = findStandardLibraryException(ex);
             if (facadeError != null) {

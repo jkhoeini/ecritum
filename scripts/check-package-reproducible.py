@@ -132,9 +132,9 @@ with tempfile.TemporaryDirectory(prefix="ecritum-package-repro-") as tmp:
         errors.append("first package JSON artifactKind is not default")
     if second.get("artifactKind") != "default":
         errors.append("second package JSON artifactKind is not default")
-    if first.get("includedRuntimes") != ["clojure", "javascript", "lua"]:
+    if first.get("includedRuntimes") != ["clojure", "javascript", "lua", "python", "ruby"]:
         errors.append("first package JSON includedRuntimes does not match the default runtime set")
-    if second.get("includedRuntimes") != ["clojure", "javascript", "lua"]:
+    if second.get("includedRuntimes") != ["clojure", "javascript", "lua", "python", "ruby"]:
         errors.append("second package JSON includedRuntimes does not match the default runtime set")
     errors.extend(validate_metadata(first_metadata))
 

@@ -12,7 +12,7 @@ NORMALIZED_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 NORMALIZED_TIMESTAMP_TEXT = "1980-01-01T00:00:00Z"
 RUNTIME_METADATA_NAME = "ecritum-runtime.json"
 LEGACY_LANE_METADATA_NAME = "ecritum-runtime-lane.json"
-DEFAULT_INCLUDED_RUNTIMES = ["clojure", "javascript", "lua"]
+DEFAULT_INCLUDED_RUNTIMES = ["clojure", "javascript", "lua", "python", "ruby"]
 PROFILE_RUNTIMES = {
     "core": ["clojure"],
     "full": DEFAULT_INCLUDED_RUNTIMES,
@@ -95,7 +95,7 @@ def runtime_metadata(artifact):
     missing = [runtime for runtime in DEFAULT_INCLUDED_RUNTIMES if runtime not in included]
     if artifact_kind != "default" or missing:
         raise SystemExit(
-            "default release artifact must include clojure, javascript, and lua; "
+            "default release artifact must include clojure, javascript, lua, python, and ruby; "
             + f"artifactKind={artifact_kind!r}, missing={missing}"
         )
     return {

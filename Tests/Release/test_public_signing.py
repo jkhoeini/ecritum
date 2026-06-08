@@ -117,7 +117,7 @@ class PublicSigningTest(unittest.TestCase):
             "artifactKind": "default",
             "formatVersion": 1,
             "implementationProfile": "full",
-            "includedRuntimes": ["clojure", "javascript", "lua"],
+            "includedRuntimes": ["clojure", "javascript", "lua", "python", "ruby"],
         }) + "\n")
 
     def write_release_zip(self):

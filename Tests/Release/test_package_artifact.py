@@ -55,7 +55,7 @@ class PackageArtifactTest(unittest.TestCase):
             "artifactKind": "default",
             "formatVersion": 1,
             "implementationProfile": "full",
-            "includedRuntimes": ["clojure", "javascript", "lua"],
+            "includedRuntimes": ["clojure", "javascript", "lua", "python", "ruby"],
         }) + "\n")
         (license_resources / "manifest.json").write_text('{"formatVersion":1,"licenseTexts":[]}\n')
         (license_resources / "Ecritum-LICENSE.txt").write_text("first party license\n")
@@ -85,7 +85,7 @@ class PackageArtifactTest(unittest.TestCase):
         self.assertEqual(first["checksum"].read_text().strip(), checksum)
         self.assertEqual(payload["artifactKind"], "default")
         self.assertEqual(payload["implementationProfile"], "full")
-        self.assertEqual(payload["includedRuntimes"], ["clojure", "javascript", "lua"])
+        self.assertEqual(payload["includedRuntimes"], ["clojure", "javascript", "lua", "python", "ruby"])
         self.assertTrue(any(item["path"] == "libecritum_graal.dylib" for item in payload["resourceInventory"]))
         self.assertEqual(payload["root"], "EcritumRuntime.xcframework")
         self.assertEqual(payload["slices"], ["macos-arm64"])
@@ -126,7 +126,7 @@ class PackageArtifactTest(unittest.TestCase):
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["violations"], [])
         self.assertEqual(payload["artifactKind"], "default")
-        self.assertEqual(payload["includedRuntimes"], ["clojure", "javascript", "lua"])
+        self.assertEqual(payload["includedRuntimes"], ["clojure", "javascript", "lua", "python", "ruby"])
 
     def test_legacy_full_metadata_packages_as_default_artifact(self):
         self.write_legacy_release_lane("full")
@@ -136,7 +136,7 @@ class PackageArtifactTest(unittest.TestCase):
 
         self.assertEqual(payload["artifactKind"], "default")
         self.assertEqual(payload["implementationProfile"], "full")
-        self.assertEqual(payload["includedRuntimes"], ["clojure", "javascript", "lua"])
+        self.assertEqual(payload["includedRuntimes"], ["clojure", "javascript", "lua", "python", "ruby"])
 
     def test_legacy_core_metadata_is_rejected_for_default_packaging(self):
         self.write_legacy_release_lane("core")
@@ -157,7 +157,7 @@ class PackageArtifactTest(unittest.TestCase):
         )
 
         self.assertNotEqual(completed.returncode, 0)
-        self.assertIn("default release artifact must include clojure, javascript, and lua", completed.stderr)
+        self.assertIn("default release artifact must include clojure, javascript, lua, python, and ruby", completed.stderr)
 
     def test_release_lane_environment_does_not_relabel_package(self):
         env = os.environ.copy()
@@ -471,12 +471,22 @@ class PackageArtifactTest(unittest.TestCase):
 
         source = smoke.main_swift()
 
-        self.assertIn("languages: [.clojure, .javascript, .lua]", source)
-        self.assertIn("clojure=42 javascript=42 lua=42", source)
+        self.assertIn("languages: [.clojure, .javascript, .lua, .python, .ruby]", source)
+        self.assertIn("clojure=42 javascript=42 lua=42 python=42 ruby=42", source)
         self.assertIn("language: .javascript", source)
         self.assertIn("release-consumer-smoke.js", source)
         self.assertIn("language: .lua", source)
         self.assertIn("release-consumer-smoke.lua", source)
+
+    def test_release_consumer_smoke_source_keeps_checked_in_hosted_default_at_current_release_set(self):
+        smoke = self.load_release_consumer_smoke()
+
+        source = smoke.main_swift(smoke.HOSTED_DEFAULT_INCLUDED_RUNTIMES)
+
+        self.assertIn("languages: [.clojure, .javascript, .lua]", source)
+        self.assertIn("clojure=42 javascript=42 lua=42", source)
+        self.assertNotIn(".python", source)
+        self.assertNotIn("python=42", source)
 
     def test_release_consumer_smoke_can_generate_exact_remote_dependency(self):
         smoke = self.load_release_consumer_smoke()
@@ -664,6 +674,7 @@ class PackageArtifactTest(unittest.TestCase):
         self.assertTrue(payload["ok"])
         self.assertTrue(payload["defaultPackageRuntime"])
         self.assertEqual(payload["binaryTargetPath"], "remote/archive/EcritumRuntime.xcframework.zip")
+        self.assertEqual(payload["expectedRuntimes"], ["clojure", "javascript", "lua"])
 
     def test_release_consumer_smoke_default_runtime_rejects_artifact_env(self):
         fixture = self.make_manifest_fixture("smoke-default-runtime-conflict")
@@ -749,7 +760,7 @@ class PackageArtifactTest(unittest.TestCase):
         expected_framework = (Path(artifact["path"]) / f"macos-{platform.machine()}" / "EcritumRuntime.framework").resolve()
         self.assertEqual(payload["downloadedFramework"], str(expected_framework))
         self.assertEqual(payload["artifactKind"], "default")
-        self.assertEqual(payload["includedRuntimes"], ["clojure", "javascript", "lua"])
+        self.assertEqual(payload["includedRuntimes"], ["clojure", "javascript", "lua", "python", "ruby"])
 
     def test_release_consumer_smoke_workspace_state_rejects_non_default_runtime_metadata(self):
         swift_build = self.root / "swift-build"
@@ -974,7 +985,7 @@ class PackageArtifactTest(unittest.TestCase):
         resources = framework / "Resources"
         resources.mkdir(parents=True, exist_ok=True)
         if included_runtimes is None:
-            included_runtimes = ["clojure", "javascript", "lua"]
+            included_runtimes = ["clojure", "javascript", "lua", "python", "ruby"]
         (resources / "ecritum-runtime.json").write_text(json.dumps({
             "artifactKind": artifact_kind,
             "formatVersion": 1,

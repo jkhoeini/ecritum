@@ -1,0 +1,7 @@
+Starting subtotal: $42.00
+Clojure: add $5.00 handling fee -> $47.00
+JavaScript: apply 8% tax -> $50.76
+Lua: $3.00 loyalty discount -> $47.76
+Python: round up to nearest dollar -> $48.00
+Ruby: add 2 cents rounding reconciliation -> $48.02
+Final total: $48.02

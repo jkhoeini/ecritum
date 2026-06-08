@@ -104,6 +104,21 @@ Python through GraalPy:
   native wheels/extensions, subprocess, raw sockets, direct host filesystem,
   and platform/native POSIX access unless ADR-008 proves denial or a narrow
   facade
+- accepted M11-003 enforcement: GraalPy contexts use deny-by-default GraalVM
+  permissions (`allowAllAccess(false)`, `HostAccess.NONE`, no host class
+  lookup/loading, `PolyglotAccess.NONE`, `IOAccess.NONE`, no native access, no
+  process creation, no thread creation, no environment access, no inner-context
+  options, no value sharing), an Ecritum-owned Python sandbox prelude replaces
+  dangerous builtins such as `__import__`, `open`, `eval`, `exec`, and
+  `compile`, resource limits/watchdog interruption enforce Python execution
+  timeout, and lexical deny patterns remain defense in depth rather than the
+  primary public sandbox.
+- escalation rule: if the strict Python abuse provider finds a bypass of direct
+  Java/Polyglot/native/process/filesystem/network/environment/package-loading
+  denial, Python support must remain unreleased. The team must either add a
+  stronger GraalPy enforcement mechanism, such as an accepted sandbox policy,
+  import hook, or runtime option that closes the bypass, or write a new ADR that
+  narrows/removes the Python support claim before release.
 
 Ruby through TruffleRuby:
 

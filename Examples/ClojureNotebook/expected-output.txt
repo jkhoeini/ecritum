@@ -1,0 +1,6 @@
+Notebook over 7 days of sales
+[1] count = 7
+[2] total = 891
+[3] max-day = 210
+[4] above-100 = 4
+[5] summary = {days: 7, peak: 210, total: 891}

@@ -160,6 +160,10 @@ def spdx_license_expression(license_name):
         "GNU General Public License, version 2, with the Classpath Exception": "GPL-2.0-only WITH Classpath-exception-2.0",
         "Unicode/ICU License": "ICU",
         "MIT License": "MIT",
+        "Python Software Foundation License": "PSF-2.0",
+        "Bouncy Castle Licence": "LicenseRef-Bouncy-Castle",
+        "New BSD License (3-clause BSD license)": "BSD-3-Clause",
+        "Simplified BSD License (2-clause BSD license)": "BSD-2-Clause",
     }
     known_spdx = set(mapping.values())
     if isinstance(license_name, (list, tuple)):
@@ -332,13 +336,25 @@ word_license = pom_license(m2 / "org" / "graalvm" / "sdk" / "word" / graal_versi
 polyglot_license = shipped_pom_license(m2 / "org" / "graalvm" / "polyglot" / "polyglot" / graal_version / f"polyglot-{graal_version}.pom", "org.graalvm.polyglot:polyglot")
 collections_license = shipped_pom_license(m2 / "org" / "graalvm" / "sdk" / "collections" / graal_version / f"collections-{graal_version}.pom", "org.graalvm.sdk:collections")
 js_language_license = shipped_pom_license(m2 / "org" / "graalvm" / "js" / "js-language" / graal_version / f"js-language-{graal_version}.pom", "org.graalvm.js:js-language")
+polyglot_python_license = shipped_pom_license(m2 / "org" / "graalvm" / "polyglot" / "python" / graal_version / f"python-{graal_version}.pom", "org.graalvm.polyglot:python")
+graal_python_license = shipped_pom_license(m2 / "org" / "graalvm" / "python" / "python" / graal_version / f"python-{graal_version}.pom", "org.graalvm.python:python")
+python_language_license = shipped_pom_license(m2 / "org" / "graalvm" / "python" / "python-language" / graal_version / f"python-language-{graal_version}.pom", "org.graalvm.python:python-language")
+python_resources_license = shipped_pom_license(m2 / "org" / "graalvm" / "python" / "python-resources" / graal_version / f"python-resources-{graal_version}.pom", "org.graalvm.python:python-resources")
 regex_license = shipped_pom_license(m2 / "org" / "graalvm" / "regex" / "regex" / graal_version / f"regex-{graal_version}.pom", "org.graalvm.regex:regex")
 truffle_api_license = shipped_pom_license(m2 / "org" / "graalvm" / "truffle" / "truffle-api" / graal_version / f"truffle-api-{graal_version}.pom", "org.graalvm.truffle:truffle-api")
+profiler_tool_license = shipped_pom_license(m2 / "org" / "graalvm" / "tools" / "profiler-tool" / graal_version / f"profiler-tool-{graal_version}.pom", "org.graalvm.tools:profiler-tool")
+shadowed_json_license = shipped_pom_license(m2 / "org" / "graalvm" / "shadowed" / "json" / graal_version / f"json-{graal_version}.pom", "org.graalvm.shadowed:json")
 icu4j_license = shipped_pom_license(m2 / "org" / "graalvm" / "shadowed" / "icu4j" / graal_version / f"icu4j-{graal_version}.pom", "org.graalvm.shadowed:icu4j")
 xz_license = shipped_pom_license(m2 / "org" / "graalvm" / "shadowed" / "xz" / graal_version / f"xz-{graal_version}.pom", "org.graalvm.shadowed:xz")
+truffle_nfi_license = shipped_pom_license(m2 / "org" / "graalvm" / "truffle" / "truffle-nfi" / graal_version / f"truffle-nfi-{graal_version}.pom", "org.graalvm.truffle:truffle-nfi")
+truffle_nfi_libffi_license = shipped_pom_license(m2 / "org" / "graalvm" / "truffle" / "truffle-nfi-libffi" / graal_version / f"truffle-nfi-libffi-{graal_version}.pom", "org.graalvm.truffle:truffle-nfi-libffi")
+truffle_nfi_panama_license = shipped_pom_license(m2 / "org" / "graalvm" / "truffle" / "truffle-nfi-panama" / graal_version / f"truffle-nfi-panama-{graal_version}.pom", "org.graalvm.truffle:truffle-nfi-panama")
 truffle_runtime_license = shipped_pom_license(m2 / "org" / "graalvm" / "truffle" / "truffle-runtime" / graal_version / f"truffle-runtime-{graal_version}.pom", "org.graalvm.truffle:truffle-runtime")
 jniutils_license = shipped_pom_license(m2 / "org" / "graalvm" / "sdk" / "jniutils" / graal_version / f"jniutils-{graal_version}.pom", "org.graalvm.sdk:jniutils")
 truffle_compiler_license = shipped_pom_license(m2 / "org" / "graalvm" / "truffle" / "truffle-compiler" / graal_version / f"truffle-compiler-{graal_version}.pom", "org.graalvm.truffle:truffle-compiler")
+bouncycastle_bcprov_license = shipped_pom_license(m2 / "org" / "bouncycastle" / "bcprov-jdk18on" / "1.78.1" / "bcprov-jdk18on-1.78.1.pom", "org.bouncycastle:bcprov-jdk18on")
+bouncycastle_bcpkix_license = shipped_pom_license(m2 / "org" / "bouncycastle" / "bcpkix-jdk18on" / "1.78.1" / "bcpkix-jdk18on-1.78.1.pom", "org.bouncycastle:bcpkix-jdk18on")
+bouncycastle_bcutil_license = shipped_pom_license(m2 / "org" / "bouncycastle" / "bcutil-jdk18on" / "1.78.1" / "bcutil-jdk18on-1.78.1.pom", "org.bouncycastle:bcutil-jdk18on")
 sci_license = pom_license(m2 / "org" / "babashka" / "sci" / "0.12.51" / "sci-0.12.51.pom", "org.babashka:sci", required=True)
 clojure_license = pom_license(m2 / "org" / "clojure" / "clojure" / "1.10.3" / "clojure-1.10.3.pom", "org.clojure:clojure", required=True)
 spec_alpha_license = pom_license(m2 / "org" / "clojure" / "spec.alpha" / "0.2.194" / "spec.alpha-0.2.194.pom", "org.clojure:spec.alpha", required=True)
@@ -347,11 +363,46 @@ edamame_license = pom_license(m2 / "borkdude" / "edamame" / "1.5.37" / "edamame-
 tools_reader_license = pom_license(m2 / "org" / "clojure" / "tools.reader" / "1.5.2" / "tools.reader-1.5.2.pom", "org.clojure:tools.reader", required=True)
 graal_locking_license = pom_license(m2 / "borkdude" / "graal.locking" / "0.0.2" / "graal.locking-0.0.2.pom", "borkdude:graal.locking", required=True)
 luaj_jme_license = shipped_pom_license(m2 / "org" / "luaj" / "luaj-jme" / "3.0.1" / "luaj-jme-3.0.1.pom", "org.luaj:luaj-jme")
+# M12-002 Slice 2: Ruby (TruffleRuby) is now a default shipped language with LLVM
+# EXCLUDED per ADR-0028. These are the seven net-new shipped coordinates Ruby adds
+# beyond the pre-Ruby 4-language baseline (truffle-api/regex/truffle-nfi*/
+# truffle-runtime/jniutils/truffle-compiler were already shipped via Python). The
+# six org.graalvm.llvm:* artifacts and org.graalvm.shadowed:antlr4 are NOT shipped
+# (antlr4 is transitive under the excluded llvm-language).
+truffleruby_version = "34.0.1"
+truffleruby_license = shipped_pom_license(m2 / "dev" / "truffleruby" / "truffleruby" / truffleruby_version / f"truffleruby-{truffleruby_version}.pom", "dev.truffleruby:truffleruby")
+truffleruby_runtime_license = shipped_pom_license(m2 / "dev" / "truffleruby" / "internal" / "runtime" / truffleruby_version / f"runtime-{truffleruby_version}.pom", "dev.truffleruby.internal:runtime")
+truffleruby_resources_license = shipped_pom_license(m2 / "dev" / "truffleruby" / "internal" / "resources" / truffleruby_version / f"resources-{truffleruby_version}.pom", "dev.truffleruby.internal:resources")
+truffleruby_annotations_license = shipped_pom_license(m2 / "dev" / "truffleruby" / "internal" / "annotations" / truffleruby_version / f"annotations-{truffleruby_version}.pom", "dev.truffleruby.internal:annotations")
+truffleruby_shared_license = shipped_pom_license(m2 / "dev" / "truffleruby" / "internal" / "shared" / truffleruby_version / f"shared-{truffleruby_version}.pom", "dev.truffleruby.internal:shared")
+truffleruby_joni_license = shipped_pom_license(m2 / "dev" / "truffleruby" / "shadowed" / "joni" / truffleruby_version / f"joni-{truffleruby_version}.pom", "dev.truffleruby.shadowed:joni")
+jcodings_license = shipped_pom_license(m2 / "org" / "graalvm" / "shadowed" / "jcodings" / graal_version / f"jcodings-{graal_version}.pom", "org.graalvm.shadowed:jcodings")
 if "SOURCE_DATE_EPOCH" in os.environ:
     created_at = dt.datetime.fromtimestamp(int(os.environ["SOURCE_DATE_EPOCH"]), dt.timezone.utc)
 else:
     created_at = dt.datetime.now(dt.timezone.utc)
 created = created_at.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+# The TruffleRuby resources package embeds the Ruby standard-library tree. The
+# denied runtime surface is recorded as a SEPARATE annotation object (never
+# appended to annotations[0].comment, whose ';'/'=' parser would corrupt on
+# tokens like 'ffi-fiddle'). Scope/license-source stay on annotations[0].
+truffleruby_resources_package = package(
+    "SPDXRef-Package-TruffleRuby-Resources",
+    "dev.truffleruby.internal:resources",
+    truffleruby_version,
+    "shipped",
+    license_names(truffleruby_resources_license),
+    created,
+    "https://github.com/oracle/truffleruby",
+    external_refs=[purl_ref(maven_purl("dev.truffleruby.internal:resources", truffleruby_version))],
+)
+truffleruby_resources_package["annotations"].append({
+    "annotationType": "OTHER",
+    "annotator": "Tool: scripts/license-report.py",
+    "annotationDate": created,
+    "comment": "ruby-denied-surface=rubygems,bundler,openssl,sockets,ffi-fiddle,native-extensions,native-so",
+})
 
 packages = [
     package(
@@ -417,6 +468,46 @@ packages = [
         external_refs=[purl_ref(maven_purl("org.graalvm.js:js-language", graal_version))],
     ),
     package(
+        "SPDXRef-Package-GraalPy-Polyglot",
+        "org.graalvm.polyglot:python",
+        graal_version,
+        "shipped",
+        license_names(polyglot_python_license),
+        created,
+        "https://github.com/oracle/graalpython",
+        external_refs=[purl_ref(maven_purl("org.graalvm.polyglot:python", graal_version))],
+    ),
+    package(
+        "SPDXRef-Package-GraalPy-Python-POM",
+        "org.graalvm.python:python",
+        graal_version,
+        "shipped",
+        license_names(graal_python_license),
+        created,
+        "https://github.com/oracle/graalpython",
+        external_refs=[purl_ref(maven_purl("org.graalvm.python:python", graal_version))],
+    ),
+    package(
+        "SPDXRef-Package-GraalPy-Language",
+        "org.graalvm.python:python-language",
+        graal_version,
+        "shipped",
+        license_names(python_language_license),
+        created,
+        "https://github.com/oracle/graalpython",
+        external_refs=[purl_ref(maven_purl("org.graalvm.python:python-language", graal_version))],
+    ),
+    package(
+        "SPDXRef-Package-GraalPy-Resources",
+        "org.graalvm.python:python-resources",
+        graal_version,
+        "shipped",
+        license_names(python_resources_license),
+        created,
+        "https://github.com/oracle/graalpython",
+        external_refs=[purl_ref(maven_purl("org.graalvm.python:python-resources", graal_version))],
+    ),
+    package(
         "SPDXRef-Package-GraalVM-Regex",
         "org.graalvm.regex:regex",
         graal_version,
@@ -437,6 +528,26 @@ packages = [
         external_refs=[purl_ref(maven_purl("org.graalvm.truffle:truffle-api", graal_version))],
     ),
     package(
+        "SPDXRef-Package-GraalVM-ProfilerTool",
+        "org.graalvm.tools:profiler-tool",
+        graal_version,
+        "shipped",
+        license_names(profiler_tool_license),
+        created,
+        "https://github.com/oracle/graal",
+        external_refs=[purl_ref(maven_purl("org.graalvm.tools:profiler-tool", graal_version))],
+    ),
+    package(
+        "SPDXRef-Package-GraalVM-ShadowedJSON",
+        "org.graalvm.shadowed:json",
+        graal_version,
+        "shipped",
+        license_names(shadowed_json_license),
+        created,
+        "https://github.com/oracle/graal",
+        external_refs=[purl_ref(maven_purl("org.graalvm.shadowed:json", graal_version))],
+    ),
+    package(
         "SPDXRef-Package-GraalVM-ICU4J",
         "org.graalvm.shadowed:icu4j",
         graal_version,
@@ -455,6 +566,36 @@ packages = [
         created,
         "https://tukaani.org/xz/java.html",
         external_refs=[purl_ref(maven_purl("org.graalvm.shadowed:xz", graal_version))],
+    ),
+    package(
+        "SPDXRef-Package-GraalVM-TruffleNFI",
+        "org.graalvm.truffle:truffle-nfi",
+        graal_version,
+        "shipped",
+        license_names(truffle_nfi_license),
+        created,
+        "https://github.com/oracle/graal",
+        external_refs=[purl_ref(maven_purl("org.graalvm.truffle:truffle-nfi", graal_version))],
+    ),
+    package(
+        "SPDXRef-Package-GraalVM-TruffleNFILibffi",
+        "org.graalvm.truffle:truffle-nfi-libffi",
+        graal_version,
+        "shipped",
+        license_names(truffle_nfi_libffi_license),
+        created,
+        "https://github.com/oracle/graal",
+        external_refs=[purl_ref(maven_purl("org.graalvm.truffle:truffle-nfi-libffi", graal_version))],
+    ),
+    package(
+        "SPDXRef-Package-GraalVM-TruffleNFIPanama",
+        "org.graalvm.truffle:truffle-nfi-panama",
+        graal_version,
+        "shipped",
+        license_names(truffle_nfi_panama_license),
+        created,
+        "https://github.com/oracle/graal",
+        external_refs=[purl_ref(maven_purl("org.graalvm.truffle:truffle-nfi-panama", graal_version))],
     ),
     package(
         "SPDXRef-Package-GraalVM-TruffleRuntime",
@@ -485,6 +626,36 @@ packages = [
         created,
         "https://github.com/oracle/graal",
         external_refs=[purl_ref(maven_purl("org.graalvm.truffle:truffle-compiler", graal_version))],
+    ),
+    package(
+        "SPDXRef-Package-BouncyCastle-BCProv",
+        "org.bouncycastle:bcprov-jdk18on",
+        "1.78.1",
+        "shipped",
+        license_names(bouncycastle_bcprov_license),
+        created,
+        "https://github.com/bcgit/bc-java",
+        external_refs=[purl_ref(maven_purl("org.bouncycastle:bcprov-jdk18on", "1.78.1"))],
+    ),
+    package(
+        "SPDXRef-Package-BouncyCastle-BCPKIX",
+        "org.bouncycastle:bcpkix-jdk18on",
+        "1.78.1",
+        "shipped",
+        license_names(bouncycastle_bcpkix_license),
+        created,
+        "https://github.com/bcgit/bc-java",
+        external_refs=[purl_ref(maven_purl("org.bouncycastle:bcpkix-jdk18on", "1.78.1"))],
+    ),
+    package(
+        "SPDXRef-Package-BouncyCastle-BCUtil",
+        "org.bouncycastle:bcutil-jdk18on",
+        "1.78.1",
+        "shipped",
+        license_names(bouncycastle_bcutil_license),
+        created,
+        "https://github.com/bcgit/bc-java",
+        external_refs=[purl_ref(maven_purl("org.bouncycastle:bcutil-jdk18on", "1.78.1"))],
     ),
     package(
         "SPDXRef-Package-SCI",
@@ -577,6 +748,67 @@ packages = [
         external_refs=[purl_ref(maven_purl("org.luaj:luaj-jme", "3.0.1"))],
     ),
     package(
+        "SPDXRef-Package-TruffleRuby",
+        "dev.truffleruby:truffleruby",
+        truffleruby_version,
+        "shipped",
+        license_names(truffleruby_license),
+        created,
+        "https://github.com/oracle/truffleruby",
+        external_refs=[purl_ref(maven_purl("dev.truffleruby:truffleruby", truffleruby_version))],
+    ),
+    package(
+        "SPDXRef-Package-TruffleRuby-Runtime",
+        "dev.truffleruby.internal:runtime",
+        truffleruby_version,
+        "shipped",
+        license_names(truffleruby_runtime_license),
+        created,
+        "https://github.com/oracle/truffleruby",
+        external_refs=[purl_ref(maven_purl("dev.truffleruby.internal:runtime", truffleruby_version))],
+    ),
+    truffleruby_resources_package,
+    package(
+        "SPDXRef-Package-TruffleRuby-Annotations",
+        "dev.truffleruby.internal:annotations",
+        truffleruby_version,
+        "shipped",
+        license_names(truffleruby_annotations_license),
+        created,
+        "https://github.com/oracle/truffleruby",
+        external_refs=[purl_ref(maven_purl("dev.truffleruby.internal:annotations", truffleruby_version))],
+    ),
+    package(
+        "SPDXRef-Package-TruffleRuby-Shared",
+        "dev.truffleruby.internal:shared",
+        truffleruby_version,
+        "shipped",
+        license_names(truffleruby_shared_license),
+        created,
+        "https://github.com/oracle/truffleruby",
+        external_refs=[purl_ref(maven_purl("dev.truffleruby.internal:shared", truffleruby_version))],
+    ),
+    package(
+        "SPDXRef-Package-TruffleRuby-Joni",
+        "dev.truffleruby.shadowed:joni",
+        truffleruby_version,
+        "shipped",
+        license_names(truffleruby_joni_license),
+        created,
+        "https://github.com/oracle/truffleruby",
+        external_refs=[purl_ref(maven_purl("dev.truffleruby.shadowed:joni", truffleruby_version))],
+    ),
+    package(
+        "SPDXRef-Package-GraalVM-JCodings",
+        "org.graalvm.shadowed:jcodings",
+        graal_version,
+        "shipped",
+        license_names(jcodings_license),
+        created,
+        "https://github.com/oracle/graal",
+        external_refs=[purl_ref(maven_purl("org.graalvm.shadowed:jcodings", graal_version))],
+    ),
+    package(
         "SPDXRef-Package-GraalVM-Word-SDK",
         "org.graalvm.sdk:word",
         graal_version,
@@ -609,28 +841,36 @@ if args.strict:
     strict_blockers.extend(first_party_license_errors(args.first_party_license_file))
     strict_blockers.extend(graalvm_evidence_errors(args.graalvm_home, graal_version))
 
+# M12-002 Slice 2: Ruby is a default shipped language (Clojure + JavaScript +
+# Lua + Python + Ruby) in the single default artifact, with LLVM excluded per
+# ADR-0028.
+document_namespace = "https://ecritum.dev/spdx/ecritum-license-inventory"
+included_runtimes = "clojure,javascript,lua,python,ruby"
+
+document_annotations = [
+    {
+        "annotationType": "OTHER",
+        "annotator": "Tool: scripts/license-report.py",
+        "annotationDate": created,
+        "comment": f"ecritum-sbom-format=SPDX-2.3 JSON; artifact-kind=default; included-runtimes={included_runtimes}; unknown shipped licenses block release; "
+        + "blockers="
+        + json.dumps(blockers + POM_METADATA_ERRORS, separators=(",", ":")),
+    }
+]
+
 document = {
     "spdxVersion": "SPDX-2.3",
     "dataLicense": "CC0-1.0",
     "SPDXID": "SPDXRef-DOCUMENT",
     "name": "Ecritum license inventory",
-    "documentNamespace": "https://ecritum.dev/spdx/ecritum-license-inventory",
+    "documentNamespace": document_namespace,
     "creationInfo": {
         "created": created,
         "creators": ["Tool: scripts/license-report.py"],
     },
     "documentDescribes": ["SPDXRef-Package-EcritumRuntime"],
     "packages": packages,
-    "annotations": [
-        {
-            "annotationType": "OTHER",
-            "annotator": "Tool: scripts/license-report.py",
-            "annotationDate": created,
-            "comment": "ecritum-sbom-format=SPDX-2.3 JSON; artifact-kind=default; included-runtimes=clojure,javascript,lua; unknown shipped licenses block release; "
-            + "blockers="
-            + json.dumps(blockers + POM_METADATA_ERRORS, separators=(",", ":")),
-        }
-    ],
+    "annotations": document_annotations,
 }
 
 if args.notices:

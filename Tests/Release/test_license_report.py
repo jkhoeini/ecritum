@@ -130,9 +130,22 @@ class LicenseReportTest(unittest.TestCase):
         self.assertIn("org.graalvm.sdk:nativeimage", package_names)
         self.assertIn("org.graalvm.polyglot:polyglot", package_names)
         self.assertIn("org.graalvm.js:js-language", package_names)
+        self.assertIn("org.graalvm.polyglot:python", package_names)
+        self.assertIn("org.graalvm.python:python-language", package_names)
+        self.assertIn("org.graalvm.python:python-resources", package_names)
+        self.assertIn("org.graalvm.tools:profiler-tool", package_names)
+        self.assertIn("org.graalvm.shadowed:json", package_names)
+        self.assertIn("org.graalvm.truffle:truffle-nfi", package_names)
+        self.assertIn("org.graalvm.truffle:truffle-nfi-libffi", package_names)
+        self.assertIn("org.graalvm.truffle:truffle-nfi-panama", package_names)
+        self.assertIn("org.bouncycastle:bcprov-jdk18on", package_names)
+        self.assertIn("org.bouncycastle:bcpkix-jdk18on", package_names)
+        self.assertIn("org.bouncycastle:bcutil-jdk18on", package_names)
         self.assertIn("org.luaj:luaj-jme", package_names)
+        self.assertEqual(package_named(report, "org.graalvm.python:python-language")["licenseConcluded"], "UPL-1.0 AND MIT AND PSF-2.0")
+        self.assertEqual(package_named(report, "org.bouncycastle:bcprov-jdk18on")["licenseConcluded"], "LicenseRef-Bouncy-Castle")
         self.assertIn("artifact-kind=default", report["annotations"][0]["comment"])
-        self.assertIn("included-runtimes=clojure,javascript,lua", report["annotations"][0]["comment"])
+        self.assertIn("included-runtimes=clojure,javascript,lua,python,ruby", report["annotations"][0]["comment"])
 
     def test_notices_include_blockers_scoped_components_and_full_text_warning(self):
         completed = run_license_report("--notices")
@@ -179,6 +192,82 @@ class LicenseReportTest(unittest.TestCase):
 
         self.assertEqual(completed.returncode, 1)
         self.assertIn("missing expected POM for org.graalvm.sdk:nativeimage", completed.stderr)
+
+    # ---- M12-002 Slice 2: Ruby (TruffleRuby) shipped in the default artifact ----
+
+    # The seven net-new shipped coordinates Ruby adds beyond the pre-Ruby
+    # 4-language baseline, with LLVM EXCLUDED per ADR-0028. SPDX strings are the
+    # generated, POM-ordered, deduped, " AND "-joined licenseConcluded values.
+    RUBY_SHIPPED_SPDX = {
+        "dev.truffleruby:truffleruby": "EPL-2.0 AND BSD-3-Clause AND BSD-2-Clause AND MIT AND UPL-1.0 AND ICU",
+        "dev.truffleruby.internal:runtime": "EPL-2.0 AND BSD-3-Clause AND BSD-2-Clause AND MIT",
+        "dev.truffleruby.internal:resources": "EPL-2.0 AND MIT AND BSD-2-Clause AND BSD-3-Clause",
+        "dev.truffleruby.internal:annotations": "EPL-2.0",
+        "dev.truffleruby.internal:shared": "EPL-2.0",
+        "dev.truffleruby.shadowed:joni": "MIT",
+        "org.graalvm.shadowed:jcodings": "MIT",
+    }
+
+    # ADR-0028: the LLVM/Sulong backend and antlr4 (transitive only under the
+    # excluded llvm-language) must NEVER appear in the default shipped artifact.
+    LLVM_EXCLUDED_COORDINATES = [
+        "org.graalvm.llvm:llvm-native",
+        "org.graalvm.llvm:llvm-api",
+        "org.graalvm.llvm:llvm-language-nfi",
+        "org.graalvm.llvm:llvm-language-native",
+        "org.graalvm.llvm:llvm-language",
+        "org.graalvm.llvm:llvm-language-native-resources",
+        "org.graalvm.shadowed:antlr4",
+    ]
+
+    def test_default_mode_includes_ruby_shipped_packages_with_exact_spdx(self):
+        completed = run_license_report()
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        report = json.loads(completed.stdout)
+        for coord, expected_spdx in self.RUBY_SHIPPED_SPDX.items():
+            pkg = package_named(report, coord)
+            self.assertEqual(pkg["licenseConcluded"], expected_spdx, f"{coord} SPDX mismatch")
+            self.assertEqual(pkg["licenseDeclared"], expected_spdx)
+            self.assertEqual(annotation_value(pkg, "ecritum-scope"), "shipped")
+
+    def test_default_mode_excludes_llvm_and_antlr4(self):
+        # ADR-0028: TruffleRuby ships with LLVM excluded; antlr4 is transitive
+        # only under the excluded llvm-language and must also be absent.
+        report = json.loads(run_license_report().stdout)
+        names = {item["name"] for item in report["packages"]}
+        for coord in self.LLVM_EXCLUDED_COORDINATES:
+            self.assertNotIn(coord, names, f"LLVM-excluded coordinate leaked into default: {coord}")
+
+    def test_default_sbom_kind_namespace_and_runtimes(self):
+        report = json.loads(run_license_report().stdout)
+        self.assertEqual(report["documentNamespace"], "https://ecritum.dev/spdx/ecritum-license-inventory")
+        doc_comment = report["annotations"][0]["comment"]
+        self.assertIn("artifact-kind=default", doc_comment)
+        self.assertIn("included-runtimes=clojure,javascript,lua,python,ruby;", doc_comment)
+        self.assertEqual(len(report["annotations"]), 1)
+        self.assertEqual(report["documentDescribes"], ["SPDXRef-Package-EcritumRuntime"])
+        # No shipped license blockers and no POM metadata errors.
+        self.assertIn("blockers=[]", doc_comment)
+
+    def test_ruby_resources_surface_annotation_is_separate_object(self):
+        # The resources package carries the denied-surface classification as a
+        # SEPARATE annotation, never in annotations[0] (which the ';'/'=' parser
+        # would corrupt on tokens like 'ffi-fiddle').
+        report = json.loads(run_license_report().stdout)
+        resources = package_named(report, "dev.truffleruby.internal:resources")
+        self.assertNotIn("ruby-denied-surface", resources["annotations"][0]["comment"])
+        surface = [a["comment"] for a in resources["annotations"] if a["comment"].startswith("ruby-denied-surface=")]
+        self.assertEqual(
+            surface,
+            ["ruby-denied-surface=rubygems,bundler,openssl,sockets,ffi-fiddle,native-extensions,native-so"],
+        )
+        # annotations[0] still parses cleanly for scope (no corruption).
+        self.assertEqual(annotation_value(resources, "ecritum-scope"), "shipped")
+
+    def test_default_mode_is_deterministic_under_source_date_epoch(self):
+        first = run_license_report()
+        second = run_license_report()
+        self.assertEqual(first.stdout, second.stdout)
 
 
 if __name__ == "__main__":

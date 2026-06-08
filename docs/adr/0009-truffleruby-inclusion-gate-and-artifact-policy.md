@@ -1,11 +1,17 @@
 # ADR-009: TruffleRuby Inclusion Gate and Artifact Policy
 
-Status: Accepted; next-release artifact policy superseded by ADR-025.
+Status: Accepted; next-release artifact policy superseded by ADR-025; old Ruby
+version alignment blocker is superseded by ADR-0027 for the `dev.truffleruby`
+validation path.
 
 ADR-025 supersedes the Core/Full and Full-only-candidate parts of this ADR for
 M9 and later. This ADR remains the historical M6-002 TruffleRuby inclusion gate
 and continues to own the Ruby denial requirements until M12 replaces them with
 passing implementation evidence.
+ADR-0026 rejects old `org.graalvm` cross-patch Ruby skew for shipped artifacts.
+ADR-0027 defines the new `dev.truffleruby` validation path. Public Ruby support
+remains blocked until that path passes its release, security, Native Image,
+license/SBOM, metrics, and clean-consumer gates.
 
 ## Context
 
@@ -48,6 +54,46 @@ The repo is pinned to GraalVM 25.0.2. Current Maven Central checks found no
   headers, and nested license files. A Ruby artifact therefore needs resource
   pruning, resource inventory, bundled-gem license inventory, and activation
   tests before it can be releasable.
+
+M12-001 repeated those checks on 2026-06-08 and got the same result:
+
+- `curl -I -fsSL
+  https://repo1.maven.org/maven2/org/graalvm/polyglot/ruby/25.0.2/ruby-25.0.2.pom`
+  -> HTTP 404.
+- `curl -I -fsSL
+  https://repo1.maven.org/maven2/org/graalvm/ruby/ruby-language/25.0.2/ruby-language-25.0.2.pom`
+  -> HTTP 404.
+- `mise exec -- mvn -s .mvn/settings.xml -q dependency:get
+  -Dartifact=org.graalvm.polyglot:ruby:25.0.2:pom -Dtransitive=true`
+  -> resolution failure.
+- `curl -I -fsSL
+  https://repo1.maven.org/maven2/org/graalvm/polyglot/ruby/25.0.0/ruby-25.0.0.pom`
+  -> HTTP 200.
+- `mise exec -- mvn -s .mvn/settings.xml -q dependency:get
+  -Dartifact=org.graalvm.polyglot:ruby:25.0.0:pom -Dtransitive=true`
+  -> PASS.
+- Local cache sizes were about 52 MB under `org/graalvm/ruby`, 75 MB under
+  `org/graalvm/llvm`, 37 MB under `org/graalvm/truffle`, and 42 MB under
+  `org/graalvm/shadowed`.
+- Largest downloaded JARs were still `ruby-language-25.0.0.jar` at
+  29,063,809 bytes, `ruby-resources-25.0.0.jar` at 25,288,061 bytes,
+  `llvm-language-native-resources-25.0.0.jar` at 56,512,783 bytes, and
+  `llvm-language-25.0.0.jar` at 21,549,564 bytes.
+- `ruby-resources-25.0.0.jar` still contained 2,643 resource entries.
+
+New upstream evidence on 2026-06-09 changes the forward path but not the old
+gate evidence:
+
+- The old `org.graalvm.polyglot:ruby` line still stops at `25.0.0`.
+- TruffleRuby now publishes Maven artifacts as
+  `dev.truffleruby:truffleruby`.
+- `dev.truffleruby:truffleruby:34.0.1` is released.
+- Its POM depends on `org.graalvm.truffle:truffle-runtime:25.0.2` and
+  `org.graalvm.llvm:llvm-native:25.0.2`.
+- Upstream states that TruffleRuby is now released on its own schedule and the
+  last GraalVM/Truffle-versioned release was `25.0.0`.
+- ADR-0027 owns validation of this new coordinate path before M12 may expose
+  public Ruby support.
 
 TruffleRuby's official embedding guidance uses the GraalVM Polyglot API. It says
 embedded TruffleRuby is configured to cooperate with another application,
@@ -114,6 +160,60 @@ host-approved, immutable package roots. Ecritum v0 must not run `gem`, download
 gems, mutate `GEM_HOME`, mutate load paths from arbitrary locations, or write
 runtime caches as part of package loading.
 
+### M12-001 Feasibility-Only Version Skew Acceptance
+
+Because matching `25.0.2` Ruby artifacts are still absent, M12-001 may use
+`org.graalvm.polyglot:ruby:25.0.0` only for a private feasibility probe while
+the repo remains pinned to GraalVM 25.0.2.
+
+This is not a public support decision and not an acceptance of Ruby version skew
+for release. The acceptance is limited by these conditions:
+
+- Ruby dependencies must live in an isolated `ruby-probe` Maven profile. The
+  default `full` profile and release artifact must not depend on Ruby.
+- Probe source must live under `native/src/ruby-probe/...` or another clearly
+  private probe path. The implementation must not add public C ABI symbols,
+  Swift API behavior, conformance providers, docs, or release notes that claim
+  Ruby support.
+- The probe must use a fixed deny-by-default context: `allowAllAccess(false)`,
+  `HostAccess.NONE`, no host class lookup/loading, `PolyglotAccess.NONE`,
+  `IOAccess.NONE`, `allowNativeAccess(false)`, no process/thread creation, no
+  environment inheritance, no inner context options, and no value sharing.
+- The only allowed raw Polyglot options in the probe are fixed Ruby denial
+  literals: `ruby.platform-native=false`, `ruby.cexts=false`, and
+  `ruby.rubygems=false`. Arbitrary option passthrough remains forbidden.
+- `ruby.rubygems=false` is not sufficient by itself to block explicit
+  `require "rubygems"` or `require "bundler"` in TruffleRuby 25.0.0; those
+  package surfaces must also remain source-denied in the probe and covered by
+  tests.
+- The probe is successful only if Java-level eval, denial tests, Native Image
+  build, and native shared-library eval all pass with reproducible commands
+  recorded in `PROJECT.org`.
+- If the probe fails because of version incompatibility, context initialization,
+  Native Image, resources, or denial failures, M12-001 may still complete as a
+  blocker outcome, but Ruby remains unreleased and the failed evidence must be
+  recorded.
+- Before any release or support claim, either matching Ruby artifacts for the
+  repo GraalVM line must be used, or a separate ADR must accept a tested
+  cross-patch skew policy with strict Ruby conformance, strict abuse, release,
+  SBOM/license, size, RSS, startup, and clean-consumer evidence.
+
+M12-001 completed as a feasibility-only proof on 2026-06-08:
+
+- `25.0.2` Ruby artifacts remained absent from Maven Central, while
+  `org.graalvm.polyglot:ruby:25.0.0` resolved.
+- The isolated `ruby-probe` profile built a Native Image shared library with
+  Java-level tests and a C native probe passing.
+- The Ruby probe image was 221.78 MB, included 3,558 resources, registered 6
+  foreign downcalls, linked Foundation/dl/pthread/z, and peaked at 7.93 GB RSS
+  during Native Image generation.
+- The production `full` profile remained uncontaminated: no Ruby/LLVM runtime
+  dependencies, no Ruby probe symbol, and the normal Clojure/JavaScript/Lua/
+  Python Native Image build and smoke tests passed.
+- M12-002 remains blocked until ADR-0027 validation proves the
+  `dev.truffleruby` path or another separate decision accepts a release-safe
+  Ruby implementation path.
+
 ## Consequences
 
 M6-002 is an inclusion gate, not a support implementation. It can complete with
@@ -123,10 +223,10 @@ acceptance criteria for the later Full-artifact spike.
 Swift, C, README, and release docs must continue to describe Ruby as planned or
 gated, not supported.
 
-`just size` remains expected to fail for the current combined local artifact
-until the project resolves the Core/Full artifact split or revises ADR-018.
-TruffleRuby cannot be used as a reason to rebaseline Core without packaged-app
-and clean-consumer evidence.
+The M12-001 `ruby-probe` profile is allowed to be temporary spike code. It must
+not contaminate the default artifact or hosted SwiftPM package. TruffleRuby
+cannot be used as a reason to rebaseline the default artifact without
+packaged-app and clean-consumer evidence.
 
 ECRITUM-DEBT-0005 can be resolved once M6-002 records the Ruby gate decision and
 the project has both Python and Ruby artifact-policy decisions.

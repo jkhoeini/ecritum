@@ -14,23 +14,42 @@ This file is an inventory and notice index. It does not include full license tex
 | --- | --- | --- | --- |
 | borkdude:edamame | 1.5.37 | EPL-1.0 | https://github.com/borkdude/edamame |
 | borkdude:graal.locking | 0.0.2 | EPL-1.0 | https://github.com/borkdude/graal.locking |
+| dev.truffleruby.internal:annotations | 34.0.1 | EPL-2.0 | https://github.com/oracle/truffleruby |
+| dev.truffleruby.internal:resources | 34.0.1 | EPL-2.0 AND MIT AND BSD-2-Clause AND BSD-3-Clause | https://github.com/oracle/truffleruby |
+| dev.truffleruby.internal:runtime | 34.0.1 | EPL-2.0 AND BSD-3-Clause AND BSD-2-Clause AND MIT | https://github.com/oracle/truffleruby |
+| dev.truffleruby.internal:shared | 34.0.1 | EPL-2.0 | https://github.com/oracle/truffleruby |
+| dev.truffleruby.shadowed:joni | 34.0.1 | MIT | https://github.com/oracle/truffleruby |
+| dev.truffleruby:truffleruby | 34.0.1 | EPL-2.0 AND BSD-3-Clause AND BSD-2-Clause AND MIT AND UPL-1.0 AND ICU | https://github.com/oracle/truffleruby |
 | EcritumRuntime.xcframework | 0.1.0 | MIT | LICENSE |
 | GraalVM Native Image embedded runtime code | 25.0.2 | GPL-2.0-only WITH Classpath-exception-2.0 | GraalVM Community 25.0.2 LICENSE_NATIVEIMAGE.txt sha256=11a8fe0c63dcff8bd8674b89a5895dfbcf5f7e5453cf0a33566c4b3fb64e404c and https://www.graalvm.org/faq/ |
 | org.babashka:sci | 0.12.51 | EPL-1.0 | https://github.com/babashka/SCI |
 | org.babashka:sci.impl.types | 0.0.2 | EPL-1.0 | https://clojars.org/org.babashka/sci.impl.types |
+| org.bouncycastle:bcpkix-jdk18on | 1.78.1 | LicenseRef-Bouncy-Castle | https://github.com/bcgit/bc-java |
+| org.bouncycastle:bcprov-jdk18on | 1.78.1 | LicenseRef-Bouncy-Castle | https://github.com/bcgit/bc-java |
+| org.bouncycastle:bcutil-jdk18on | 1.78.1 | LicenseRef-Bouncy-Castle | https://github.com/bcgit/bc-java |
 | org.clojure:clojure | 1.10.3 | EPL-1.0 | https://github.com/clojure/clojure |
 | org.clojure:core.specs.alpha | 0.2.56 | EPL-1.0 | https://github.com/clojure/core.specs.alpha |
 | org.clojure:spec.alpha | 0.2.194 | EPL-1.0 | https://github.com/clojure/spec.alpha |
 | org.clojure:tools.reader | 1.5.2 | EPL-1.0 | https://github.com/clojure/tools.reader |
 | org.graalvm.js:js-language | 25.0.2 | UPL-1.0 AND MIT | https://github.com/oracle/graaljs |
 | org.graalvm.polyglot:polyglot | 25.0.2 | UPL-1.0 | https://github.com/oracle/graal |
+| org.graalvm.polyglot:python | 25.0.2 | MIT AND PSF-2.0 AND UPL-1.0 | https://github.com/oracle/graalpython |
+| org.graalvm.python:python | 25.0.2 | UPL-1.0 AND MIT AND PSF-2.0 | https://github.com/oracle/graalpython |
+| org.graalvm.python:python-language | 25.0.2 | UPL-1.0 AND MIT AND PSF-2.0 | https://github.com/oracle/graalpython |
+| org.graalvm.python:python-resources | 25.0.2 | UPL-1.0 AND MIT AND PSF-2.0 | https://github.com/oracle/graalpython |
 | org.graalvm.regex:regex | 25.0.2 | UPL-1.0 | https://github.com/oracle/graal |
 | org.graalvm.sdk:collections | 25.0.2 | UPL-1.0 | https://github.com/oracle/graal |
 | org.graalvm.sdk:jniutils | 25.0.2 | UPL-1.0 | https://github.com/oracle/graal |
 | org.graalvm.shadowed:icu4j | 25.0.2 | ICU | https://github.com/unicode-org/icu |
+| org.graalvm.shadowed:jcodings | 25.0.2 | MIT | https://github.com/oracle/graal |
+| org.graalvm.shadowed:json | 25.0.2 | UPL-1.0 | https://github.com/oracle/graal |
 | org.graalvm.shadowed:xz | 25.0.2 | UPL-1.0 | https://tukaani.org/xz/java.html |
+| org.graalvm.tools:profiler-tool | 25.0.2 | GPL-2.0-only WITH Classpath-exception-2.0 | https://github.com/oracle/graal |
 | org.graalvm.truffle:truffle-api | 25.0.2 | UPL-1.0 | https://github.com/oracle/graal |
 | org.graalvm.truffle:truffle-compiler | 25.0.2 | UPL-1.0 | https://github.com/oracle/graal |
+| org.graalvm.truffle:truffle-nfi | 25.0.2 | UPL-1.0 | https://github.com/oracle/graal |
+| org.graalvm.truffle:truffle-nfi-libffi | 25.0.2 | UPL-1.0 | https://github.com/oracle/graal |
+| org.graalvm.truffle:truffle-nfi-panama | 25.0.2 | UPL-1.0 | https://github.com/oracle/graal |
 | org.graalvm.truffle:truffle-runtime | 25.0.2 | UPL-1.0 | https://github.com/oracle/graal |
 | org.luaj:luaj-jme | 3.0.1 | MIT | https://sourceforge.net/projects/luaj/ |
 

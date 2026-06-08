@@ -92,7 +92,7 @@ final class LuaEvaluator {
         try {
             Globals globals = newGlobals(projections, hostInvoker, standardLibraryPolicy, standardLibraryBridge);
             LuaValue value = globals.load(source, sourceFileName(safeSourceName), globals).call();
-            return SciEvalResult.ok(normalizeValue(value, newTableSet()));
+            return SciEvalResult.ok(LANGUAGE, normalizeValue(value, newTableSet()));
         } catch (LuaAdapterException ex) {
             return new SciEvalResult(
                 ex.status(),

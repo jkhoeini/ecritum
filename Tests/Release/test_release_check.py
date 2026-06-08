@@ -33,7 +33,7 @@ class ReleaseCheckTest(unittest.TestCase):
             "artifactKind": "default",
             "formatVersion": 1,
             "implementationProfile": "full",
-            "includedRuntimes": ["clojure", "javascript", "lua"],
+            "includedRuntimes": ["clojure", "javascript", "lua", "python", "ruby"],
         }) + "\n")
         self.output_dir = self.root / "release-output"
         self.release_zip = self.root / "release" / "EcritumRuntime.xcframework.zip"
@@ -84,6 +84,10 @@ class ReleaseCheckTest(unittest.TestCase):
         self.assertTrue(size_payload["ok"])
         self.assertEqual(package_payload["artifactKind"], "default")
         self.assertEqual(reproducibility_payload["artifactKind"], "default")
+        self.assertTrue((self.output_dir / "python-first-eval.json").exists())
+        self.assertTrue((self.output_dir / "python-rss.json").exists())
+        self.assertIn({"target": "bench-python-first-eval", "args": []}, log_entries)
+        self.assertIn({"target": "bench-python-rss", "args": []}, log_entries)
         self.assertIn(
             {
                 "target": "package-artifact",
@@ -495,7 +499,7 @@ class ReleaseCheckTest(unittest.TestCase):
                         "artifactKind": "default",
                         "artifact": artifact,
                         "formatVersion": 1,
-                        "includedRuntimes": ["clojure", "javascript", "lua"],
+                        "includedRuntimes": ["clojure", "javascript", "lua", "python", "ruby"],
                         "implementationProfile": "full",
                         "output": output,
                         "sha256": checksum,
@@ -505,7 +509,7 @@ class ReleaseCheckTest(unittest.TestCase):
                     Path(str(output_path) + ".checksum").write_text(checksum + "\\n")
                     print(json.dumps(payload, indent=2, sort_keys=True))
                 elif target == "package-artifact-verify":
-                    print(json.dumps({"artifactKind": "default", "includedRuntimes": ["clojure", "javascript", "lua"], "ok": True, "violations": []}, indent=2, sort_keys=True))
+                    print(json.dumps({"artifactKind": "default", "includedRuntimes": ["clojure", "javascript", "lua", "python", "ruby"], "ok": True, "violations": []}, indent=2, sort_keys=True))
                 elif target == "check-public-signing":
                     print(json.dumps({"ok": True, "target": target, "args": args}, indent=2, sort_keys=True))
                 elif target == "checksum":
@@ -523,7 +527,9 @@ class ReleaseCheckTest(unittest.TestCase):
                     "inspect",
                     "bench-cold-start",
                     "bench-first-eval",
+                    "bench-python-first-eval",
                     "bench-idle-rss",
+                    "bench-python-rss",
                     "check-dep-delta",
                     "test",
                     "check-abi",

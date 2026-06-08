@@ -11,7 +11,11 @@ DEFAULT_ROOTS = [
     "justfile",
     ".mvn",
     "native/pom.xml",
+    "native/src/core/java",
+    "native/src/full/java",
     "native/src/main",
+    "native/src/python-probe",
+    "native/src/ruby-probe",
     "Sources",
     "scripts",
 ]
@@ -82,6 +86,27 @@ RULES = [
     ("luaj.luajc", r"\bLuaJC\b"),
 ]
 
+FIXED_OPTION_ALLOWLIST = {
+    '.option("ruby.platform-native", "false")',
+    '.option("ruby.cexts", "false")',
+    '.option("ruby.rubygems", "false")',
+}
+
+# Security-positive TruffleRuby options for the production Ruby evaluator
+# (native/src/full/java/ecritum/RubyEvaluator.java). The first three are deny
+# switches (no native platform, no C-extensions, no RubyGems). ruby.single-threaded
+# enforces guest Thread.new denial ("threads not allowed in single-threaded mode");
+# it is paired with allowCreateThread(true) (also allowlisted below, gated on
+# single-threaded being present) purely so TruffleRuby can run its internal fibers
+# for core operations (e.g. Array#pack). No guest concurrency is exposed. None of
+# these options relax the sandbox; they all narrow the guest surface.
+FULL_RUBY_OPTION_ALLOWLIST = {
+    '.option("ruby.platform-native", "false")',
+    '.option("ruby.cexts", "false")',
+    '.option("ruby.rubygems", "false")',
+    '.option("ruby.single-threaded", "true")',
+}
+
 
 class StaticCheckError(Exception):
     pass
@@ -128,6 +153,14 @@ def line_and_column(text, offset):
     return line, column
 
 
+def is_ruby_probe_path(path):
+    return "native/src/ruby-probe" in path.as_posix()
+
+
+def is_full_ruby_evaluator_path(path):
+    return path.as_posix().endswith("native/src/full/java/ecritum/RubyEvaluator.java")
+
+
 def scan_file(path, compiled_rules):
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
@@ -137,6 +170,29 @@ def scan_file(path, compiled_rules):
     violations = []
     for rule, pattern in compiled_rules:
         for match in pattern.finditer(text):
+            # allowCreateThread(true) is permitted ONLY in the production Ruby
+            # evaluator, and ONLY while ruby.single-threaded=true is also present
+            # so the guest-visible thread surface stays denied (guest Thread.new
+            # raises "threads not allowed in single-threaded mode"). It exists
+            # solely so TruffleRuby can run its internal fibers; no concurrency is
+            # exposed. If single-threaded is ever dropped, this exemption lapses.
+            if (
+                rule == "polyglot.create_thread"
+                and is_full_ruby_evaluator_path(path)
+                and '.option("ruby.single-threaded", "true")' in text
+            ):
+                continue
+            if rule == "polyglot.raw_option_passthrough":
+                line_start = text.rfind("\n", 0, match.start()) + 1
+                line_end = text.find("\n", match.start())
+                line = text[line_start:] if line_end == -1 else text[line_start:line_end]
+                # Allow a trailing ';' so the last option in a builder chain
+                # matches the same fixed allowlist entry as chained options.
+                stripped_line = line.strip().rstrip(";")
+                if is_ruby_probe_path(path) and stripped_line in FIXED_OPTION_ALLOWLIST:
+                    continue
+                if is_full_ruby_evaluator_path(path) and stripped_line in FULL_RUBY_OPTION_ALLOWLIST:
+                    continue
             line, column = line_and_column(text, match.start())
             violations.append(
                 {

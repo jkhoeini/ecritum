@@ -1,0 +1,4 @@
+Loan rules engine:
+  Dana: APPROVED
+  Lee: DENIED (applicant must be at least 21)
+  Sam: DENIED (loan exceeds half of annual income; identity not verified)

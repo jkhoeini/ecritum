@@ -284,6 +284,10 @@ static ecritum_value_t eval_lua(ecritum_context_t context, const char *source) {
     return eval_language(context, "lua", source, "native-smoke.lua");
 }
 
+static ecritum_value_t eval_python(ecritum_context_t context, const char *source) {
+    return eval_language(context, "python", source, "native-smoke.py");
+}
+
 static void expect_failed_eval(ecritum_context_t context, const char *source, const char *source_name, const char *category) {
     ecritum_job_t failed_job = 0;
     ecritum_error_t error = 0;
@@ -681,8 +685,85 @@ int main(void) {
     expect_failed_eval_status_language(context, "lua", "coroutine.resume(coroutine.create(function() while true do end end))", "coroutine-source.lua", ECRITUM_ERROR_PERMISSION_DENIED, "permission");
     expect_failed_eval_status_language(context, "lua", "while true do end", "timeout-source.lua", ECRITUM_ERROR_TIMEOUT, "timeout");
 
+    ecritum_value_t python_scalar = eval_python(context, "40 + 2");
+    assert_int(python_scalar, 42);
+    CHECK(ecritum_value_destroy(&python_scalar) == ECRITUM_OK);
+
+    ecritum_value_t python_null = eval_python(context, "None");
+    assert_null(python_null);
+    CHECK(ecritum_value_destroy(&python_null) == ECRITUM_OK);
+
+    ecritum_value_t python_bool = eval_python(context, "True");
+    assert_bool(python_bool, 1);
+    CHECK(ecritum_value_destroy(&python_bool) == ECRITUM_OK);
+
+    ecritum_value_t python_string = eval_python(context, "'hello'");
+    assert_string(python_string, "hello");
+    CHECK(ecritum_value_destroy(&python_string) == ECRITUM_OK);
+
+    ecritum_value_t python_double = eval_python(context, "3.5");
+    assert_double(python_double, 3.5);
+    CHECK(ecritum_value_destroy(&python_double) == ECRITUM_OK);
+
+    ecritum_value_t python_array = eval_python(context, "[1, 'two', True]");
+    if (python_array != 0) {
+        CHECK(ecritum_value_kind(python_array, &kind) == ECRITUM_OK);
+        CHECK(kind == ECRITUM_VALUE_KIND_ARRAY);
+        CHECK(ecritum_value_count(python_array, &count) == ECRITUM_OK);
+        CHECK(count == 3);
+        ecritum_value_t first = 0;
+        CHECK(ecritum_value_array_get(python_array, 0, &first, &error) == ECRITUM_OK);
+        assert_int(first, 1);
+        CHECK(ecritum_value_destroy(&first) == ECRITUM_OK);
+        CHECK(ecritum_value_destroy(&python_array) == ECRITUM_OK);
+    }
+
+    ecritum_value_t python_object = eval_python(context, "{'answer': 42}");
+    if (python_object != 0) {
+        CHECK(ecritum_value_kind(python_object, &kind) == ECRITUM_OK);
+        CHECK(kind == ECRITUM_VALUE_KIND_OBJECT);
+        CHECK(ecritum_value_count(python_object, &count) == ECRITUM_OK);
+        CHECK(count == 1);
+        ecritum_string_view_t key = {0};
+        ecritum_value_t object_value = 0;
+        CHECK(ecritum_value_object_entry(python_object, 0, &key, &object_value, &error) == ECRITUM_OK);
+        CHECK(key.len == 6);
+        CHECK(memcmp(key.data, "answer", 6) == 0);
+        assert_int(object_value, 42);
+        CHECK(ecritum_value_destroy(&object_value) == ECRITUM_OK);
+        CHECK(ecritum_value_destroy(&python_object) == ECRITUM_OK);
+    }
+
+    ecritum_value_t python_data = eval_python(context, "bytes([0, 1, 2, 255])");
+    assert_data(python_data, expected_data, sizeof(expected_data));
+    CHECK(ecritum_value_destroy(&python_data) == ECRITUM_OK);
+
+    ecritum_value_t python_json = eval_python(context, "ecritum.json.writeString({'b': 2, 'a': 1})");
+    assert_string(python_json, "{\"a\":1,\"b\":2}");
+    CHECK(ecritum_value_destroy(&python_json) == ECRITUM_OK);
+
+    ecritum_value_t python_time = eval_python(context, "ecritum.time.formatInstant(ecritum.time.parseInstant('2026-06-05T00:00:00Z'))");
+    assert_string(python_time, "2026-06-05T00:00:00Z");
+    CHECK(ecritum_value_destroy(&python_time) == ECRITUM_OK);
+
+    ecritum_value_t python_host_value = eval_python(context, "ecritum.app.answer()");
+    assert_int(python_host_value, 42);
+    CHECK(ecritum_value_destroy(&python_host_value) == ECRITUM_OK);
+
+    ecritum_value_t python_host_arg_value = eval_python(context, "ecritum.app.add_one(41)");
+    assert_int(python_host_arg_value, 42);
+    CHECK(ecritum_value_destroy(&python_host_arg_value) == ECRITUM_OK);
+
+    ecritum_value_t python_host_data = eval_python(context, "ecritum.app.blob()");
+    assert_data(python_host_data, expected_data, sizeof(expected_data));
+    CHECK(ecritum_value_destroy(&python_host_data) == ECRITUM_OK);
+
+    expect_failed_eval_status_language(context, "python", "ecritum.app.fail()", "callback-source.py", ECRITUM_ERROR_CALLBACK, "callback");
+    expect_failed_eval_status_language(context, "python", "raise RuntimeError('boom')", "runtime-source.py", ECRITUM_ERROR_SCRIPT, "runtime");
+    expect_failed_eval_status_language(context, "python", "import java", "permission-source.py", ECRITUM_ERROR_PERMISSION_DENIED, "permission");
+    expect_failed_eval_status_language(context, "python", "import socket\nsocket.socket()", "socket-source.py", ECRITUM_ERROR_PERMISSION_DENIED, "permission");
+
     expect_failed_eval_status(context, "(app/fail)", "callback-source.clj", ECRITUM_ERROR_CALLBACK, "callback");
-    expect_eval_start_error(context, view("python"), empty_bytes(), ECRITUM_ERROR_RUNTIME_UNAVAILABLE);
     expect_eval_start_error(context, view("clojure"), bytes("{\"rawSciOption\":true}"), ECRITUM_ERROR_INVALID_ARGUMENT);
 
     ecritum_runtime_t js_runtime = 0;
@@ -718,6 +799,40 @@ int main(void) {
     expect_eval_start_error(lua_context, view("clojure"), empty_bytes(), ECRITUM_ERROR_PERMISSION_DENIED);
     CHECK(ecritum_context_destroy(&lua_context, &error) == ECRITUM_OK);
     CHECK(ecritum_runtime_destroy(&lua_runtime, &error) == ECRITUM_OK);
+
+    ecritum_runtime_t python_runtime = 0;
+    ecritum_context_t python_context = 0;
+    ecritum_bytes_t python_only_config = bytes(
+        "{\"schemaVersion\":1,\"languages\":[\"python\"],"
+        "\"policy\":{\"filesystem\":{\"mode\":\"denied\"},\"network\":{\"mode\":\"denied\"},\"process\":{\"mode\":\"denied\"},"
+        "\"environment\":{\"mode\":\"denied\"},\"clock\":{\"mode\":\"denied\"},\"random\":{\"mode\":\"denied\"},\"log\":{\"mode\":\"denied\"}},"
+        "\"diagnostics\":{\"mode\":\"redacted\"},\"resourceLimits\":{}}"
+    );
+    CHECK(ecritum_runtime_create(python_only_config, &python_runtime, &error) == ECRITUM_OK);
+    CHECK(ecritum_context_create(python_runtime, empty_bytes(), &python_context, &error) == ECRITUM_OK);
+    ecritum_value_t python_only_value = eval_language(python_context, "python", "40 + 2", "python-only.py");
+    assert_int(python_only_value, 42);
+    CHECK(ecritum_value_destroy(&python_only_value) == ECRITUM_OK);
+    expect_eval_start_error(python_context, view("clojure"), empty_bytes(), ECRITUM_ERROR_PERMISSION_DENIED);
+    CHECK(ecritum_context_destroy(&python_context, &error) == ECRITUM_OK);
+    CHECK(ecritum_runtime_destroy(&python_runtime, &error) == ECRITUM_OK);
+
+    ecritum_runtime_t python_timeout_runtime = 0;
+    ecritum_context_t python_timeout_context = 0;
+    ecritum_bytes_t python_timeout_config = bytes(
+        "{\"schemaVersion\":1,\"languages\":[\"python\"],"
+        "\"policy\":{\"filesystem\":{\"mode\":\"denied\"},\"network\":{\"mode\":\"denied\"},\"process\":{\"mode\":\"denied\"},"
+        "\"environment\":{\"mode\":\"denied\"},\"clock\":{\"mode\":\"denied\"},\"random\":{\"mode\":\"denied\"},\"log\":{\"mode\":\"denied\"}},"
+        "\"diagnostics\":{\"mode\":\"redacted\"},\"resourceLimits\":{\"executionTimeoutNanos\":1000000}}"
+    );
+    CHECK(ecritum_runtime_create(python_timeout_config, &python_timeout_runtime, &error) == ECRITUM_OK);
+    CHECK(ecritum_context_create(python_timeout_runtime, empty_bytes(), &python_timeout_context, &error) == ECRITUM_OK);
+    expect_failed_eval_status_language(python_timeout_context, "python", "while True:\n    pass", "timeout-source.py", ECRITUM_ERROR_TIMEOUT, "timeout");
+    ecritum_value_t python_after_timeout = eval_language(python_timeout_context, "python", "40 + 2", "python-after-timeout.py");
+    assert_int(python_after_timeout, 42);
+    CHECK(ecritum_value_destroy(&python_after_timeout) == ECRITUM_OK);
+    CHECK(ecritum_context_destroy(&python_timeout_context, &error) == ECRITUM_OK);
+    CHECK(ecritum_runtime_destroy(&python_timeout_runtime, &error) == ECRITUM_OK);
 
     CHECK(ecritum_context_destroy(&context, &error) == ECRITUM_OK);
     CHECK(ecritum_runtime_destroy(&runtime, &error) == ECRITUM_OK);

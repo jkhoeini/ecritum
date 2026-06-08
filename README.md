@@ -50,29 +50,39 @@ The public API should be capability-based and deny-by-default: scripts only see
 functions, objects, and standard-library services that the host explicitly
 registers and enables through a versioned policy object.
 
-## Next Release Language Target
+## Supported Languages
 
-The next target is not "run every language on the JVM." The target is a
-practical, packageable scripting runtime in one default Ecritum artifact.
-Support is claimed only after strict conformance and strict abuse gates pass with
-zero required pending cases for the language.
+The target is not "run every language on the JVM." The target is a practical,
+packageable scripting runtime in one default Ecritum artifact. Support is
+claimed only after strict conformance and strict abuse gates pass with zero
+required pending cases for the language.
 
-- Clojure: first-class through SCI with Babashka-compatible namespaces.
-- JavaScript: through GraalJS.
-- Lua: through LuaJ or another pure-Java Lua implementation that compiles into
-  Native Image.
-- Python: through GraalPy after Native Image resource packaging, strict
-  conformance, strict abuse, license/SBOM, size, startup, and RSS gates pass.
-- Ruby: through TruffleRuby after Maven/version feasibility, Native Image
-  resource packaging, strict conformance, strict abuse, license/SBOM, size,
-  startup, and RSS gates pass.
-- JVM bytecode/JARs: future research, not an MVP promise.
+The single default `EcritumRuntime.xcframework` ships all five languages below as
+supported. There is no separate Core/Full choice and no separate Ruby artifact.
 
-Python and Ruby are runtime-and-standard-library/resource-only in the next
-release. Ecritum does not support `pip`, RubyGems, Bundler, third-party package
-installs, package downloads, native wheels, native gems, C extensions, `ctypes`,
-`cffi`, FFI/NFI, mutable package caches, subprocess, raw network, unrestricted
+| Language | Engine | Status |
+| --- | --- | --- |
+| Clojure | SCI (Babashka-compatible namespaces) | Supported in the default artifact |
+| JavaScript | GraalJS | Supported in the default artifact |
+| Lua | LuaJ (pure-Java, compiled into Native Image) | Supported in the default artifact |
+| Python | GraalPy | Supported in the default artifact |
+| Ruby | TruffleRuby (pure-Ruby sandboxed mode; LLVM/Sulong backend excluded) | Supported in the default artifact |
+
+JVM bytecode/JARs remain future research, not an MVP promise.
+
+### Unsupported Scope
+
+Python and Ruby ship as runtime-and-standard-library only. Ecritum does not
+support `pip`, RubyGems, Bundler, third-party package installs, package
+downloads, native wheels, native gems, C/native extensions, `ctypes`, `cffi`,
+`fiddle`, FFI/NFI, mutable package caches, subprocess, raw network, unrestricted
 filesystem, environment access, direct Java access, or raw Polyglot access.
+These are denied by default for every language, including Ruby and Python.
+
+Ruby runs in pure-Ruby sandboxed mode; TruffleRuby's LLVM/Sulong backend is
+excluded from the shipped artifact (see
+[ADR-0028](docs/adr/0028-ruby-size-budget-and-llvm-exclusion.md)), so any path
+that would require native C extensions, FFI, or `fiddle` stays denied.
 
 ## Standard Library Plan
 
@@ -169,27 +179,66 @@ Release gate baselines are documented in
 [docs/release-gates.md](docs/release-gates.md). See [PLAN.org](PLAN.org) and
 [PROJECT.org](PROJECT.org) for the implementation sequence.
 
+## Tutorials
+
+Task-oriented how-tos for using Ecritum from a Swift app live in
+[docs/tutorials/](docs/tutorials/README.md):
+
+1. [Add Ecritum to a Swift app and run a first eval](docs/tutorials/01-add-to-a-swift-app.md)
+2. [Register host functions and call them from a script](docs/tutorials/02-register-host-functions.md)
+3. [Write and evaluate scripts in each language](docs/tutorials/03-scripts-in-each-language.md)
+4. [Enable a narrow filesystem capability](docs/tutorials/04-narrow-filesystem-capability.md)
+5. [Package a macOS .app that embeds the runtime](docs/tutorials/05-package-a-macos-app.md)
+6. [Interpret errors and default-deny failures](docs/tutorials/06-interpret-errors-and-denials.md)
+
+Each tutorial points to a runnable example under [Examples/](Examples).
+
 ## Current Reference Metrics
 
-The next final release must publish measured zip size, unzipped framework size,
-app bundle delta, cold start, first eval per language, and idle RSS in this
-README. The latest measured v0.2.0-alpha.1 default artifact reference from the
-current release gate is:
+All values below are measured on macOS arm64 for the current five-language
+default artifact (`dist/local/EcritumRuntime.xcframework`, runtimes: Clojure,
+JavaScript, Lua, Python, Ruby). Reproduce with `mise exec -- just size`, the
+`bench-*` recipes, and `package-artifact`/`inspect`.
 
-| Metric | Value |
-| --- | ---: |
-| Hosted zip size | 58,541,515 bytes |
-| Unzipped XCFramework size | 151,368,769 bytes |
-| Framework bundle size | 147,864 KiB |
-| Packaged smoke app size | 148,504 KiB |
-| C host cold start | p50 18.618 ms, p95 195.009 ms |
-| First eval | p50 1.356 ms, p95 2.219 ms |
-| Idle RSS after first call | p50 15,810,560 bytes, p95 15,810,560 bytes |
-| SwiftPM checksum | `edfe358e9e98a5133080e147a4069b42a9a8c20a5b1b917464113da61b17358e` |
-| Included runtimes | Clojure, JavaScript, Lua |
+### Artifact size
 
-The packaged app size is not an app bundle delta. M13 tracks measuring the delta
-against a comparable app without Ecritum.
+| Metric | Value | Source |
+| --- | ---: | --- |
+| Unzipped XCFramework artifact | 476,886,393 bytes (~476.9 MB) | `just size` |
+| Private runtime (`libecritum_graal.dylib`) | 476,230,752 bytes | `just size` |
+| Public wrapper binary | 164,160 bytes | `just size` |
+| Hosted release zip | 172,157,157 bytes | `package-artifact` |
+| SwiftPM package checksum | `2f8170d74abe0f95aafb3e247489c814e0b6165be475790f014f7fcb6f94f146` | `package-artifact-verify` |
+
+The 800 MB default-artifact size budget and the TruffleRuby LLVM/Sulong
+exclusion are recorded in
+[ADR-0028](docs/adr/0028-ruby-size-budget-and-llvm-exclusion.md).
+
+### Startup and memory
+
+| Metric | Value | Source |
+| --- | ---: | --- |
+| C host cold start (process elapsed) | p50 23.272 ms, p95 113.579 ms | `just bench-cold-start` |
+| `dlopen`+`dlsym` | p50 9.545 ms, p95 13.018 ms | `just bench-cold-start` |
+| First wrapper call | p50 2.536 ms, p95 3.156 ms | `just bench-cold-start` |
+| Swift host cold start (process elapsed) | p50 28.198 ms, p95 96.312 ms | `just bench-swift-cold-start` |
+| Idle RSS after first call | p50 21,741,568 bytes, p95 21,741,568 bytes | `just bench-idle-rss` |
+| Python RSS after eval | p50 229,146,624 bytes, p95 242,532,352 bytes | `just bench-python-rss` |
+| Ruby RSS after eval | p50 198,000,640 bytes, p95 202,997,760 bytes | `just bench-ruby-rss` |
+
+### First eval per language
+
+| Language | First eval | Source |
+| --- | ---: | --- |
+| Lua | p50 1.225 ms, p95 1.595 ms | `just bench-lua-first-eval` |
+| Clojure (default `bench-first-eval`) | p50 1.732 ms, p95 2.647 ms | `just bench-first-eval` |
+| JavaScript | p50 8.083 ms, p95 11.282 ms | `just bench-javascript-first-eval` |
+| Python | p50 46.759 ms, p95 53.341 ms | `just bench-python-first-eval` |
+| Ruby | p50 62.010 ms, p95 115.695 ms | `just bench-ruby-first-eval` |
+
+App bundle delta (the size a `.app` grows by when it embeds Ecritum versus a
+comparable app without it) is not yet measured by a release recipe. The hosted
+zip and unzipped artifact sizes above are the authoritative size references.
 
 ## Design Priorities
 
@@ -203,10 +252,8 @@ against a comparable app without Ecritum.
 
 ## Open Questions
 
-- GraalPy resource packaging and sandbox feasibility inside the default artifact.
-- TruffleRuby Maven/version feasibility and resource packaging inside the default
-  artifact.
 - Async host callback and executor behavior.
 - Complete five-language sandbox evidence for user-provided scripts.
+- App bundle delta measurement against a comparable app without Ecritum.
 - Optional Trusted macOS release operations with Developer ID signing and
   notarization.

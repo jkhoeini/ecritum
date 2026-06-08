@@ -9,7 +9,11 @@ record SciEvalResult(
     String message
 ) {
     static SciEvalResult ok(Object value) {
-        return new SciEvalResult(EcritumStatus.OK, value, "clojure", "", "", "");
+        return new SciEvalResult(EcritumStatus.OK, value, "", "", "", "");
+    }
+
+    static SciEvalResult ok(String language, Object value) {
+        return new SciEvalResult(EcritumStatus.OK, value, language, "", "", "");
     }
 
     static SciEvalResult scriptError(String language, String sourceName, String category, String message) {

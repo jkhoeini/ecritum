@@ -7,10 +7,11 @@ record StandardLibraryPolicy(
     String filesystemMode,
     List<String> filesystemRoots,
     boolean clockReadable,
-    boolean networkReadable
+    boolean networkReadable,
+    Long executionTimeoutNanos
 ) {
     static StandardLibraryPolicy denied() {
-        return new StandardLibraryPolicy("denied", List.of(), false, false);
+        return new StandardLibraryPolicy("denied", List.of(), false, false, null);
     }
 
     static StandardLibraryPolicy fromManifest(String manifest) {
@@ -49,13 +50,15 @@ record StandardLibraryPolicy(
         if (!clockMode.equals("denied") && !clockMode.equals("allowed")) {
             throw StandardLibraryException.internalError("standard-library clock mode is unsupported");
         }
-        expectObject(root.get("resourceLimits"), "standard-library resource limits are invalid");
+        Map<?, ?> resourceLimits = expectObject(root.get("resourceLimits"), "standard-library resource limits are invalid");
+        expectKeys(resourceLimits, List.of("executionTimeoutNanos"), "standard-library resource limits have unknown keys");
 
         return new StandardLibraryPolicy(
             filesystemMode,
             List.copyOf(roots),
             clockMode.equals("allowed"),
-            networkMode.equals("allowed")
+            networkMode.equals("allowed"),
+            optionalLong(resourceLimits.get("executionTimeoutNanos"), "standard-library execution timeout is invalid")
         );
     }
 
@@ -101,6 +104,16 @@ record StandardLibraryPolicy(
     private static void expectLong(Object value, long expected, String message) {
         if (value instanceof Long raw && raw == expected) {
             return;
+        }
+        throw StandardLibraryException.internalError(message);
+    }
+
+    private static Long optionalLong(Object value, String message) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Long raw) {
+            return raw;
         }
         throw StandardLibraryException.internalError(message);
     }

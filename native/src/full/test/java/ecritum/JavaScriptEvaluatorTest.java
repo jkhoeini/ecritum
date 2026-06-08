@@ -269,6 +269,7 @@ final class JavaScriptEvaluatorTest {
     private Object ok(String source) {
         SciEvalResult result = JavaScriptEvaluator.evaluate(source, "value-source.js");
         assertEquals(EcritumStatus.OK, result.status(), result.message());
+        assertEquals("javascript", result.language());
         return result.value();
     }
 

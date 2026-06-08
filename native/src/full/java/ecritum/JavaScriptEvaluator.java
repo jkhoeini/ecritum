@@ -62,7 +62,7 @@ final class JavaScriptEvaluator {
                 ecritumGlobal(context, projections, hostInvoker, standardLibraryPolicy, standardLibraryBridge)
             );
             Value value = context.eval(Source.newBuilder("js", source, sourceFileName(safeSourceName)).buildLiteral());
-            return SciEvalResult.ok(normalizeValue(context, value, newIdentitySet()));
+            return SciEvalResult.ok(LANGUAGE, normalizeValue(context, value, newIdentitySet()));
         } catch (JavaScriptAdapterException ex) {
             return new SciEvalResult(
                 ex.status(),

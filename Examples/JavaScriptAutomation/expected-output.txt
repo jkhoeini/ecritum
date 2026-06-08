@@ -1,0 +1,5 @@
+Order automation summary:
+  regions = {amer: 1, apac: 1, emea: 2}
+  revenue = 460
+  shippedCount = 4
+  topOrder = "A-4"

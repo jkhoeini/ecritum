@@ -268,6 +268,15 @@ static void test_eval_job_success_single_drain_and_busy_context(void) {
     CHECK(ecritum_job_destroy(&job, &error) == ECRITUM_OK);
     CHECK(job == 0);
 
+#ifndef ECRITUM_RUNTIME_LANE_CORE
+    CHECK(ecritum_eval_start(context, view("python"), bytes("fixture:int:42"), view("smoke.py"), empty_config(), &job, &error) == ECRITUM_OK);
+    CHECK(ecritum_job_result(job, &result, &error) == ECRITUM_OK);
+    assert_int_value(result, 42);
+    CHECK(ecritum_value_destroy(&result) == ECRITUM_OK);
+    CHECK(ecritum_job_destroy(&job, &error) == ECRITUM_OK);
+    CHECK(job == 0);
+#endif
+
     CHECK(ecritum_context_destroy(&context, &error) == ECRITUM_OK);
     CHECK(ecritum_runtime_destroy(&runtime, &error) == ECRITUM_OK);
 }
@@ -282,6 +291,14 @@ static void test_core_lane_rejects_full_only_languages_before_job_creation(void)
     create_runtime_and_context(&runtime, &context);
 
     CHECK(ecritum_eval_start(context, view("javascript"), bytes("fixture:int:42"), view("core.js"), empty_config(), &job, &error) == ECRITUM_ERROR_RUNTIME_UNAVAILABLE);
+    CHECK(job == 0);
+    CHECK(error != 0);
+    assert_error_field(error, ecritum_error_operation, "eval_start");
+    assert_error_field(error, ecritum_error_category, "runtime_unavailable");
+    CHECK(ecritum_error_destroy(&error) == ECRITUM_OK);
+
+    job = 123;
+    CHECK(ecritum_eval_start(context, view("python"), bytes("fixture:int:42"), view("core.py"), empty_config(), &job, &error) == ECRITUM_ERROR_RUNTIME_UNAVAILABLE);
     CHECK(job == 0);
     CHECK(error != 0);
     assert_error_field(error, ecritum_error_operation, "eval_start");
