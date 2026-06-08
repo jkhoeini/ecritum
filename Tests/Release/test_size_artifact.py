@@ -25,62 +25,61 @@ class SizeArtifactTest(unittest.TestCase):
         self.artifact = self.root / "EcritumRuntime.xcframework"
         framework = self.artifact / "macos-arm64" / "EcritumRuntime.framework"
         self.wrapper = framework / "EcritumRuntime"
-        self.private_runtime = framework / "Resources" / "libecritum_graal.dylib"
+        self.resources = framework / "Resources"
+        self.private_runtime = self.resources / "libecritum_graal.dylib"
         make_file(self.wrapper, 64 * 1024)
         self.wrapper.chmod(self.wrapper.stat().st_mode | stat.S_IXUSR)
         make_file(self.private_runtime, 151_000_000)
-        self.metadata = framework / "Resources" / "ecritum-runtime-lane.json"
-        self.write_release_lane("full")
+        self.metadata = self.resources / "ecritum-runtime.json"
+        self.write_runtime_metadata()
 
     def tearDown(self):
         self.tmp.cleanup()
 
-    def test_core_lane_fails_but_full_lane_accepts_large_combined_artifact(self):
-        core = self.run_size("core")
-        full = self.run_size("full")
+    def test_default_artifact_accepts_current_combined_runtime_budget(self):
+        completed = self.run_size()
 
-        self.assertEqual(core.returncode, 1, core.stdout + core.stderr)
-        core_payload = json.loads(core.stdout)
-        self.assertEqual(core_payload["lane"], "core")
-        self.assertFalse(core_payload["ok"])
-        self.assertEqual(core_payload["artifact_release_lane"], "full")
-        self.assertIn("artifact release lane 'full' does not match requested lane 'core'", core_payload["violations"])
-        self.assertTrue(any("artifact_bytes" in violation for violation in core_payload["violations"]))
-        self.assertTrue(any("private_runtime_bytes" in violation for violation in core_payload["violations"]))
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        payload = json.loads(completed.stdout)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["artifactKind"], "default")
+        self.assertEqual(payload["implementationProfile"], "full")
+        self.assertEqual(payload["includedRuntimes"], ["clojure", "javascript", "lua"])
+        self.assertEqual(payload["violations"], [])
 
-        self.assertEqual(full.returncode, 0, full.stdout + full.stderr)
-        full_payload = json.loads(full.stdout)
-        self.assertEqual(full_payload["lane"], "full")
-        self.assertEqual(full_payload["artifact_release_lane"], "full")
-        self.assertTrue(full_payload["ok"])
-        self.assertEqual(full_payload["violations"], [])
+    def test_legacy_full_metadata_is_accepted_until_artifact_rebuild(self):
+        self.metadata.unlink()
+        (self.resources / "ecritum-runtime-lane.json").write_text('{"formatVersion":1,"releaseLane":"full"}\n')
 
-    def test_lane_metadata_mismatch_is_a_violation_even_when_size_fits(self):
-        self.write_release_lane("core")
+        completed = self.run_size()
 
-        completed = self.run_size("full")
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["artifactKind"], "default")
+        self.assertEqual(payload["implementationProfile"], "full")
+
+    def test_legacy_core_metadata_is_not_a_default_artifact(self):
+        self.metadata.unlink()
+        (self.resources / "ecritum-runtime-lane.json").write_text('{"formatVersion":1,"releaseLane":"core"}\n')
+
+        completed = self.run_size()
 
         self.assertEqual(completed.returncode, 1)
         payload = json.loads(completed.stdout)
-        self.assertIn("artifact release lane 'core' does not match requested lane 'full'", payload["violations"])
+        self.assertIn("artifactKind 'internal' is not 'default'", payload["violations"])
+        self.assertIn("includedRuntimes missing required default runtimes: javascript, lua", payload["violations"])
 
     def test_missing_private_runtime_is_a_violation(self):
         self.private_runtime.unlink()
 
-        completed = self.run_size("full")
+        completed = self.run_size()
 
         self.assertEqual(completed.returncode, 1)
         payload = json.loads(completed.stdout)
         self.assertIn("private_runtime_bytes missing", payload["violations"])
 
-    def test_invalid_lane_is_rejected_by_argparse(self):
-        completed = self.run_size("experimental")
-
-        self.assertEqual(completed.returncode, 2)
-        self.assertIn("invalid choice", completed.stderr)
-
-    def run_size(self, lane):
-        return subprocess.run(
+    def test_retired_lane_argument_is_rejected_by_argparse(self):
+        completed = subprocess.run(
             [
                 sys.executable,
                 str(SIZE_ARTIFACT),
@@ -88,7 +87,7 @@ class SizeArtifactTest(unittest.TestCase):
                 str(self.artifact),
                 "--require-artifact",
                 "--lane",
-                lane,
+                "core",
             ],
             cwd=ROOT,
             text=True,
@@ -97,8 +96,32 @@ class SizeArtifactTest(unittest.TestCase):
             check=False,
         )
 
-    def write_release_lane(self, lane):
-        self.metadata.write_text(json.dumps({"formatVersion": 1, "releaseLane": lane}) + "\n")
+        self.assertEqual(completed.returncode, 2)
+        self.assertIn("unrecognized arguments", completed.stderr)
+
+    def run_size(self):
+        return subprocess.run(
+            [
+                sys.executable,
+                str(SIZE_ARTIFACT),
+                "--artifact",
+                str(self.artifact),
+                "--require-artifact",
+            ],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+
+    def write_runtime_metadata(self):
+        self.metadata.write_text(json.dumps({
+            "artifactKind": "default",
+            "formatVersion": 1,
+            "implementationProfile": "full",
+            "includedRuntimes": ["clojure", "javascript", "lua"],
+        }) + "\n")
 
 
 if __name__ == "__main__":

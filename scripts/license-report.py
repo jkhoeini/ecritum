@@ -60,9 +60,7 @@ def missing_license():
     return {"name": None, "url": None, "names": [], "urls": []}
 
 
-def full_lane_pom_license(path, package_name):
-    if args.lane != "full":
-        return missing_license()
+def shipped_pom_license(path, package_name):
     return pom_license(path, package_name, required=True)
 
 
@@ -320,7 +318,6 @@ parser.add_argument("--native-pom", default="native/pom.xml")
 parser.add_argument("--m2", default=str(Path.home() / ".m2" / "repository"))
 parser.add_argument("--graalvm-home", default=None, help="GraalVM home used to verify Native Image license evidence in strict mode.")
 parser.add_argument("--first-party-license-file", default=FIRST_PARTY_LICENSE_FILE, help="First-party Ecritum license file to validate in strict mode.")
-parser.add_argument("--lane", choices=["core", "full"], default="full")
 args = parser.parse_args()
 
 native_pom = Path(args.native_pom)
@@ -332,16 +329,16 @@ if native_pom.exists():
 
 nativeimage_license = pom_license(m2 / "org" / "graalvm" / "sdk" / "nativeimage" / graal_version / f"nativeimage-{graal_version}.pom", "org.graalvm.sdk:nativeimage", required=True)
 word_license = pom_license(m2 / "org" / "graalvm" / "sdk" / "word" / graal_version / f"word-{graal_version}.pom", "org.graalvm.sdk:word", required=True)
-polyglot_license = full_lane_pom_license(m2 / "org" / "graalvm" / "polyglot" / "polyglot" / graal_version / f"polyglot-{graal_version}.pom", "org.graalvm.polyglot:polyglot")
-collections_license = full_lane_pom_license(m2 / "org" / "graalvm" / "sdk" / "collections" / graal_version / f"collections-{graal_version}.pom", "org.graalvm.sdk:collections")
-js_language_license = full_lane_pom_license(m2 / "org" / "graalvm" / "js" / "js-language" / graal_version / f"js-language-{graal_version}.pom", "org.graalvm.js:js-language")
-regex_license = full_lane_pom_license(m2 / "org" / "graalvm" / "regex" / "regex" / graal_version / f"regex-{graal_version}.pom", "org.graalvm.regex:regex")
-truffle_api_license = full_lane_pom_license(m2 / "org" / "graalvm" / "truffle" / "truffle-api" / graal_version / f"truffle-api-{graal_version}.pom", "org.graalvm.truffle:truffle-api")
-icu4j_license = full_lane_pom_license(m2 / "org" / "graalvm" / "shadowed" / "icu4j" / graal_version / f"icu4j-{graal_version}.pom", "org.graalvm.shadowed:icu4j")
-xz_license = full_lane_pom_license(m2 / "org" / "graalvm" / "shadowed" / "xz" / graal_version / f"xz-{graal_version}.pom", "org.graalvm.shadowed:xz")
-truffle_runtime_license = full_lane_pom_license(m2 / "org" / "graalvm" / "truffle" / "truffle-runtime" / graal_version / f"truffle-runtime-{graal_version}.pom", "org.graalvm.truffle:truffle-runtime")
-jniutils_license = full_lane_pom_license(m2 / "org" / "graalvm" / "sdk" / "jniutils" / graal_version / f"jniutils-{graal_version}.pom", "org.graalvm.sdk:jniutils")
-truffle_compiler_license = full_lane_pom_license(m2 / "org" / "graalvm" / "truffle" / "truffle-compiler" / graal_version / f"truffle-compiler-{graal_version}.pom", "org.graalvm.truffle:truffle-compiler")
+polyglot_license = shipped_pom_license(m2 / "org" / "graalvm" / "polyglot" / "polyglot" / graal_version / f"polyglot-{graal_version}.pom", "org.graalvm.polyglot:polyglot")
+collections_license = shipped_pom_license(m2 / "org" / "graalvm" / "sdk" / "collections" / graal_version / f"collections-{graal_version}.pom", "org.graalvm.sdk:collections")
+js_language_license = shipped_pom_license(m2 / "org" / "graalvm" / "js" / "js-language" / graal_version / f"js-language-{graal_version}.pom", "org.graalvm.js:js-language")
+regex_license = shipped_pom_license(m2 / "org" / "graalvm" / "regex" / "regex" / graal_version / f"regex-{graal_version}.pom", "org.graalvm.regex:regex")
+truffle_api_license = shipped_pom_license(m2 / "org" / "graalvm" / "truffle" / "truffle-api" / graal_version / f"truffle-api-{graal_version}.pom", "org.graalvm.truffle:truffle-api")
+icu4j_license = shipped_pom_license(m2 / "org" / "graalvm" / "shadowed" / "icu4j" / graal_version / f"icu4j-{graal_version}.pom", "org.graalvm.shadowed:icu4j")
+xz_license = shipped_pom_license(m2 / "org" / "graalvm" / "shadowed" / "xz" / graal_version / f"xz-{graal_version}.pom", "org.graalvm.shadowed:xz")
+truffle_runtime_license = shipped_pom_license(m2 / "org" / "graalvm" / "truffle" / "truffle-runtime" / graal_version / f"truffle-runtime-{graal_version}.pom", "org.graalvm.truffle:truffle-runtime")
+jniutils_license = shipped_pom_license(m2 / "org" / "graalvm" / "sdk" / "jniutils" / graal_version / f"jniutils-{graal_version}.pom", "org.graalvm.sdk:jniutils")
+truffle_compiler_license = shipped_pom_license(m2 / "org" / "graalvm" / "truffle" / "truffle-compiler" / graal_version / f"truffle-compiler-{graal_version}.pom", "org.graalvm.truffle:truffle-compiler")
 sci_license = pom_license(m2 / "org" / "babashka" / "sci" / "0.12.51" / "sci-0.12.51.pom", "org.babashka:sci", required=True)
 clojure_license = pom_license(m2 / "org" / "clojure" / "clojure" / "1.10.3" / "clojure-1.10.3.pom", "org.clojure:clojure", required=True)
 spec_alpha_license = pom_license(m2 / "org" / "clojure" / "spec.alpha" / "0.2.194" / "spec.alpha-0.2.194.pom", "org.clojure:spec.alpha", required=True)
@@ -349,7 +346,7 @@ core_specs_alpha_license = pom_license(m2 / "org" / "clojure" / "core.specs.alph
 edamame_license = pom_license(m2 / "borkdude" / "edamame" / "1.5.37" / "edamame-1.5.37.pom", "borkdude:edamame", required=True)
 tools_reader_license = pom_license(m2 / "org" / "clojure" / "tools.reader" / "1.5.2" / "tools.reader-1.5.2.pom", "org.clojure:tools.reader", required=True)
 graal_locking_license = pom_license(m2 / "borkdude" / "graal.locking" / "0.0.2" / "graal.locking-0.0.2.pom", "borkdude:graal.locking", required=True)
-luaj_jme_license = full_lane_pom_license(m2 / "org" / "luaj" / "luaj-jme" / "3.0.1" / "luaj-jme-3.0.1.pom", "org.luaj:luaj-jme")
+luaj_jme_license = shipped_pom_license(m2 / "org" / "luaj" / "luaj-jme" / "3.0.1" / "luaj-jme-3.0.1.pom", "org.luaj:luaj-jme")
 if "SOURCE_DATE_EPOCH" in os.environ:
     created_at = dt.datetime.fromtimestamp(int(os.environ["SOURCE_DATE_EPOCH"]), dt.timezone.utc)
 else:
@@ -601,22 +598,6 @@ packages = [
     ),
 ]
 
-FULL_ONLY_SHIPPED_PACKAGES = {
-    "org.graalvm.polyglot:polyglot",
-    "org.graalvm.sdk:collections",
-    "org.graalvm.js:js-language",
-    "org.graalvm.regex:regex",
-    "org.graalvm.truffle:truffle-api",
-    "org.graalvm.shadowed:icu4j",
-    "org.graalvm.shadowed:xz",
-    "org.graalvm.truffle:truffle-runtime",
-    "org.graalvm.sdk:jniutils",
-    "org.graalvm.truffle:truffle-compiler",
-    "org.luaj:luaj-jme",
-}
-if args.lane == "core":
-    packages = [item for item in packages if item["name"] not in FULL_ONLY_SHIPPED_PACKAGES]
-
 blockers = [
     f"{item['name']} has unknown shipped license"
     for item in packages
@@ -645,7 +626,7 @@ document = {
             "annotationType": "OTHER",
             "annotator": "Tool: scripts/license-report.py",
             "annotationDate": created,
-            "comment": f"ecritum-sbom-format=SPDX-2.3 JSON; release-lane={args.lane}; unknown shipped licenses block release; "
+            "comment": "ecritum-sbom-format=SPDX-2.3 JSON; artifact-kind=default; included-runtimes=clojure,javascript,lua; unknown shipped licenses block release; "
             + "blockers="
             + json.dumps(blockers + POM_METADATA_ERRORS, separators=(",", ":")),
         }

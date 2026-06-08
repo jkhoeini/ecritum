@@ -109,17 +109,17 @@ check-native-legacy:
 
 xcframework output="dist/local/EcritumRuntime.xcframework":
     test -d build/native
-    scripts/build-xcframework.sh --native-dir "{{native_stable_dir}}" --lane full --output "{{output}}"
+    scripts/build-xcframework.sh --native-dir "{{native_stable_dir}}" --implementation-profile full --output "{{output}}"
     just check-xcframework "{{output}}"
 
 xcframework-core output="dist/core/EcritumRuntime.xcframework":
     test -d {{native_core_stable_dir}}
-    scripts/build-xcframework.sh --native-dir "{{native_core_stable_dir}}" --lane core --work-dir "build/xcframework/core" --output "{{output}}"
+    scripts/build-xcframework.sh --native-dir "{{native_core_stable_dir}}" --implementation-profile core --work-dir "build/xcframework/core" --output "{{output}}"
     just check-xcframework "{{output}}"
 
 xcframework-full output="dist/full/EcritumRuntime.xcframework":
     test -d {{native_full_stable_dir}}
-    scripts/build-xcframework.sh --native-dir "{{native_full_stable_dir}}" --lane full --work-dir "build/xcframework/full" --output "{{output}}"
+    scripts/build-xcframework.sh --native-dir "{{native_full_stable_dir}}" --implementation-profile full --work-dir "build/xcframework/full" --output "{{output}}"
     just check-xcframework "{{output}}"
 
 check-xcframework artifact="dist/local/EcritumRuntime.xcframework":
@@ -349,12 +349,13 @@ packaged-app-smoke:
 
 test-packaged-app-smoke: packaged-app-smoke
 
-test-release-consumer-smoke artifact_url="" checksum="" release_zip="" lane="core":
+test-release-consumer-smoke artifact_url="" checksum="" release_zip="" use_default_package_runtime="0" manifest_only="0":
     @args=(); \
     if [ -n "{{artifact_url}}" ]; then args+=(--artifact-url "{{artifact_url}}"); fi; \
     if [ -n "{{checksum}}" ]; then args+=(--checksum "{{checksum}}"); fi; \
     if [ -n "{{release_zip}}" ]; then args+=(--release-zip "{{release_zip}}"); fi; \
-    if [ -n "{{lane}}" ]; then args+=(--lane "{{lane}}"); fi; \
+    if [ "{{use_default_package_runtime}}" = "1" ]; then args+=(--use-default-package-runtime); fi; \
+    if [ "{{manifest_only}}" = "1" ]; then args+=(--manifest-only); fi; \
     python3 scripts/test-release-consumer-smoke.py "${args[@]}"
 
 examples: example-swift example-c packaged-app-smoke
@@ -369,18 +370,18 @@ test-examples-auto:
 inspect artifact="dist/local/EcritumRuntime.xcframework":
     @python3 scripts/inspect-artifact.py --artifact "{{artifact}}"
 
-package-artifact artifact="dist/local/EcritumRuntime.xcframework" output="dist/release/EcritumRuntime.xcframework.zip" lane="core":
-    @python3 scripts/package-artifact.py --artifact "{{artifact}}" --output "{{output}}" --release-lane "{{lane}}"
+package-artifact artifact="dist/local/EcritumRuntime.xcframework" output="dist/release/EcritumRuntime.xcframework.zip":
+    @python3 scripts/package-artifact.py --artifact "{{artifact}}" --output "{{output}}"
 
-package-artifact-verify artifact="dist/local/EcritumRuntime.xcframework" lane="core":
-    @python3 scripts/check-package-reproducible.py --artifact "{{artifact}}" --release-lane "{{lane}}"
+package-artifact-verify artifact="dist/local/EcritumRuntime.xcframework":
+    @python3 scripts/check-package-reproducible.py --artifact "{{artifact}}"
 
 checksum output="dist/release/EcritumRuntime.xcframework.zip":
     test -f "{{output}}"
     @swift package compute-checksum "{{output}}"
 
-size artifact="dist/local/EcritumRuntime.xcframework" lane="core":
-    @python3 scripts/size-artifact.py --artifact "{{artifact}}" --lane "{{lane}}"
+size artifact="dist/local/EcritumRuntime.xcframework":
+    @python3 scripts/size-artifact.py --artifact "{{artifact}}"
 
 bench-cold-start:
     @python3 scripts/measure-runtime.py --mode startup
@@ -405,8 +406,8 @@ bench-first-eval:
 bench-javascript-first-eval:
     @python3 scripts/measure-first-eval.py --name javascript-first-eval --language javascript --source "40 + 2" --source-name bench-first-eval.js
 
-check-dep-delta lane="full":
-    @python3 scripts/check-dep-delta.py --lane "{{lane}}"
+check-dep-delta:
+    @python3 scripts/check-dep-delta.py
 
 check-license-texts artifact="dist/local/EcritumRuntime.xcframework" license_report="":
     @args=(--artifact "{{artifact}}"); \
@@ -436,30 +437,28 @@ perf-baseline: size bench-cold-start bench-swift-cold-start bench-idle-rss bench
 
 perf: perf-baseline
 
-license-report lane="full":
-    @python3 scripts/license-report.py --lane "{{lane}}"
+license-report:
+    @python3 scripts/license-report.py
 
-sbom output="dist/release/EcritumRuntime.xcframework.zip.spdx.json" lane="full":
-    @python3 scripts/license-report.py --lane "{{lane}}" > "{{output}}"
+sbom output="dist/release/EcritumRuntime.xcframework.zip.spdx.json":
+    @python3 scripts/license-report.py > "{{output}}"
 
-license-report-strict lane="full":
-    @python3 scripts/license-report.py --strict --lane "{{lane}}"
+license-report-strict:
+    @python3 scripts/license-report.py --strict
 
-third-party-notices output="THIRD_PARTY_NOTICES.md" lane="full":
-    @SOURCE_DATE_EPOCH=0 python3 scripts/license-report.py --notices --lane "{{lane}}" > "{{output}}"
+third-party-notices output="THIRD_PARTY_NOTICES.md":
+    @SOURCE_DATE_EPOCH=0 python3 scripts/license-report.py --notices > "{{output}}"
 
-release-check lane="":
-    @args=(); \
-    if [ -n "{{lane}}" ]; then args+=(--lane "{{lane}}"); fi; \
-    scripts/release-check.sh "${args[@]}"
+release-check:
+    @scripts/release-check.sh
 
-release-check-community lane="core":
-    @scripts/release-check.sh --lane "{{lane}}" --community
+release-check-community:
+    @scripts/release-check.sh --community
 
-release-check-public lane="core" notary_submit_json="" notary_log_json="" stapling_exception_json="" stapler_evidence_json="":
+release-check-public notary_submit_json="" notary_log_json="" stapling_exception_json="" stapler_evidence_json="":
     @test -n "{{notary_submit_json}}" || { echo "release-check-public requires notary_submit_json" >&2; exit 2; }; \
     test -n "{{notary_log_json}}" || { echo "release-check-public requires notary_log_json" >&2; exit 2; }; \
-    args=(--lane "{{lane}}" --public --notary-submit-json "{{notary_submit_json}}" --notary-log-json "{{notary_log_json}}"); \
+    args=(--public --notary-submit-json "{{notary_submit_json}}" --notary-log-json "{{notary_log_json}}"); \
     if [ -n "{{stapling_exception_json}}" ]; then args+=(--stapling-exception-json "{{stapling_exception_json}}"); fi; \
     if [ -n "{{stapler_evidence_json}}" ]; then args+=(--stapler-evidence-json "{{stapler_evidence_json}}"); fi; \
     scripts/release-check.sh "${args[@]}"

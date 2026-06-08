@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'USAGE'
-Usage: build-xcframework.sh [--lane core|full] [--native-dir PATH] [--public-headers PATH] [--license-texts-dir PATH] [--first-party-license-file PATH] [--output PATH] [--work-dir PATH] [--min-macos VERSION] [--sign-identity ID] [--skip-sign] [--public-release]
+Usage: build-xcframework.sh [--implementation-profile core|full] [--native-dir PATH] [--public-headers PATH] [--license-texts-dir PATH] [--first-party-license-file PATH] [--output PATH] [--work-dir PATH] [--min-macos VERSION] [--sign-identity ID] [--skip-sign] [--public-release]
 
 Build dist/local/EcritumRuntime.xcframework from the M1 native output.
 Diagnostics go to stderr. The output path is printed to stdout.
@@ -19,12 +19,17 @@ work_dir="build/xcframework"
 min_macos="14.0"
 sign_identity="${ECRITUM_CODESIGN_IDENTITY:--}"
 skip_sign="0"
-lane="full"
+implementation_profile="full"
 public_release="0"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --lane) lane="$2"; shift 2 ;;
+    --implementation-profile) implementation_profile="$2"; shift 2 ;;
+    --lane)
+      echo "--lane is retired; use --implementation-profile for internal build profiles" >&2
+      usage >&2
+      exit 2
+      ;;
     --native-dir) native_dir="$2"; shift 2 ;;
     --public-headers) public_headers="$2"; shift 2 ;;
     --license-texts-dir) license_texts_dir="$2"; shift 2 ;;
@@ -40,8 +45,8 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-if [ "$lane" != "core" ] && [ "$lane" != "full" ]; then
-  echo "invalid lane: $lane" >&2
+if [ "$implementation_profile" != "core" ] && [ "$implementation_profile" != "full" ]; then
+  echo "invalid implementation profile: $implementation_profile" >&2
   usage >&2
   exit 2
 fi
@@ -81,11 +86,25 @@ cp "$public_headers/ecritum.h" "$framework_dir/Headers/ecritum.h"
 cp "$native_lib" "$resources_dir/libecritum_graal.dylib"
 cp -R "$license_texts_dir" "$resources_dir/Licenses"
 cp "$first_party_license_file" "$resources_dir/Licenses/Ecritum-LICENSE.txt"
-printf '{"formatVersion":1,"releaseLane":"%s"}\n' "$lane" > "$resources_dir/ecritum-runtime-lane.json"
+if [ "$implementation_profile" = "full" ]; then
+  artifact_kind="default"
+  included_runtimes='["clojure","javascript","lua"]'
+else
+  artifact_kind="internal"
+  included_runtimes='["clojure"]'
+fi
+cat > "$resources_dir/ecritum-runtime.json" <<METADATA
+{
+  "artifactKind": "$artifact_kind",
+  "formatVersion": 1,
+  "implementationProfile": "$implementation_profile",
+  "includedRuntimes": $included_runtimes
+}
+METADATA
 install_name_tool -id "@loader_path/Resources/libecritum_graal.dylib" "$resources_dir/libecritum_graal.dylib"
 
 clang_defines=()
-if [ "$lane" = "core" ]; then
+if [ "$implementation_profile" = "core" ]; then
   clang_defines+=("-DECRITUM_RUNTIME_LANE_CORE=1")
 fi
 

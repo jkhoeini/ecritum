@@ -29,9 +29,14 @@ class ReleaseCheckTest(unittest.TestCase):
         make_file(framework / "EcritumRuntime", 64 * 1024)
         resources = framework / "Resources"
         make_file(resources / "libecritum_graal.dylib", 30_000_000)
-        (resources / "ecritum-runtime-lane.json").write_text('{"formatVersion":1,"releaseLane":"full"}\n')
+        (resources / "ecritum-runtime.json").write_text(json.dumps({
+            "artifactKind": "default",
+            "formatVersion": 1,
+            "implementationProfile": "full",
+            "includedRuntimes": ["clojure", "javascript", "lua"],
+        }) + "\n")
         self.output_dir = self.root / "release-output"
-        self.release_zip = self.root / "release" / "full" / "EcritumRuntime.xcframework.zip"
+        self.release_zip = self.root / "release" / "EcritumRuntime.xcframework.zip"
         self.fake_bin = self.root / "bin"
         self.fake_bin.mkdir()
         self.log = self.root / "just-log.jsonl"
@@ -41,7 +46,7 @@ class ReleaseCheckTest(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def test_full_lane_is_propagated_to_release_gate_steps(self):
+    def test_default_artifact_is_propagated_to_release_gate_steps(self):
         env = os.environ.copy()
         env["JUST"] = str(self.fake_bin / "fake-just")
         env["JUST_LOG"] = str(self.log)
@@ -54,8 +59,6 @@ class ReleaseCheckTest(unittest.TestCase):
             [
                 "bash",
                 str(RELEASE_CHECK),
-                "--lane",
-                "full",
                 "--output-dir",
                 str(self.output_dir),
                 "--artifact",
@@ -77,21 +80,21 @@ class ReleaseCheckTest(unittest.TestCase):
         reproducibility_payload = json.loads((self.output_dir / "package-reproducibility.json").read_text())
         log_entries = [json.loads(line) for line in self.log.read_text().splitlines()]
 
-        self.assertEqual(size_payload["lane"], "full")
+        self.assertEqual(size_payload["artifactKind"], "default")
         self.assertTrue(size_payload["ok"])
-        self.assertEqual(package_payload["releaseLane"], "full")
-        self.assertEqual(reproducibility_payload["releaseLane"], "full")
+        self.assertEqual(package_payload["artifactKind"], "default")
+        self.assertEqual(reproducibility_payload["artifactKind"], "default")
         self.assertIn(
             {
                 "target": "package-artifact",
-                "args": [str(self.artifact), str(self.release_zip), "full"],
+                "args": [str(self.artifact), str(self.release_zip)],
             },
             log_entries,
         )
         self.assertIn(
             {
                 "target": "package-artifact-verify",
-                "args": [str(self.artifact), "full"],
+                "args": [str(self.artifact)],
             },
             log_entries,
         )
@@ -102,13 +105,12 @@ class ReleaseCheckTest(unittest.TestCase):
                     "https://example.invalid/EcritumRuntime.xcframework.zip",
                     self.release_zip_checksum(),
                     str(self.release_zip),
-                    "full",
                 ],
             },
             log_entries,
         )
 
-    def test_default_full_lane_paths_are_lane_scoped(self):
+    def test_default_release_paths_are_unscoped(self):
         env = os.environ.copy()
         env["JUST"] = str(self.fake_bin / "fake-just")
         env["JUST_LOG"] = str(self.log)
@@ -125,8 +127,6 @@ class ReleaseCheckTest(unittest.TestCase):
             [
                 "bash",
                 str(RELEASE_CHECK),
-                "--lane",
-                "full",
                 "--artifact",
                 str(self.artifact),
             ],
@@ -139,13 +139,13 @@ class ReleaseCheckTest(unittest.TestCase):
         )
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
-        release_zip = work_root / "dist" / "release" / "full" / "EcritumRuntime.xcframework.zip"
-        output_dir = work_root / "build" / "release" / "full"
+        release_zip = work_root / "dist" / "release" / "EcritumRuntime.xcframework.zip"
+        output_dir = work_root / "build" / "release"
         self.assertTrue((output_dir / "package.json").is_file())
         self.assertTrue((output_dir / "size.json").is_file())
         self.assertTrue(release_zip.is_file())
-        self.assertEqual(json.loads((output_dir / "package.json").read_text())["releaseLane"], "full")
-        self.assertEqual(json.loads((output_dir / "size.json").read_text())["lane"], "full")
+        self.assertEqual(json.loads((output_dir / "package.json").read_text())["artifactKind"], "default")
+        self.assertEqual(json.loads((output_dir / "size.json").read_text())["artifactKind"], "default")
 
     def test_release_check_ignores_ambient_release_lane(self):
         env = os.environ.copy()
@@ -176,16 +176,15 @@ class ReleaseCheckTest(unittest.TestCase):
             check=False,
         )
 
-        self.assertEqual(completed.returncode, 1)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
         size_payload = json.loads((self.output_dir / "size.json").read_text())
         package_payload = json.loads((self.output_dir / "package.json").read_text())
-        self.assertEqual(size_payload["lane"], "core")
-        self.assertEqual(package_payload["releaseLane"], "core")
-        self.assertIn("artifact release lane 'full' does not match requested lane 'core'", size_payload["violations"])
+        self.assertEqual(size_payload["artifactKind"], "default")
+        self.assertEqual(package_payload["artifactKind"], "default")
 
-    def test_invalid_lane_exits_before_running_gates(self):
+    def test_retired_lane_exits_before_running_gates(self):
         completed = subprocess.run(
-            ["bash", str(RELEASE_CHECK), "--lane", "experimental"],
+            ["bash", str(RELEASE_CHECK), "--lane", "full"],
             cwd=ROOT,
             text=True,
             stdout=subprocess.PIPE,
@@ -194,7 +193,7 @@ class ReleaseCheckTest(unittest.TestCase):
         )
 
         self.assertEqual(completed.returncode, 2)
-        self.assertIn("invalid release lane", completed.stderr)
+        self.assertIn("--lane is retired", completed.stderr)
 
     def test_public_release_requires_notarization_evidence_args(self):
         completed = subprocess.run(
@@ -223,8 +222,6 @@ class ReleaseCheckTest(unittest.TestCase):
             [
                 "bash",
                 str(RELEASE_CHECK),
-                "--lane",
-                "full",
                 "--output-dir",
                 str(self.output_dir),
                 "--artifact",
@@ -250,7 +247,7 @@ class ReleaseCheckTest(unittest.TestCase):
         self.assertEqual(completed.returncode, 1)
         self.assertIn("public release requires ECRITUM_CONSUMER_ARTIFACT_URL", completed.stderr)
 
-    def test_community_release_requires_hosted_consumer_url(self):
+    def test_community_release_uses_checked_in_default_manifest_without_hosted_env(self):
         env = os.environ.copy()
         env["JUST"] = str(self.fake_bin / "fake-just")
         env["JUST_LOG"] = str(self.log)
@@ -263,8 +260,6 @@ class ReleaseCheckTest(unittest.TestCase):
             [
                 "bash",
                 str(RELEASE_CHECK),
-                "--lane",
-                "full",
                 "--output-dir",
                 str(self.output_dir),
                 "--artifact",
@@ -281,9 +276,17 @@ class ReleaseCheckTest(unittest.TestCase):
             check=False,
         )
 
-        self.assertEqual(completed.returncode, 1)
-        self.assertIn("community release requires ECRITUM_CONSUMER_ARTIFACT_URL", completed.stderr)
-        self.assertFalse(self.log.exists())
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        log_entries = [json.loads(line) for line in self.log.read_text().splitlines()]
+        self.assertIn(
+            {
+                "target": "test-release-consumer-smoke",
+                "args": ["", "", str(self.release_zip), "1", "1"],
+            },
+            log_entries,
+        )
+        payload = json.loads((self.output_dir / "clean-consumer.json").read_text())
+        self.assertTrue(payload["ok"])
 
     def test_community_release_runs_hosted_consumer_without_public_signing(self):
         env = os.environ.copy()
@@ -298,8 +301,6 @@ class ReleaseCheckTest(unittest.TestCase):
             [
                 "bash",
                 str(RELEASE_CHECK),
-                "--lane",
-                "full",
                 "--output-dir",
                 str(self.output_dir),
                 "--artifact",
@@ -331,61 +332,10 @@ class ReleaseCheckTest(unittest.TestCase):
                     "https://example.invalid/EcritumRuntime.xcframework.zip",
                     "a" * 64,
                     str(self.release_zip),
-                    "full",
                 ],
             },
             log_entries,
         )
-
-    def test_core_community_release_runs_core_hosted_consumer(self):
-        lane_metadata = self.artifact / "macos-arm64" / "EcritumRuntime.framework" / "Resources" / "ecritum-runtime-lane.json"
-        lane_metadata.write_text('{"formatVersion":1,"releaseLane":"core"}\n')
-        release_zip = self.root / "release" / "core" / "EcritumRuntime.xcframework.zip"
-        env = os.environ.copy()
-        env["JUST"] = str(self.fake_bin / "fake-just")
-        env["JUST_LOG"] = str(self.log)
-        env["REPO_ROOT"] = str(ROOT)
-        env["PATH"] = str(self.fake_bin) + os.pathsep + env["PATH"]
-        env["ECRITUM_CONSUMER_ARTIFACT_URL"] = "https://example.invalid/EcritumRuntime.xcframework.zip"
-        env["ECRITUM_CONSUMER_ARTIFACT_CHECKSUM"] = "b" * 64
-
-        completed = subprocess.run(
-            [
-                "bash",
-                str(RELEASE_CHECK),
-                "--lane",
-                "core",
-                "--output-dir",
-                str(self.output_dir),
-                "--artifact",
-                str(self.artifact),
-                "--release-zip",
-                str(release_zip),
-                "--community",
-            ],
-            cwd=ROOT,
-            env=env,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            check=False,
-        )
-
-        self.assertEqual(completed.returncode, 0, completed.stderr)
-        log_entries = [json.loads(line) for line in self.log.read_text().splitlines()]
-        self.assertIn(
-            {
-                "target": "test-release-consumer-smoke",
-                "args": [
-                    "https://example.invalid/EcritumRuntime.xcframework.zip",
-                    "b" * 64,
-                    str(release_zip),
-                    "core",
-                ],
-            },
-            log_entries,
-        )
-        self.assertEqual(json.loads((self.output_dir / "package.json").read_text())["releaseLane"], "core")
 
     def test_release_mode_cannot_be_both_public_and_community(self):
         completed = subprocess.run(
@@ -414,8 +364,6 @@ class ReleaseCheckTest(unittest.TestCase):
             [
                 "bash",
                 str(RELEASE_CHECK),
-                "--lane",
-                "full",
                 "--output-dir",
                 str(self.output_dir),
                 "--artifact",
@@ -464,7 +412,6 @@ class ReleaseCheckTest(unittest.TestCase):
                     "https://example.invalid/EcritumRuntime.xcframework.zip",
                     self.release_zip_checksum(),
                     str(self.release_zip),
-                    "full",
                 ],
             },
             log_entries,
@@ -472,7 +419,6 @@ class ReleaseCheckTest(unittest.TestCase):
 
     def test_missing_option_values_exit_with_usage(self):
         for option in [
-            "--lane",
             "--output-dir",
             "--artifact",
             "--release-zip",
@@ -499,7 +445,7 @@ class ReleaseCheckTest(unittest.TestCase):
         import hashlib
 
         digest = hashlib.sha256()
-        digest.update(b"release-zip-full")
+        digest.update(b"release-zip-default")
         return digest.hexdigest()
 
     def write_public_evidence_files(self):
@@ -540,16 +486,18 @@ class ReleaseCheckTest(unittest.TestCase):
                     return digest.hexdigest()
 
                 if target == "package-artifact":
-                    artifact, output, lane = args
+                    artifact, output = args
                     output_path = Path(output)
                     output_path.parent.mkdir(parents=True, exist_ok=True)
-                    output_path.write_bytes(("release-zip-" + lane).encode())
+                    output_path.write_bytes(b"release-zip-default")
                     checksum = sha256(output_path)
                     payload = {
+                        "artifactKind": "default",
                         "artifact": artifact,
                         "formatVersion": 1,
+                        "includedRuntimes": ["clojure", "javascript", "lua"],
+                        "implementationProfile": "full",
                         "output": output,
-                        "releaseLane": lane,
                         "sha256": checksum,
                         "swiftPackageChecksum": checksum,
                     }
@@ -557,7 +505,7 @@ class ReleaseCheckTest(unittest.TestCase):
                     Path(str(output_path) + ".checksum").write_text(checksum + "\\n")
                     print(json.dumps(payload, indent=2, sort_keys=True))
                 elif target == "package-artifact-verify":
-                    print(json.dumps({"ok": True, "releaseLane": args[1], "violations": []}, indent=2, sort_keys=True))
+                    print(json.dumps({"artifactKind": "default", "includedRuntimes": ["clojure", "javascript", "lua"], "ok": True, "violations": []}, indent=2, sort_keys=True))
                 elif target == "check-public-signing":
                     print(json.dumps({"ok": True, "target": target, "args": args}, indent=2, sort_keys=True))
                 elif target == "checksum":

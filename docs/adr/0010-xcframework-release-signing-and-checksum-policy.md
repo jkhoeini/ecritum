@@ -1,6 +1,11 @@
 # ADR-010: XCFramework Release, Signing, And Checksum Policy
 
-Status: Accepted
+Status: Accepted; next-release artifact policy superseded by ADR-025.
+
+ADR-025 supersedes the public Core/Full lane and release-manifest default
+behavior for M9 and later. This ADR still owns XCFramework shape, Community vs
+Trusted macOS trust tiers, signing, notarization, checksum, and hosted
+consumer-gate policy.
 
 Reviewers: Release, Swift DX, Unix, Tests/TDD, Security, GraalVM Runtime,
 Claude CLI attempted.

@@ -4,6 +4,8 @@ import Foundation
 import PackageDescription
 
 let localRuntimePath = "dist/local/EcritumRuntime.xcframework"
+let defaultRuntimeURL = "https://github.com/jkhoeini/ecritum/releases/download/v0.2.0-alpha.1/EcritumRuntime.xcframework.zip"
+let defaultRuntimeChecksum = "edfe358e9e98a5133080e147a4069b42a9a8c20a5b1b917464113da61b17358e"
 let packageDirectory = URL(fileURLWithPath: #filePath).deletingLastPathComponent().path
 let localRuntimeFullPath = packageDirectory + "/" + localRuntimePath
 let localRuntimeMode = ProcessInfo.processInfo.environment["ECRITUM_LOCAL_RUNTIME"]
@@ -17,6 +19,11 @@ let hasPartialReleaseRuntime = (releaseRuntimeURL == nil) != (releaseRuntimeChec
 if hasPartialReleaseRuntime {
     fatalError("ECRITUM_RUNTIME_URL and ECRITUM_RUNTIME_CHECKSUM must be set together")
 }
+if forceScaffoldRuntime && (releaseRuntimeRequired || releaseRuntimeURL != nil || releaseRuntimeChecksum != nil) {
+    fatalError("ECRITUM_LOCAL_RUNTIME=0 cannot be combined with release runtime URL/checksum or ECRITUM_RELEASE_RUNTIME_REQUIRED")
+}
+let selectedRuntimeURL = releaseRuntimeURL ?? defaultRuntimeURL
+let selectedRuntimeChecksum = releaseRuntimeChecksum ?? defaultRuntimeChecksum
 
 let hasLocalRuntime: Bool
 if releaseRuntimeRequired {
@@ -30,9 +37,9 @@ if releaseRuntimeRequired {
     hasLocalRuntime = hasLocalRuntimeFile
 }
 
-let hasReleaseRuntime = !forceScaffoldRuntime && releaseRuntimeURL != nil && releaseRuntimeChecksum != nil
+let hasReleaseRuntime = !forceScaffoldRuntime && !selectedRuntimeURL.isEmpty && !selectedRuntimeChecksum.isEmpty
 if releaseRuntimeRequired && !hasReleaseRuntime {
-    fatalError("ECRITUM_RELEASE_RUNTIME_REQUIRED requires ECRITUM_RUNTIME_URL and ECRITUM_RUNTIME_CHECKSUM")
+    fatalError("ECRITUM_RELEASE_RUNTIME_REQUIRED requires a default runtime URL/checksum or ECRITUM_RUNTIME_URL and ECRITUM_RUNTIME_CHECKSUM")
 }
 
 var runtimeDependency: [Target.Dependency] = []
@@ -48,12 +55,12 @@ if hasLocalRuntime {
     )
     runtimeDependency.append("EcritumRuntime")
     swiftSettings.append(.define("ECRITUM_HAS_RUNTIME_ARTIFACT"))
-} else if hasReleaseRuntime, let releaseRuntimeURL, let releaseRuntimeChecksum {
+} else if hasReleaseRuntime {
     targets.append(
         .binaryTarget(
             name: "EcritumRuntime",
-            url: releaseRuntimeURL,
-            checksum: releaseRuntimeChecksum
+            url: selectedRuntimeURL,
+            checksum: selectedRuntimeChecksum
         )
     )
     runtimeDependency.append("EcritumRuntime")

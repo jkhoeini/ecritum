@@ -1,6 +1,11 @@
 # ADR-008: GraalPy Inclusion Gate and Artifact Policy
 
-Status: Accepted
+Status: Accepted; next-release artifact policy superseded by ADR-025.
+
+ADR-025 supersedes the Core/Full and Full-only-candidate parts of this ADR for
+M9 and later. This ADR remains the historical M6-001 GraalPy inclusion gate and
+continues to own the Python denial requirements until M11 replaces them with
+passing implementation evidence.
 
 ## Context
 

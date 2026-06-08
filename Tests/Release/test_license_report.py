@@ -81,16 +81,6 @@ class LicenseReportTest(unittest.TestCase):
         self.assertIn("release-blocker=false", first_party["annotations"][0]["comment"])
         self.assertNotIn("has unknown shipped license", completed.stderr)
 
-    def test_core_lane_strict_mode_accepts_first_party_mit_license(self):
-        completed = run_license_report("--strict", "--lane", "core")
-
-        self.assertEqual(completed.returncode, 0, completed.stderr)
-        report = json.loads(completed.stdout)
-        first_party = package_named(report, "EcritumRuntime.xcframework")
-
-        self.assertEqual(first_party["licenseConcluded"], "MIT")
-        self.assertEqual(annotation_value(first_party, "license-source"), "LICENSE")
-
     def test_strict_mode_rejects_missing_first_party_license_file(self):
         with tempfile.TemporaryDirectory(prefix="ecritum-missing-license-") as tmp:
             completed = run_license_report("--strict", "--first-party-license-file", str(Path(tmp) / "LICENSE"))
@@ -130,18 +120,19 @@ class LicenseReportTest(unittest.TestCase):
         self.assertIn("pkg:generic/ecritum/EcritumRuntime.xcframework@0.1.0", purls(first_party))
         self.assertIn("pkg:generic/oracle/graalvm-native-image-embedded-runtime@25.0.2", purls(graal_runtime))
 
-    def test_core_lane_excludes_full_only_runtime_packages(self):
-        completed = run_license_report("--lane", "core")
+    def test_default_artifact_includes_polyglot_runtime_packages(self):
+        completed = run_license_report()
         self.assertEqual(completed.returncode, 0, completed.stderr)
         report = json.loads(completed.stdout)
         package_names = {item["name"] for item in report["packages"]}
 
         self.assertIn("org.babashka:sci", package_names)
         self.assertIn("org.graalvm.sdk:nativeimage", package_names)
-        self.assertNotIn("org.graalvm.polyglot:polyglot", package_names)
-        self.assertNotIn("org.graalvm.js:js-language", package_names)
-        self.assertNotIn("org.luaj:luaj-jme", package_names)
-        self.assertIn("release-lane=core", report["annotations"][0]["comment"])
+        self.assertIn("org.graalvm.polyglot:polyglot", package_names)
+        self.assertIn("org.graalvm.js:js-language", package_names)
+        self.assertIn("org.luaj:luaj-jme", package_names)
+        self.assertIn("artifact-kind=default", report["annotations"][0]["comment"])
+        self.assertIn("included-runtimes=clojure,javascript,lua", report["annotations"][0]["comment"])
 
     def test_notices_include_blockers_scoped_components_and_full_text_warning(self):
         completed = run_license_report("--notices")

@@ -37,21 +37,6 @@ BASELINE = {
     ],
 }
 
-FULL_ONLY_SHIPPED_PACKAGES = {
-    "org.graalvm.polyglot:polyglot",
-    "org.graalvm.sdk:collections",
-    "org.graalvm.js:js-language",
-    "org.graalvm.regex:regex",
-    "org.graalvm.truffle:truffle-api",
-    "org.graalvm.shadowed:icu4j",
-    "org.graalvm.shadowed:xz",
-    "org.graalvm.truffle:truffle-runtime",
-    "org.graalvm.sdk:jniutils",
-    "org.graalvm.truffle:truffle-compiler",
-    "org.luaj:luaj-jme",
-}
-
-
 def package_scope(package):
     comment = package["annotations"][0]["comment"]
     for part in comment.split(";"):
@@ -62,20 +47,12 @@ def package_scope(package):
 
 
 parser = argparse.ArgumentParser(description="Check dependency/license inventory delta against the reviewed release baseline.")
-parser.add_argument("--lane", choices=["core", "full"], default="full")
 parser.add_argument("--license-report-command", nargs=argparse.REMAINDER, default=["python3", "scripts/license-report.py"])
 args = parser.parse_args()
 if not args.license_report_command:
-    args.license_report_command = ["python3", "scripts/license-report.py", "--lane", args.lane]
-elif args.license_report_command == ["python3", "scripts/license-report.py"]:
-    args.license_report_command = ["python3", "scripts/license-report.py", "--lane", args.lane]
+    args.license_report_command = ["python3", "scripts/license-report.py"]
 
 baseline = json.loads(json.dumps(BASELINE))
-if args.lane == "core":
-    baseline["shipped"] = [
-        item for item in baseline["shipped"]
-        if item["name"] not in FULL_ONLY_SHIPPED_PACKAGES
-    ]
 
 completed = subprocess.run(args.license_report_command, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
 violations = []
@@ -118,9 +95,9 @@ for scope, expected in baseline.items():
             )
 
 payload = {
+    "artifactKind": "default",
     "baseline": baseline,
     "current": current,
-    "lane": args.lane,
     "ok": not violations,
     "violations": violations,
     "license_report_command": args.license_report_command,

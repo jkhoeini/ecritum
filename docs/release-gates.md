@@ -21,49 +21,66 @@ Swift scaffold tests and Java unit tests. After `just xcframework`, it runs the
 Swift runtime path against `dist/local/EcritumRuntime.xcframework` plus the Java
 unit tests.
 
-## Release Gate Commands
+## Current Release Gate Commands
 
-The release gate is:
+ADR-025 changes the next-release target to one default runtime artifact. The
+public release-facing commands now operate on that single default artifact:
 
 ```sh
-mise exec -- just native-core
-mise exec -- just xcframework-core
+mise exec -- just native
+mise exec -- just xcframework
 mise exec -- just release-check
 ```
 
-The default release lane is Core. To validate the combined SCI/GraalJS/Lua
-candidate as Full, run:
+`release-check` writes evidence under `build/release` and prepares the
+deterministic zip at `dist/release/EcritumRuntime.xcframework.zip`. Public
+release commands do not accept a Core/Full release lane. Ambient
+`ECRITUM_RELEASE_LANE` is ignored.
+
+Internal Native Image profiles such as `native-core`, `native-full`,
+`xcframework-core`, and `xcframework-full` remain available only for regression
+and size comparison while old M8 history exists. They are not product artifacts.
+
+Community release mode is the first public open-source release tier. It does
+not claim Developer ID signing, notarization, or stapling:
 
 ```sh
-mise exec -- just native-full
-mise exec -- just xcframework-full
-mise exec -- just release-check full
+mise exec -- just release-check-community
 ```
 
-`release-check` writes lane-specific evidence under `build/release/<lane>` and,
-unless overridden, prepares the deterministic zip at
-`dist/release/<lane>/EcritumRuntime.xcframework.zip`.
-The release lane is selected only by command arguments; ambient
-`ECRITUM_RELEASE_LANE` does not make release-check or direct packaging run Full.
-Local release-check mode validates developer artifacts and records
-`public-signing.json` as skipped.
-
-Community release mode is the first public open-source release tier. It requires
-the final artifact to be hosted at an HTTPS SwiftPM binary-target URL, but it
-does not claim Developer ID signing, notarization, or stapling:
+Without staging environment variables, community mode validates that
+`Package.swift` resolves the checked-in remote binary target rather than the
+local `dist/local` artifact. With a staged hosted artifact, it can run the clean
+consumer against that URL:
 
 ```sh
-export ECRITUM_CONSUMER_ARTIFACT_URL=https://github.com/OWNER/ecritum/releases/download/v0.1.0/EcritumRuntime.xcframework.zip
-export ECRITUM_CONSUMER_ARTIFACT_CHECKSUM=$(cat dist/release/core/EcritumRuntime.xcframework.zip.checksum)
-mise exec -- just release-check-community core
+export ECRITUM_CONSUMER_ARTIFACT_URL=https://github.com/OWNER/ecritum/releases/download/v0.2.0-alpha.1/EcritumRuntime.xcframework.zip
+export ECRITUM_CONSUMER_ARTIFACT_CHECKSUM=$(cat dist/release/EcritumRuntime.xcframework.zip.checksum)
+mise exec -- just release-check-community
 ```
+
+The remaining M10 distribution proof is a clean external SwiftPM consumer from a
+tag that runs Clojure, JavaScript, and Lua from the hosted default artifact.
+That is tracked separately from this release-facing lane cleanup.
+
+## Next Release Target
+
+The next release has one public artifact: `EcritumRuntime.xcframework.zip`.
+There is no public Core/Full choice. `Package.swift` should prefer local
+`dist/local` artifacts for contributors, allow paired URL/checksum environment
+overrides for release staging/tests, and otherwise fall back to a checked-in
+GitHub Release URL/checksum for normal tagged SwiftPM consumers.
+
+Final release validation must prove that a clean no-env SwiftPM consumer from
+the tag resolves the hosted default artifact, and that a packaged `.app` runs
+Clojure, JavaScript, Lua, Python, and Ruby from `EcritumRuntime.framework`.
 
 Trusted macOS release mode is explicit:
 
 ```sh
 export ECRITUM_CONSUMER_ARTIFACT_URL=https://.../EcritumRuntime.xcframework.zip
-export ECRITUM_CONSUMER_ARTIFACT_CHECKSUM=$(cat dist/release/core/EcritumRuntime.xcframework.zip.checksum)
-mise exec -- just release-check-public core \
+export ECRITUM_CONSUMER_ARTIFACT_CHECKSUM=$(cat dist/release/EcritumRuntime.xcframework.zip.checksum)
+mise exec -- just release-check-public \
   build/release/notary-submit.json \
   build/release/notary-log.json \
   build/release/stapling-exception.json
@@ -82,14 +99,14 @@ signing/notarization gate. It fails if clean-consumer evidence would be skipped.
 - `just bench-first-eval`
 - `just bench-idle-rss`
 - `just check-dep-delta`
-- `just package-artifact` with the selected release lane
-- `just package-artifact-verify` with the selected release lane
+- `just package-artifact`
+- `just package-artifact-verify`
 - `just checksum`
 - release-mode `swift package describe --type json` with
   `ECRITUM_RELEASE_RUNTIME_REQUIRED=1`
-- `just test-release-consumer-smoke` when `ECRITUM_CONSUMER_ARTIFACT_URL` is
-  set; otherwise `build/release/clean-consumer.json` records a skipped HTTPS
-  artifact gate
+- `just test-release-consumer-smoke` against a staged hosted URL when
+  `ECRITUM_CONSUMER_ARTIFACT_URL` is set; community mode without staging env
+  validates the checked-in default package manifest without building a consumer
 - `just sbom`
 - `just check-license-texts`
 - `just check-license-texts-zip`
@@ -98,7 +115,7 @@ signing/notarization gate. It fails if clean-consumer evidence would be skipped.
   records a skipped signing gate with the reason that the artifact does not
   claim Developer ID signing, notarization, or stapling; local mode records a
   skipped local gate
-- `scripts/size-artifact.py --require-artifact` with the selected release lane
+- `scripts/size-artifact.py --require-artifact` against the default artifact
 - `scripts/license-report.py --strict`
 
 `just bench-swift-cold-start` is represented by the M1 budget policy but is not
@@ -107,27 +124,27 @@ because it is a host-example benchmark rather than a release blocker while the C
 ABI packaging gates cover the artifact runtime path. First-eval is part of
 `release-check` once the eval ABI exists.
 
-The default Core lane is a SCI/Clojure-only artifact. The combined
-SCI/GraalJS/Lua artifact is classified as a Full candidate and must be selected
-explicitly with `full`; ambient `ECRITUM_RELEASE_LANE` does not promote it.
-After Core or Full lane size gates pass, the strict license step validates the
-top-level MIT `LICENSE` evidence for first-party Ecritum code and still blocks
-any unresolved shipped third-party license.
+For v0.1.0, the default Core lane is a SCI/Clojure-only artifact and the
+combined SCI/GraalJS/Lua artifact is classified as a Full candidate. For the
+next release, ADR-025 replaces that public split with one default artifact.
+After size gates pass, the strict license step validates the top-level MIT
+`LICENSE` evidence for first-party Ecritum code and still blocks any unresolved
+shipped third-party license.
 
 SwiftPM requires remote binary target URLs to use `https`. Local `http://` and
 `file://` URLs are not accepted as release proof. Self-signed loopback HTTPS
 with a locally trusted certificate is development evidence only; M7-002 release
 acceptance requires a real hosted HTTPS artifact URL and matching checksum. To
-run the clean-consumer release gate, publish the lane-specific zip such as
-`dist/release/full/EcritumRuntime.xcframework.zip` to an HTTPS URL, then run:
+run the current clean-consumer release gate, publish the current release zip
+`dist/release/EcritumRuntime.xcframework.zip` to an HTTPS URL, then run:
 
 ```sh
 export ECRITUM_CONSUMER_ARTIFACT_URL=https://.../EcritumRuntime.xcframework.zip
-export ECRITUM_CONSUMER_ARTIFACT_CHECKSUM=$(cat dist/release/full/EcritumRuntime.xcframework.zip.checksum)
+export ECRITUM_CONSUMER_ARTIFACT_CHECKSUM=$(cat dist/release/EcritumRuntime.xcframework.zip.checksum)
 mise exec -- just test-release-consumer-smoke \
   "$ECRITUM_CONSUMER_ARTIFACT_URL" \
   "$ECRITUM_CONSUMER_ARTIFACT_CHECKSUM" \
-  dist/release/full/EcritumRuntime.xcframework.zip
+  dist/release/EcritumRuntime.xcframework.zip
 ```
 
 The clean-consumer smoke creates a temporary SwiftPM executable package outside
@@ -211,26 +228,20 @@ truth. The ABI gate prevents drift until M2 replaces that duplication.
 install names, bundled resources, code-signing status, architectures, minimum
 macOS version, checksums, and embedded runtime list.
 
-`just size dist/core/EcritumRuntime.xcframework core` prints JSON and applies
-Core regression budgets:
+Current release tooling records the single default artifact size with:
 
-- artifact directory: 35,000,000 bytes
-- artifact warning: above 33,000,000 bytes or above 10% growth from baseline
-- public wrapper binary: 262,144 bytes
-- private Graal runtime: 33,000,000 bytes
+```sh
+mise exec -- just size
+```
 
-`just size dist/full/EcritumRuntime.xcframework full` applies Full candidate
-budgets:
-
-- artifact directory: 200,000,000 bytes
-- artifact warning: above 175,000,000 bytes or above 10% growth from Full
-  baseline
-- public wrapper binary: 262,144 bytes
-- private Graal runtime: 190,000,000 bytes
+For the next release, ADR-025 requires single-default-artifact evidence instead:
+hosted zip size, unzipped framework size, packaged app bundle delta, cold start,
+first eval per language, idle RSS, dependency delta, license/SBOM inventory, and
+runtime/resource inventory.
 
 See [performance-and-artifact-budgets.md](performance-and-artifact-budgets.md)
-and ADR-018 for startup, first-eval, idle-RSS, dependency-delta, and Core/Full
-artifact gates.
+for the full metric checklist. ADR-018 remains the historical M1-M8 Core/Full
+budget record.
 
 ## SBOM And License Policy
 
@@ -338,7 +349,7 @@ dev.ecritum:ecritum-native:jar:0.1.0
    \- borkdude:graal.locking:jar:0.0.2:compile
 ```
 
-M5-001 adds experimental Lua through LuaJ. The accepted shipped dependency is:
+M5-001 added experimental Lua through LuaJ. The accepted shipped dependency is:
 
 - `org.luaj:luaj-jme:3.0.1`, MIT.
 
@@ -349,31 +360,32 @@ dependency-tree delta is:
 +- org.luaj:luaj-jme:jar:3.0.1:compile
 ```
 
-Lua remains an experimental measured candidate, not a release-ready Core
-runtime. M5-001 verification proved `CoroutineLib` is omitted and
-`string.dump`/binary chunks are denied. Core promotion is blocked until
-ADR-018/Core-Full classification is resolved with Lua size/startup/RSS/
-first-eval data and a memory-limiting plan exists for untrusted Lua workloads.
+Historically, Lua was an experimental measured candidate, not a release-ready
+Core runtime. ADR-025 supersedes that classification for M9 and later: Lua may
+be claimed in the default artifact only after strict Lua conformance/security,
+license, size, first-eval, RSS, resource-limit, clean-consumer, and packaged-app
+evidence pass.
 
-M6-001 gates Python through GraalPy. ADR-008 rejects GraalPy inclusion in the
-default Core artifact for v0 and keeps Python as a Full-artifact candidate until
-a later spike proves Native Image shared-library packaging, standard-library
-resource layout, conformance/security behavior, size/startup/RSS/first-eval
-impact, license inventory, and dependency delta. Native wheels, C extensions,
-runtime `pip`, direct Java imports, raw Polyglot bindings, `ctypes`, `cffi`,
+M6-001 gated Python through GraalPy. ADR-025 supersedes the old separate-artifact
+classification: Python is now a default-artifact candidate, but only after M11
+proves Native Image shared-library packaging, standard-library resource layout,
+strict conformance/security behavior, size/startup/RSS/first-eval impact,
+license inventory, dependency delta, and clean-consumer behavior. Native wheels,
+C extensions, runtime `pip`, package downloads/installs, third-party package
+directories, direct Java imports, raw Polyglot bindings, `ctypes`, `cffi`,
 subprocess, raw sockets, environment access, and direct filesystem access remain
 non-goals unless a later ADR explicitly accepts a narrow facade.
 
-M6-002 gates Ruby through TruffleRuby. ADR-009 rejects TruffleRuby inclusion in
-the default Core artifact for v0 and keeps Ruby as a Full-artifact candidate
-until a later spike proves matching GraalVM/Maven coordinates or an accepted
-version-skew policy, Native Image shared-library packaging, runtime-resource
-layout, conformance/security behavior, size/startup/RSS/first-eval impact,
-license inventory, dependency delta, reproducible packaging, clean-consumer
-behavior, and macOS slice policy. RubyGems/Bundler installation, native gems, C
-extensions, NFI/FFI, direct Java imports, raw Polyglot bindings, subprocess, raw
-sockets, environment access, and direct filesystem access remain non-goals
-unless a later ADR explicitly accepts a narrow facade.
+M6-002 gated Ruby through TruffleRuby. ADR-025 supersedes the old separate-artifact
+classification: Ruby is now a default-artifact candidate, but only after M12
+proves matching GraalVM/Maven coordinates or an accepted version-skew policy,
+Native Image shared-library packaging, runtime-resource layout, strict
+conformance/security behavior, size/startup/RSS/first-eval impact, license
+inventory, dependency delta, reproducible packaging, clean-consumer behavior,
+and macOS slice policy. RubyGems/Bundler installation, runtime gem installation,
+native gems, C extensions, NFI/FFI, direct Java imports, raw Polyglot bindings,
+subprocess, raw sockets, environment access, and direct filesystem access remain
+non-goals unless a later ADR explicitly accepts a narrow facade.
 
 ## Reproducibility
 
@@ -386,10 +398,10 @@ M7 uses rebuildable provenance plus deterministic archive metadata:
 - local artifacts are ad-hoc signed by signing the nested private dylib first
   and then the framework bundle
 - `release-check` invokes `just package-artifact` to write
-  `dist/release/<lane>/EcritumRuntime.xcframework.zip`
+  `dist/release/EcritumRuntime.xcframework.zip`
 - `release-check` also writes
-  `dist/release/<lane>/EcritumRuntime.xcframework.zip.json` and
-  `dist/release/<lane>/EcritumRuntime.xcframework.zip.checksum`
+  `dist/release/EcritumRuntime.xcframework.zip.json` and
+  `dist/release/EcritumRuntime.xcframework.zip.checksum`
 - archive entries are sorted
 - archive timestamps are normalized to `1980-01-01T00:00:00Z`
 - macOS metadata files such as `.DS_Store`, `._*`, and `__MACOSX` are excluded

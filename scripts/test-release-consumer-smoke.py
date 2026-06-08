@@ -13,10 +13,8 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 
-SUCCESS_LINES = {
-    "core": "ReleaseConsumerSmoke version=0.1.0 lane=core clojure=42",
-    "full": "ReleaseConsumerSmoke version=0.1.0 lane=full clojure=42 javascript=42",
-}
+SUCCESS_LINE = "ReleaseConsumerSmoke version=0.1.0 clojure=42 javascript=42 lua=42"
+DEFAULT_INCLUDED_RUNTIMES = ["clojure", "javascript", "lua"]
 CHECKSUM_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -62,7 +60,7 @@ def tool(name):
     return found
 
 
-def build_env(artifact_url, checksum, build_dir):
+def build_env(artifact_url, checksum, build_dir, use_default_package_runtime=False):
     tool_dirs = []
     for name in ["swift", "otool"]:
         directory = str(Path(tool(name)).parent)
@@ -81,10 +79,15 @@ def build_env(artifact_url, checksum, build_dir):
         "HOME": str(home),
         "TMPDIR": str(tmp),
         "PATH": os.pathsep.join(tool_dirs),
-        "ECRITUM_RELEASE_RUNTIME_REQUIRED": "1",
-        "ECRITUM_RUNTIME_URL": artifact_url,
-        "ECRITUM_RUNTIME_CHECKSUM": checksum,
     }
+    if use_default_package_runtime:
+        env["ECRITUM_RELEASE_RUNTIME_REQUIRED"] = "1"
+    else:
+        env.update({
+            "ECRITUM_RELEASE_RUNTIME_REQUIRED": "1",
+            "ECRITUM_RUNTIME_URL": artifact_url,
+            "ECRITUM_RUNTIME_CHECKSUM": checksum,
+        })
     for key in ["DEVELOPER_DIR", "SDKROOT", "TOOLCHAINS"]:
         if os.environ.get(key):
             env[key] = os.environ[key]
@@ -138,56 +141,35 @@ def package_swift(repo_root):
     )
 
 
-def main_swift(lane):
-    if lane == "core":
-        runtime_languages = "[.clojure]"
-        javascript_eval = ""
-    elif lane == "full":
-        runtime_languages = "[.clojure, .javascript]"
-        javascript_eval = textwrap.indent(
-            textwrap.dedent(
-                """\
-                let javascript = try await context.eval(EcritumScript(
-                    "40 + (ecritum.app.answer() - 40)",
-                    language: .javascript,
-                    sourceName: "release-consumer-smoke.js"
-                ))
-                try expectInt(javascript, equals: 42, label: "javascript")
-                """
-            ),
-            "                    ",
-        )
-    else:
-        raise ValueError(f"unsupported release lane: {lane}")
-
+def main_swift():
     return textwrap.dedent(
-        f"""\
+        """\
         import Ecritum
         import Foundation
 
         @main
-        struct ReleaseConsumerSmoke {{
-            static func main() async {{
-                do {{
-                    guard Ecritum.runtimeArtifactAvailable else {{
+        struct ReleaseConsumerSmoke {
+            static func main() async {
+                do {
+                    guard Ecritum.runtimeArtifactAvailable else {
                         throw SmokeFailure("runtime artifact is not available")
-                    }}
+                    }
 
                     let version = try Ecritum.version
-                    let runtime = try EcritumRuntime(.init(languages: {runtime_languages}))
+                    let runtime = try EcritumRuntime(.init(languages: [.clojure, .javascript, .lua]))
                     let namespace = try runtime.namespace(.init("app"))
-                    try namespace.register(.init("answer")) {{ call in
-                        guard try call.argumentCount() == 0 else {{
+                    try namespace.register(.init("answer")) { call in
+                        guard try call.argumentCount() == 0 else {
                             throw SmokeFailure("answer callback expected no arguments")
-                        }}
+                        }
                         return .int(42)
-                    }}
+                    }
                     let context = try runtime.context()
-                    defer {{
+                    defer {
                         try? context.close()
                         try? namespace.close()
                         try? runtime.close()
-                    }}
+                    }
 
                     let clojure = try await context.eval(EcritumScript(
                         "(+ 40 (- (app/answer) 40))",
@@ -196,29 +178,42 @@ def main_swift(lane):
                     ))
                     try expectInt(clojure, equals: 42, label: "clojure")
 
-{javascript_eval}
-                    print("{SUCCESS_LINES[lane]}")
+                    let javascript = try await context.eval(EcritumScript(
+                        "40 + (ecritum.app.answer() - 40)",
+                        language: .javascript,
+                        sourceName: "release-consumer-smoke.js"
+                    ))
+                    try expectInt(javascript, equals: 42, label: "javascript")
+
+                    let lua = try await context.eval(EcritumScript(
+                        "return 40 + (ecritum.app.answer() - 40)",
+                        language: .lua,
+                        sourceName: "release-consumer-smoke.lua"
+                    ))
+                    try expectInt(lua, equals: 42, label: "lua")
+
+                    print("ReleaseConsumerSmoke version=0.1.0 clojure=42 javascript=42 lua=42")
                     _ = version
-                }} catch {{
+                } catch {
                     fputs("ReleaseConsumerSmoke failed: \\(error)\\n", stderr)
                     exit(1)
-                }}
-            }}
+                }
+            }
 
-            private static func expectInt(_ value: EcritumValue, equals expected: Int64, label: String) throws {{
-                guard value == .int(expected) else {{
+            private static func expectInt(_ value: EcritumValue, equals expected: Int64, label: String) throws {
+                guard value == .int(expected) else {
                     throw SmokeFailure("\\(label) expected \\(expected), got \\(value)")
-                }}
-            }}
-        }}
+                }
+            }
+        }
 
-        private struct SmokeFailure: Error, CustomStringConvertible {{
+        private struct SmokeFailure: Error, CustomStringConvertible {
             var description: String
 
-            init(_ description: String) {{
+            init(_ description: String) {
                 self.description = description
-            }}
-        }}
+            }
+        }
         """
     )
 
@@ -237,15 +232,37 @@ def require_file(path, label):
     return path
 
 
-def validate_framework_release_lane(framework, expected_lane):
-    metadata_path = framework / "Resources" / "ecritum-runtime-lane.json"
-    metadata = json.loads(require_file(metadata_path, "runtime release-lane metadata").read_text())
-    actual_lane = metadata.get("releaseLane")
-    if metadata.get("formatVersion") != 1 or actual_lane not in SUCCESS_LINES:
-        fail(f"invalid runtime release-lane metadata in {metadata_path}: {metadata}")
-    if actual_lane != expected_lane:
-        fail(f"downloaded artifact release lane '{actual_lane}' does not match requested lane '{expected_lane}'")
-    return actual_lane
+def validate_framework_runtime_metadata(framework):
+    resources = framework / "Resources"
+    metadata_path = resources / "ecritum-runtime.json"
+    legacy_path = resources / "ecritum-runtime-lane.json"
+    if metadata_path.exists():
+        metadata = json.loads(metadata_path.read_text())
+        artifact_kind = metadata.get("artifactKind")
+        included = metadata.get("includedRuntimes")
+        if metadata.get("formatVersion") != 1 or artifact_kind != "default":
+            fail(f"invalid default runtime metadata in {metadata_path}: {metadata}")
+        if not isinstance(included, list):
+            fail(f"invalid includedRuntimes in {metadata_path}: {metadata}")
+        missing = [runtime for runtime in DEFAULT_INCLUDED_RUNTIMES if runtime not in included]
+        if missing:
+            fail(f"default runtime metadata is missing required runtimes {missing}: {metadata_path}")
+        return {
+            "artifactKind": artifact_kind,
+            "implementationProfile": metadata.get("implementationProfile"),
+            "includedRuntimes": included,
+            "metadataSource": str(metadata_path),
+        }
+    legacy = json.loads(require_file(legacy_path, "legacy runtime metadata").read_text())
+    profile = legacy.get("releaseLane")
+    if legacy.get("formatVersion") != 1 or profile != "full":
+        fail(f"legacy runtime metadata is not a default-capable artifact: {legacy_path}: {legacy}")
+    return {
+        "artifactKind": "default",
+        "implementationProfile": profile,
+        "includedRuntimes": DEFAULT_INCLUDED_RUNTIMES,
+        "metadataSource": str(legacy_path),
+    }
 
 
 def validate_workspace_runtime_artifact(swift_build_dir, repo_root, slice_name):
@@ -289,12 +306,12 @@ def parse_args(argv):
     parser = argparse.ArgumentParser(description="Build and run a clean SwiftPM consumer against an HTTPS EcritumRuntime artifact.")
     parser.add_argument("--artifact-url", default=os.environ.get("ECRITUM_CONSUMER_ARTIFACT_URL") or os.environ.get("ECRITUM_RUNTIME_URL"))
     parser.add_argument("--checksum", default=os.environ.get("ECRITUM_CONSUMER_ARTIFACT_CHECKSUM") or os.environ.get("ECRITUM_RUNTIME_CHECKSUM"))
-    parser.add_argument("--lane", choices=sorted(SUCCESS_LINES), default="core", help="Release lane expected from the artifact.")
     parser.add_argument("--package-root", default=".")
     parser.add_argument("--build-dir", default="build/release-consumer-smoke")
     parser.add_argument("--release-zip", default="dist/release/EcritumRuntime.xcframework.zip")
     parser.add_argument("--package-manifest", default=None, help="Package JSON manifest. Defaults to RELEASE_ZIP.json.")
     parser.add_argument("--manifest-only", action="store_true", help="Validate release-mode Package.swift target selection without building a consumer.")
+    parser.add_argument("--use-default-package-runtime", action="store_true", help="Do not inject Ecritum runtime env vars; validate the checked-in Package.swift default runtime.")
     parser.add_argument("--validate-workspace-state", default=None, help="Validate a SwiftPM build directory's workspace-state.json and exit.")
     return parser.parse_args(argv)
 
@@ -302,13 +319,15 @@ def parse_args(argv):
 def main(argv=None):
     args = parse_args(argv)
 
-    if not args.artifact_url:
+    if args.use_default_package_runtime and (args.artifact_url or args.checksum):
+        fail("--use-default-package-runtime cannot be combined with artifact URL/checksum env or flags")
+    if not args.use_default_package_runtime and not args.artifact_url:
         fail("missing artifact URL: pass --artifact-url or set ECRITUM_CONSUMER_ARTIFACT_URL")
-    if urlparse(args.artifact_url).scheme != "https":
+    if args.artifact_url and urlparse(args.artifact_url).scheme != "https":
         fail("artifact URL must use https because SwiftPM binary targets reject non-https URLs")
-    if not args.checksum:
+    if not args.use_default_package_runtime and not args.checksum:
         fail("missing artifact checksum: pass --checksum or set ECRITUM_CONSUMER_ARTIFACT_CHECKSUM")
-    if not CHECKSUM_RE.match(args.checksum):
+    if args.checksum and not CHECKSUM_RE.match(args.checksum):
         fail("artifact checksum must be a 64-character lowercase SHA-256/SwiftPM checksum")
 
     repo_root = Path(args.package_root).resolve()
@@ -319,7 +338,7 @@ def main(argv=None):
     release_zip = Path(args.release_zip).resolve()
     package_manifest = Path(args.package_manifest).resolve() if args.package_manifest else Path(str(release_zip) + ".json")
     checksum_sidecar = Path(str(release_zip) + ".checksum")
-    if release_zip.exists():
+    if release_zip.exists() and args.checksum:
         local_zip_sha = sha256(release_zip)
         if local_zip_sha != args.checksum:
             fail(f"release zip SHA-256 {local_zip_sha} does not match requested checksum {args.checksum}")
@@ -330,8 +349,15 @@ def main(argv=None):
             if manifest.get("sha256") != args.checksum or manifest.get("swiftPackageChecksum") != args.checksum:
                 fail(f"package manifest checksum does not match requested checksum: {package_manifest}")
             for key in ["releaseLane", "artifactReleaseLane"]:
-                if key in manifest and manifest.get(key) != args.lane:
-                    fail(f"package manifest {key} '{manifest.get(key)}' does not match requested lane '{args.lane}': {package_manifest}")
+                if key in manifest:
+                    fail(f"package manifest contains retired release lane metadata {key}: {package_manifest}")
+            if manifest.get("artifactKind") not in (None, "default"):
+                fail(f"package manifest artifactKind is not default: {package_manifest}")
+            included = manifest.get("includedRuntimes")
+            if isinstance(included, list):
+                missing = [runtime for runtime in DEFAULT_INCLUDED_RUNTIMES if runtime not in included]
+                if missing:
+                    fail(f"package manifest includedRuntimes is missing required runtimes {missing}: {package_manifest}")
 
     arch = platform.machine()
     slice_name = f"macos-{arch}"
@@ -341,17 +367,17 @@ def main(argv=None):
     source_dir = consumer_dir / "Sources" / "ReleaseConsumerSmoke"
     empty_bin = build_dir / "empty-bin"
 
-    env = build_env(args.artifact_url, args.checksum, build_dir)
+    env = build_env(args.artifact_url, args.checksum, build_dir, args.use_default_package_runtime)
     runtime_target = validate_ecritum_release_manifest(repo_root, env)
     if args.manifest_only:
         print(json.dumps(
             {
-                "artifactUrl": args.artifact_url,
+                "artifactUrl": args.artifact_url or "checked-in Package.swift default",
                 "binaryTargetPath": runtime_target.get("path"),
                 "checksum": args.checksum,
+                "defaultPackageRuntime": args.use_default_package_runtime,
                 "manifestOnly": True,
                 "ok": True,
-                "releaseLane": args.lane,
             },
             indent=2,
             sort_keys=True,
@@ -359,14 +385,16 @@ def main(argv=None):
         return 0
     if args.validate_workspace_state:
         _, framework = validate_workspace_runtime_artifact(Path(args.validate_workspace_state).resolve(), repo_root, slice_name)
-        release_lane = validate_framework_release_lane(framework, args.lane)
+        runtime_metadata = validate_framework_runtime_metadata(framework)
         print(json.dumps(
             {
-                "artifactUrl": args.artifact_url,
+                "artifactKind": runtime_metadata["artifactKind"],
+                "artifactUrl": args.artifact_url or "checked-in Package.swift default",
                 "checksum": args.checksum,
+                "defaultPackageRuntime": args.use_default_package_runtime,
                 "downloadedFramework": str(framework),
+                "includedRuntimes": runtime_metadata["includedRuntimes"],
                 "ok": True,
-                "releaseLane": release_lane,
                 "workspaceState": str(Path(args.validate_workspace_state).resolve() / "workspace-state.json"),
             },
             indent=2,
@@ -378,8 +406,8 @@ def main(argv=None):
     source_dir.mkdir(parents=True)
     empty_bin.mkdir(parents=True)
     (consumer_dir / "Package.swift").write_text(package_swift(repo_root))
-    (source_dir / "main.swift").write_text(main_swift(args.lane))
-    env = build_env(args.artifact_url, args.checksum, build_dir)
+    (source_dir / "main.swift").write_text(main_swift())
+    env = build_env(args.artifact_url, args.checksum, build_dir, args.use_default_package_runtime)
 
     run([tool("swift"), "build", "--build-path", str(swift_build_dir), "--configuration", "debug", "--quiet"], cwd=consumer_dir, env=env)
     bin_path = Path(run([tool("swift"), "build", "--build-path", str(swift_build_dir), "--configuration", "debug", "--show-bin-path"], cwd=consumer_dir, env=env).strip())
@@ -388,7 +416,7 @@ def main(argv=None):
         fail(f"missing release consumer executable: {executable}")
 
     _, framework = validate_workspace_runtime_artifact(swift_build_dir, repo_root, slice_name)
-    release_lane = validate_framework_release_lane(framework, args.lane)
+    runtime_metadata = validate_framework_runtime_metadata(framework)
     local_artifact = (repo_root / "dist" / "local" / "EcritumRuntime.xcframework").resolve()
     if is_within(framework, local_artifact):
         fail(f"release consumer resolved the local artifact instead of the remote archive: {framework}")
@@ -409,7 +437,7 @@ def main(argv=None):
     if completed.returncode != 0:
         fail("release consumer failed under isolated runtime environment\nstdout:\n" + completed.stdout + "\nstderr:\n" + completed.stderr)
     output = completed.stdout.strip()
-    if output != SUCCESS_LINES[args.lane]:
+    if output != SUCCESS_LINE:
         fail(f"unexpected release consumer output: {output}")
 
     link_payload = "\n".join(
@@ -424,14 +452,15 @@ def main(argv=None):
             fail(f"release consumer links a build-machine runtime path containing {forbidden}")
 
     payload = {
+        "artifactKind": runtime_metadata["artifactKind"],
         "artifactUrl": args.artifact_url,
         "binaryTargetPath": runtime_target.get("path"),
         "checksum": args.checksum,
         "consumer": str(consumer_dir),
         "downloadedFramework": str(framework),
+        "includedRuntimes": runtime_metadata["includedRuntimes"],
         "ok": True,
         "output": output,
-        "releaseLane": release_lane,
         "releaseZip": str(release_zip) if release_zip.exists() else None,
         "swiftBuildDir": str(swift_build_dir),
     }

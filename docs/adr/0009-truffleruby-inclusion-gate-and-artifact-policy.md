@@ -1,6 +1,11 @@
 # ADR-009: TruffleRuby Inclusion Gate and Artifact Policy
 
-Status: Accepted
+Status: Accepted; next-release artifact policy superseded by ADR-025.
+
+ADR-025 supersedes the Core/Full and Full-only-candidate parts of this ADR for
+M9 and later. This ADR remains the historical M6-002 TruffleRuby inclusion gate
+and continues to own the Ruby denial requirements until M12 replaces them with
+passing implementation evidence.
 
 ## Context
 

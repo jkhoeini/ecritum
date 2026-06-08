@@ -113,7 +113,12 @@ class PublicSigningTest(unittest.TestCase):
         private_dylib.write_text("graal\n")
         runtime.chmod(runtime.stat().st_mode | stat.S_IXUSR)
         private_dylib.chmod(private_dylib.stat().st_mode | stat.S_IXUSR)
-        (resources / "ecritum-runtime-lane.json").write_text('{"formatVersion":1,"releaseLane":"core"}\n')
+        (resources / "ecritum-runtime.json").write_text(json.dumps({
+            "artifactKind": "default",
+            "formatVersion": 1,
+            "implementationProfile": "full",
+            "includedRuntimes": ["clojure", "javascript", "lua"],
+        }) + "\n")
 
     def write_release_zip(self):
         with zipfile.ZipFile(self.release_zip, "w") as archive:
@@ -124,6 +129,7 @@ class PublicSigningTest(unittest.TestCase):
     def write_package_sidecars(self):
         Path(str(self.release_zip) + ".checksum").write_text(self.release_zip_sha + "\n")
         Path(str(self.release_zip) + ".json").write_text(json.dumps({
+            "artifactKind": "default",
             "formatVersion": 1,
             "sha256": self.release_zip_sha,
             "swiftPackageChecksum": self.release_zip_sha,

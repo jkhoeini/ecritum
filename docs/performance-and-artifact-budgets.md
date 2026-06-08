@@ -1,26 +1,44 @@
 # Performance And Artifact Budgets
 
-ADR-018 is the source of truth for Ecritum's initial performance and artifact
-budget policy. This page is the operator-facing checklist.
+ADR-025 is the source of truth for the next-release single-default-artifact
+policy. ADR-018 remains the historical M1-M8 Core/Full budget record. This page
+is the operator-facing checklist.
 
 ## Current Commands
 
 ```sh
-mise exec -- just size dist/core/EcritumRuntime.xcframework core
-mise exec -- just size dist/full/EcritumRuntime.xcframework full
+mise exec -- just size
 mise exec -- just bench-cold-start
 mise exec -- just bench-swift-cold-start
 mise exec -- just bench-idle-rss
 mise exec -- just bench-first-eval
-mise exec -- just check-dep-delta core
-mise exec -- just check-dep-delta full
+mise exec -- just check-dep-delta
 ```
+
+These commands record the current single default artifact path. Historical M8
+Core/Full measurements remain below for release-history context only.
 
 `bench-first-eval` compiles a tiny C host against the packaged XCFramework and
 measures `eval_start` through `job_result` for SCI Clojure. It exits nonzero when
 the packaged artifact is missing or when first-eval latency exceeds budget.
 
-## Current Core Gates
+## Next Default Artifact Measurements
+
+The next release is blocked until these measurements are recorded for the single
+default artifact and copied into the README/release evidence:
+
+| Measurement | Command family | Required evidence |
+| --- | --- | --- |
+| Hosted zip size | `package-artifact`, `checksum` | release zip bytes and SwiftPM checksum |
+| Unzipped framework size | `size` | `EcritumRuntime.framework` size |
+| App bundle delta | packaged app smoke | app size with and without Ecritum |
+| Cold start | `bench-cold-start` | p50 and p95 |
+| First eval per language | `bench-first-eval` | Clojure, JavaScript, Lua, Python, Ruby |
+| Idle RSS | `bench-idle-rss` | post-load and post-eval RSS |
+| Dependency/license delta | `check-dep-delta`, `license-report-strict` | reviewed delta and SPDX inventory |
+| Resource inventory | `inspect` | bundled runtimes and resource directories |
+
+## Historical v0.1.0/M8 Baselines
 
 | Gate | Command | Budget | Current baseline |
 | --- | --- | ---: | ---: |
@@ -36,15 +54,15 @@ the packaged artifact is missing or when first-eval latency exceeds budget.
 | Idle RSS | `just bench-idle-rss` | 75 MiB for M1 version runtime | measured per run |
 | Dependency/license delta | `just check-dep-delta` | no unreviewed delta | M1 baseline |
 
-## Core vs Full Criteria
+## Historical v0.1.0/M8 Core vs Full Criteria
 
-Core is the default SwiftPM artifact. Full is the heavier artifact reserved for
-runtime combinations that exceed Core gates. `just size` defaults to Core;
-Full checks must be requested explicitly with the `full` lane.
+The v0.1.0 release used Core as the default SwiftPM artifact and kept Full as an
+explicit heavier lane. ADR-025 supersedes this as future product policy, but the
+M8 commands and historical release notes still use those names.
 
-The Core artifact is a SCI/Clojure-only Native Image build. The combined
-SCI/GraalJS/Lua artifact is a Full candidate and must use explicit Full paths
-and release-lane metadata.
+Historically, the Core artifact is a SCI/Clojure-only Native Image build. The
+combined SCI/GraalJS/Lua artifact is a Full candidate and must use explicit Full
+paths and release-lane metadata.
 
 Initial M7 Full-lane size gates for that candidate are:
 
@@ -55,15 +73,18 @@ Initial M7 Full-lane size gates for that candidate are:
 | Public wrapper | `just size ... full` | 262,144 bytes | measured per artifact |
 | Private runtime | `just size ... full` | 190,000,000 bytes | measured per artifact |
 
-Python and Ruby remain Full-only until measurements prove:
+Under ADR-025, Python and Ruby are default-artifact candidates, not separate
+heavy-lane product artifacts. They still cannot be claimed until measurements
+prove:
 
-- same-commit artifact delta versus Core is no more than 80,000,000 bytes
-- cold-start p95 delta versus Core is no more than 500 ms
-- first-eval p95 delta versus Core is no more than 750 ms
-- idle RSS delta versus Core is no more than 150 MiB
 - every shipped runtime license is known and inventoried
-- the conformance suite passes
+- strict conformance and strict abuse suites pass with zero required pending
+  cases
+- zip size, unzipped framework size, app bundle delta, cold start, first eval,
+  idle RSS, dependency delta, and resource inventory are recorded
 - no host or end user installs a separate language runtime
+- package managers, third-party packages, native extensions, and mutable package
+  caches are not enabled
 
-SCI/Clojure is the default Core language. JavaScript and Lua remain Full-only
-unless later measurements and security work justify promoting them.
+JavaScript and Lua are already implemented in the heavier local lane. M10 owns
+promoting Clojure, JavaScript, and Lua into the single default artifact path.

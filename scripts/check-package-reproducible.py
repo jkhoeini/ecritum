@@ -34,7 +34,7 @@ def run(command):
     return completed.stdout
 
 
-def package_once(script, artifact, output, manifest, checksum_file, release_lane):
+def package_once(script, artifact, output, manifest, checksum_file):
     stdout = run([
         sys.executable,
         str(script),
@@ -46,8 +46,6 @@ def package_once(script, artifact, output, manifest, checksum_file, release_lane
         str(manifest),
         "--checksum-output",
         str(checksum_file),
-        "--release-lane",
-        release_lane,
     ])
     return json.loads(stdout)
 
@@ -87,7 +85,6 @@ def validate_metadata(records):
 parser = argparse.ArgumentParser(description="Verify deterministic EcritumRuntime release packaging.")
 parser.add_argument("--artifact", default="dist/local/EcritumRuntime.xcframework")
 parser.add_argument("--package-script", default="scripts/package-artifact.py")
-parser.add_argument("--release-lane", choices=["core", "full"], default="core")
 args = parser.parse_args()
 
 artifact = Path(args.artifact)
@@ -106,8 +103,8 @@ with tempfile.TemporaryDirectory(prefix="ecritum-package-repro-") as tmp:
     first_checksum = root / "first.checksum"
     second_checksum = root / "second.checksum"
 
-    first = package_once(script, artifact, first_zip, first_manifest, first_checksum, args.release_lane)
-    second = package_once(script, artifact, second_zip, second_manifest, second_checksum, args.release_lane)
+    first = package_once(script, artifact, first_zip, first_manifest, first_checksum)
+    second = package_once(script, artifact, second_zip, second_manifest, second_checksum)
     first_sha = sha256(first_zip)
     second_sha = sha256(second_zip)
     first_metadata = zip_metadata(first_zip)
@@ -131,16 +128,22 @@ with tempfile.TemporaryDirectory(prefix="ecritum-package-repro-") as tmp:
         errors.append("SwiftPM checksum does not match package sha256")
     if first_metadata != second_metadata:
         errors.append("repeated package zip metadata differs")
-    if first.get("releaseLane") != args.release_lane:
-        errors.append("first package JSON releaseLane does not match requested lane")
-    if second.get("releaseLane") != args.release_lane:
-        errors.append("second package JSON releaseLane does not match requested lane")
+    if first.get("artifactKind") != "default":
+        errors.append("first package JSON artifactKind is not default")
+    if second.get("artifactKind") != "default":
+        errors.append("second package JSON artifactKind is not default")
+    if first.get("includedRuntimes") != ["clojure", "javascript", "lua"]:
+        errors.append("first package JSON includedRuntimes does not match the default runtime set")
+    if second.get("includedRuntimes") != ["clojure", "javascript", "lua"]:
+        errors.append("second package JSON includedRuntimes does not match the default runtime set")
     errors.extend(validate_metadata(first_metadata))
 
     payload = {
         "artifact": str(artifact),
+        "artifactKind": first.get("artifactKind"),
         "entries": first.get("entries"),
-        "releaseLane": args.release_lane,
+        "implementationProfile": first.get("implementationProfile"),
+        "includedRuntimes": first.get("includedRuntimes"),
         "normalizedTimestamp": first.get("normalizedTimestamp"),
         "ok": not errors,
         "packageSha256": first_sha,

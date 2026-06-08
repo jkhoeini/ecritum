@@ -19,9 +19,56 @@ not done if it introduced debt without an entry.
 
 ## Active Debt
 
-No active debt.
+- ID: ECRITUM-DEBT-0014
+- Source task: M10-001
+- Introduced by: Default remote SwiftPM manifest behavior needs a live hosted
+  artifact URL before the next single default artifact exists.
+- Owner persona: Release, Licensing, and Distribution Engineer
+- Date: 2026-06-08
+- Impact: `Package.swift` currently uses the hosted v0.1.0 Community Core
+  artifact as the checked-in default remote runtime. This proves the default
+  remote manifest path and keeps normal SwiftPM resolution functional, but it is
+  not the final next-release single default artifact and does not satisfy the
+  Clojure/JavaScript/Lua/Python/Ruby support claim.
+- Reason accepted: A checked-in default URL must point at an immutable hosted
+  SwiftPM artifact to be useful during M10. The next single default artifact
+  cannot have its final tag URL/checksum until it is built, packaged, uploaded,
+  and verified later in the release sequence.
+- Resolve-by phase: M14
+- Exit condition: `Package.swift` default URL/checksum point at the next
+  release's single default artifact, hosted clean no-env SwiftPM consumer passes
+  from the tag, and packaged app smoke runs every claimed language from that
+  artifact.
+- Removal task: M14-002 Publish release assets and verify hosted consumption.
+- Verification required: final `gh release view`, SwiftPM checksum match,
+  hosted no-env clean consumer from the release tag, packaged app smoke, and
+  `PROJECT.org` M14 evidence.
 
 ## Resolved Debt
+
+- ID: ECRITUM-DEBT-0013
+- Source task: M9-002
+- Introduced by: ADR-025 single-default-artifact policy while M8 release tooling
+  still exposed Core/Full lane commands and metadata
+- Owner persona: Release, Licensing, and Distribution Engineer
+- Date: 2026-06-08
+- Resolved in: M10-002
+- Resolution: Release-facing `just` recipes, `release-check`, packaging, size,
+  license/SBOM, dependency-delta, and consumer-smoke tooling now use one
+  default artifact path. Package manifests record `artifactKind: default`,
+  included runtimes, implementation profile, and resource inventory. Remaining
+  `core`/`full` names are historical, test-only, or internal implementation
+  profiles.
+- Boundary: The final hosted no-env clean SwiftPM consumer that runs Clojure,
+  JavaScript, and Lua from the checked-in URL is still open under M10-003 and
+  ECRITUM-DEBT-0014 because `Package.swift` currently points at the hosted
+  v0.1.0 bootstrap artifact.
+- Verification: `mise exec -- just test-release-tools` -> PASS, 105 tests;
+  `mise exec -- just package-artifact` -> PASS; `mise exec -- just
+  package-artifact-verify` -> PASS; `mise exec -- just size` -> PASS;
+  `mise exec -- just inspect` -> PASS; `mise exec -- just
+  release-check-community` -> PASS; support-claim scan shows only historical
+  ADR/PROJECT entries, explicit legacy-metadata tests, or legacy readers.
 
 - ID: ECRITUM-DEBT-0012
 - Source task: M7-001

@@ -1,6 +1,13 @@
 # ADR-0023: Lua Support Through LuaJ Spike
 
-Status: Accepted for M5-001 spike; not release-ready Core.
+Status: Accepted for M5-001 spike; next-release promotion policy superseded by
+ADR-025.
+
+ADR-025 supersedes the "not release-ready Core" classification for M9 and later.
+This ADR remains the historical LuaJ selection and Lua security-surface record.
+Lua can be claimed in the next default artifact only after the M10/M14
+conformance, abuse, metrics, license, clean-consumer, and packaged-app gates
+pass.
 
 Reviewers: GraalVM Runtime, Architecture Expert, Security, Tests/TDD, Release,
 Claude CLI.

@@ -5357,6 +5357,1044 @@ Verification:
   seconds with no output (`CLAUDE_STATUS=124`). Release/Unix and TDD persona
   reviews were used as fallback.
 
+** DONE Milestone M9: Product and Architecture Reset for the Default Full Runtime
+
+Goal: reset the product and architecture contract for the next release. Ecritum
+will have one default runtime artifact, not public Core and Full artifacts. That
+default artifact must ultimately contain Clojure/SCI, GraalJS, LuaJ, GraalPy,
+and TruffleRuby, and remain consumable as a normal SwiftPM dependency.
+
+Lead: Engineering Manager.
+Required reviewers: Architecture, GraalVM Runtime, Release, Swift DX, Security,
+Tests/TDD, Unix, Clean Code, Technical Debt.
+
+Accepted product scope:
+
+- One default runtime artifact for the next release; no separate public Core and
+  Full artifacts.
+- macOS arm64 remains the first supported platform slice.
+- Python and Ruby package support is intentionally minimal: only the language
+  runtime and standard/runtime resources required by Ecritum itself. No `pip`,
+  gems, third-party package directories, package downloads, package installs,
+  native extensions, native wheels, C extensions, `ctypes`, `cffi`, FFI/NFI, or
+  mutable package caches in this release.
+- Default policy remains deny-by-default for filesystem, network, process,
+  environment, reflection/class loading, direct Java access, raw Polyglot access,
+  native library loading, native access, and host access outside registered
+  Ecritum capabilities.
+- Docs, tutorials, examples, release notes, measured artifact/app-size impact,
+  cold start, first eval per language, and idle RSS are release blockers.
+
+Roadmap sequencing:
+
+- M9 resets ADRs and public support claims.
+- M10 fixes normal SwiftPM distribution and promotes the existing Clojure,
+  JavaScript, and Lua runtime lane to the default artifact path.
+- M11 adds GraalPy behind feasibility, resource, security, conformance, and
+  measurement gates.
+- M12 adds TruffleRuby behind version-coordinate, resource, security,
+  conformance, and measurement gates.
+- M13 expands docs, tutorials, examples, and measured reference metrics.
+- M14 publishes the next Community release only after the hosted no-env
+  consumer, packaged app, license/SBOM, and five-language gates pass.
+
+Milestone definition of done:
+
+- ADR-008, ADR-009, ADR-010, ADR-018, and ADR-023 are updated or superseded
+  before runtime implementation changes.
+- README, docs, release gates, and support claims no longer describe Core as the
+  next-release default artifact. Historical v0.1.0 release notes remain factual.
+- Python/Ruby package limits, accepted performance budgets, and the SwiftPM
+  distribution strategy are recorded in accepted ADR text.
+- `PROJECT.org` contains milestone tasks with owners, reviewers, DoD, and
+  verification plans for M10-M14.
+- DEBT.md remains empty or records any accepted deferral with owner, expiry,
+  exit condition, removal task, and verification.
+
+Persona debate and review record:
+
+- Architecture/GraalVM Runtime sub-agent `019ea7e8-c106-74d1-9101-e30ff90b365a`
+  recommended splitting the work into M9-M14, updating/superseding ADR-008,
+  ADR-009, ADR-010, ADR-018, and ADR-023, and treating Ruby version skew as the
+  highest runtime risk.
+- Release/Swift DX sub-agent `019ea7e8-df56-7302-9940-b7c483b87c06` recommended
+  making `Package.swift` default to a checked-in GitHub Release URL/checksum
+  when `dist/local` is absent, keeping env URL overrides only for staging/tests,
+  and not using `native/pom.xml` as a contributor sentinel because SwiftPM
+  consumers clone the repo and would also have it.
+- Security/TDD sub-agent `019ea7e8-fdbf-7762-8c5e-2753484dc650` required that no
+  language be documented as supported until strict conformance and strict abuse
+  suites have zero required pending cases for that language.
+- Claude plan challenge: direct `claude -p` attempt on the initial roadmap timed
+  out after 90 seconds with no output (`CLAUDE_STATUS=124`); persona reviews are
+  recorded as the fallback.
+- Claude review on the refined M9-M14 roadmap completed with findings on
+  feasibility exits, task dependencies, M10 URL/version strategy, and M14
+  five-language hosted verification. EM accepted the dependency and verification
+  fixes. EM rejected an automatic N-1 language release fallback because the user
+  requirement for this project is all five languages; any scope reduction must be
+  an explicit ADR and user-approved project change.
+
+Milestone verification plan:
+
+- `mise exec -- just plan-check`
+- ADR support-claim scan for Core/Full default language.
+- Claude review on the ADR diff, or timeout recorded.
+- Persona review from Architecture, Release, Security, Tests/TDD, Unix, Clean
+  Code, and Technical Debt.
+
+Milestone completion evidence:
+
+- M9-000, M9-001, and M9-002 are DONE.
+- ADR-025 accepted the single-default-runtime-artifact policy.
+- ADR-008, ADR-009, ADR-010, ADR-018, and ADR-023 now carry ADR-025
+  supersession notes for next-release artifact policy.
+- Active docs and PLAN now distinguish historical v0.1.0/M8 Core/Full behavior
+  from the next-release single default artifact policy.
+- Active release-facing Core/Full implementation cleanup is tracked as
+  ECRITUM-DEBT-0013 and assigned to M10.
+- `mise exec -- just plan-check` -> PASS.
+- `mise exec -- just test` -> PASS.
+- Existing hosted community release gate with v0.1.0 URL/checksum ->
+  `mise exec -- just release-check-community core` PASS.
+- Current no-env community release gate remains a known M10 blocker.
+
+*** DONE M9-000 Roadmap kickoff and task decomposition
+
+Lead persona: Engineering Manager.
+Reviewer personas: Architecture, GraalVM Runtime, Release, Swift DX, Security,
+Tests/TDD, Unix, Clean Code, Technical Debt.
+
+Definition of done:
+
+- User requirements are captured in the M9-M14 roadmap.
+- Persona debate is requested and incorporated or recorded as pending.
+- ADR requirements and implementation sequencing are explicit.
+- Each roadmap milestone has lead/reviewer personas, definition of done,
+  verification plan, dependencies, and known blockers.
+- Claude plan review is attempted directly; if unavailable, timeout is recorded.
+
+Research checklist:
+
+- `TEAM.md`, `AGENTS.md`, `PROJECT.org`, `PLAN.org`, `README.md`, `DEBT.md`.
+- ADR-001, ADR-004, ADR-008, ADR-009, ADR-010, ADR-013, ADR-014, ADR-017,
+  ADR-018, ADR-020, ADR-021, ADR-023.
+- `Package.swift`, `native/pom.xml`, native source layout, C wrapper dispatch,
+  conformance/security fixtures, release scripts, examples, and release notes.
+
+Verification plan:
+
+- `mise exec -- just plan-check`
+- `jj diff --stat`
+- Persona review records from the three roadmap sub-agents.
+- Claude plan challenge status.
+
+Progress:
+
+- Confirmed the current normal clean SwiftPM consumer gap: depending on
+  `https://github.com/jkhoeini/ecritum.git` at `0.1.0` without Ecritum release
+  environment variables builds but prints `available=false` and
+  `runtimeArtifactMissing`.
+- Confirmed existing M8 release gates are not enough for the next requirement
+  because they set `ECRITUM_RUNTIME_URL` and checksum explicitly.
+- Confirmed ADR-008, ADR-009, ADR-010, ADR-018, and ADR-023 conflict with the
+  new no-Core/Full-split direction and must be revised before implementation.
+- EM accepted the team recommendation to split the work into M9-M14.
+- Incorporated refined Claude review feedback: added feasibility failure gates,
+  tightened M10/M13/M14 dependencies, required a version/URL staging strategy
+  before `Package.swift` default URL work, and made hosted release verification
+  explicitly five-language.
+
+Verification evidence:
+
+- `mise exec -- just plan-check` -> PASS.
+- `jj diff --stat` -> `PROJECT.org | 707 insertions`.
+- Architecture/GraalVM Runtime, Release/Swift DX, and Security/TDD sub-agent
+  recommendations incorporated.
+- Refined Claude roadmap review completed successfully (`CLAUDE_STATUS=0`).
+
+*** DONE M9-001 Adopt the single default artifact policy
+
+Lead persona: Architecture Expert Engineer.
+Reviewer personas: GraalVM Runtime, Release, Security, Tests/TDD, Technical Debt.
+Active review agents: Architecture `019ea7f7-4723-7812-92a3-95744c5a780d`;
+Release/SwiftPM `019ea7f7-4a48-7931-9e9f-58752e924526`; Security/TDD
+`019ea7f7-4da0-7083-9d17-cd1fa7610141`.
+
+Definition of done:
+
+- Accepted ADR text records that the next release has one default artifact that
+  contains Clojure, JavaScript, Lua, Python, and Ruby once all runtime gates pass.
+- ADR-008 and ADR-009 are superseded or amended so Python/Ruby are no longer
+  described as future Full-only candidates, while preserving the no-package and
+  no-native-extension limits.
+- ADR-010 records the default remote SwiftPM binary-target strategy.
+- ADR-018 records single-artifact size/performance budgets from measurements
+  rather than Core-vs-Full deltas.
+- ADR-023 records Lua promotion rules under the single default artifact.
+- DEBT.md records any accepted policy mismatch that remains after ADR updates.
+
+Verification plan:
+
+- `mise exec -- just plan-check`
+- `mise exec -- just test`
+- `mise exec -- just release-check-community`
+- `rg -n "Core is the default|Full is explicit|Full-only|Core/Full" README.md
+  docs PROJECT.org PLAN.org`
+- Claude plan review on the ADR diff, or timeout recorded.
+- Persona review from Architecture, Release, Security, and Tests/TDD.
+
+Progress and evidence:
+
+- Added ADR-025 as the accepted single-default-runtime-artifact policy.
+- Added supersession notes to ADR-008, ADR-009, ADR-010, ADR-018, and ADR-023.
+- Added ADR-025 to the ADR backlog.
+- Architecture review `019ea7f7-4723-7812-92a3-95744c5a780d` accepted the
+  superseding-ADR approach and required explicit ABI/layout language; added.
+- Release/SwiftPM review `019ea7f7-4a48-7931-9e9f-58752e924526` required
+  checked-in hosted URL/checksum policy, env override limits,
+  `ECRITUM_RELEASE_RUNTIME_REQUIRED=1` remote forcing, no `native/pom.xml`
+  sentinel, and release staging order; added.
+- Security/TDD review `019ea7f7-4da0-7083-9d17-cd1fa7610141` required
+  zero-required-pending strict conformance/abuse before support claims and
+  explicit Python/Ruby package/native-extension denials; added.
+- `mise exec -- just plan-check` -> PASS.
+- `mise exec -- just test` -> PASS; includes scaffold conformance/security,
+  Swift tests, Java tests, C ABI/native smokes, examples, and packaged app smoke.
+- `mise exec -- just release-check-community` without hosted env vars -> expected
+  FAIL in current M8 implementation; confirms the M10 distribution blocker.
+- `ECRITUM_CONSUMER_ARTIFACT_URL=https://github.com/jkhoeini/ecritum/releases/download/v0.1.0/EcritumRuntime.xcframework.zip
+  ECRITUM_CONSUMER_ARTIFACT_CHECKSUM=f2cc8401e0012039b56cf41cc62b0388457cf6d502ccf672f40475732dd7f223
+  mise exec -- just release-check-community core` -> PASS.
+- Support-claim scan found historical Core/Full references plus active docs in
+  `docs/performance-and-artifact-budgets.md` and `docs/release-gates.md`; active
+  cleanup is assigned to M9-002.
+- Claude ADR diff review attempted directly with `claude -p`; timed out after 90
+  seconds with no output (`CLAUDE_STATUS=124`).
+
+*** DONE M9-002 Rewrite support claims and budget docs
+
+Lead persona: Technical Debt Steward.
+Reviewer personas: Architecture, Release, Swift DX, Security.
+Depends on: M9-001.
+Active review agents: Swift DX `019ea800-8cce-7dc2-9da3-d6728dcfbdda`;
+Release `019ea800-8f76-79e2-a0c6-62153df98c8a`; Technical Debt
+`019ea800-93b6-7800-b84d-c583e364e4b1`.
+
+Definition of done:
+
+- README, docs, release-check descriptions, and PROJECT support claims use the
+  single-default-artifact terminology for future work.
+- Historical v0.1.0 docs remain factual and are clearly historical.
+- Docs state that Python/Ruby package managers, third-party packages, and native
+  extensions are not supported in the next release.
+- Performance and artifact budget docs name the next-release measurements that
+  block release: zip size, unzipped framework size, app bundle delta, cold start,
+  first eval per language, and idle RSS.
+
+Verification plan:
+
+- `mise exec -- just plan-check`
+- Support-claim scan for stale default-Core wording.
+- Link/readability review by Swift DX.
+- Technical-debt review proving no hidden policy mismatch remains.
+
+Progress and evidence:
+
+- Updated README to use the next release language target, no-env SwiftPM target,
+  one-app-bundle framework distribution shape, Python/Ruby unsupported package
+  scope, and current v0.1.0 Core reference metrics.
+- Updated `docs/performance-and-artifact-budgets.md` to make ADR-025 the
+  next-release policy, keep ADR-018 as historical M1-M8 evidence, and list
+  single-default-artifact measurements.
+- Updated `docs/release-gates.md` to label current lane commands as v0.1.0/M8
+  transitional behavior and add the M10 target for checked-in hosted URL/checksum
+  no-env consumers.
+- Updated `PLAN.org` with an ADR-025 supersession note for the obsolete
+  `EcritumFull`/`EcritumCore` fallback.
+- Added active `ECRITUM-DEBT-0013` for M10-owned release-facing Core/Full lane
+  cleanup across tooling/tests/manifests.
+- Swift DX review `019ea800-8cce-7dc2-9da3-d6728dcfbdda` completed and included
+  a successful Claude consult (`CLAUDE_STATUS=0`); wording recommendations were
+  incorporated.
+- Release review `019ea800-8f76-79e2-a0c6-62153df98c8a` completed; M10 target
+  section and current limitation wording were incorporated.
+- Technical Debt review `019ea800-93b6-7800-b84d-c583e364e4b1` completed; PLAN
+  note and debt entry were incorporated.
+- `mise exec -- just plan-check` -> PASS.
+- Support-claim scan for `EcritumFull`, `EcritumCore`, `Core is the default`,
+  `Full-only`, `default Core`, `Core artifact`, `Full-artifact candidate`,
+  `release-ready Core`, and `Core/Full` across README, active docs, PLAN, DEBT,
+  and Examples -> remaining hits are explicit ADR-025 supersession, v0.1.0/M8
+  history, or M10 debt.
+- Direct Claude docs diff review attempted with `claude -p`; timed out after 90
+  seconds with no output (`CLAUDE_STATUS=124`).
+
+** IN-PROGRESS Milestone M10: Default SwiftPM Distribution and Existing Runtime Promotion
+
+Goal: make the current Clojure/SCI, GraalJS, and LuaJ runtime lane the normal
+SwiftPM artifact path before adding Python or Ruby. A clean SwiftPM app must be
+able to depend on a tagged Ecritum release without Ecritum-specific environment
+variables and receive `EcritumRuntime.framework` automatically.
+
+Lead persona: Release, Licensing, and Distribution Engineer.
+Reviewer personas: Swift DX, Unix, Tests/TDD, Architecture, Security.
+Depends on: M9.
+
+Definition of done:
+
+- `Package.swift` defaults to a checked-in GitHub Release URL and SwiftPM
+  checksum when `dist/local/EcritumRuntime.xcframework` is absent.
+- The next version and staged/final release URL strategy are selected before the
+  checked-in default URL is changed. A draft or prerelease validation URL may be
+  used only if M14 replaces or confirms it before publication.
+- `ECRITUM_RUNTIME_URL` and `ECRITUM_RUNTIME_CHECKSUM` remain only for release
+  staging/tests and still must be provided together.
+- Local contributor flows still work through `dist/local` and scaffold/no-runtime
+  test mode.
+- No contributor sentinel relies on `native/pom.xml`, because external SwiftPM
+  consumers clone the repo and would also have it.
+- Clean no-env SwiftPM consumers run Clojure, JavaScript, and Lua from the
+  default artifact.
+- Packaged `.app` smoke embeds `EcritumRuntime.framework` and generates no
+  intentional crash reports.
+
+Verification plan:
+
+- `swift package describe --type json` in the repo with no Ecritum env vars.
+- Clean external SwiftPM consumer from a GitHub tag with no `dist/`, temporary
+  HOME/cache, and no Ecritum env vars.
+- `mise exec -- just test-swift-scaffold`
+- `mise exec -- just test-swift`
+- `mise exec -- just examples`
+- `mise exec -- just packaged-app-smoke`
+- `mise exec -- just release-check-community`
+- Negative: setting only URL or checksum fails clearly.
+
+*** DONE M10-001 Add default remote runtime manifest behavior
+
+Lead persona: Release, Licensing, and Distribution Engineer.
+Reviewer personas: Swift DX, Unix, Tests/TDD.
+Active review agents: Release/SwiftPM `019ea807-c261-7772-8c44-facb881dff1a`;
+Tests/TDD `019ea807-c531-7fc3-a912-7e9384e6bd62`.
+
+Definition of done:
+
+- Next version, tag naming, staged artifact URL, and final hosted URL replacement
+  rules are recorded before changing `Package.swift`.
+- `Package.swift` selects the local artifact first, otherwise the checked-in
+  release URL/checksum, otherwise scaffold mode only when explicitly intended by
+  tests.
+- Tests cover local artifact, default remote, explicit env override, missing
+  checksum, missing URL, and scaffold/no-runtime mode.
+- The implementation is deterministic under clean SwiftPM package resolution.
+
+Verification plan:
+
+- `python3 -B -m unittest Tests/Release/test_package_artifact.py`
+- `mise exec -- just test-swift-scaffold`
+- `swift package describe --type json` with no Ecritum env vars.
+- Clean no-env consumer smoke.
+
+Progress and evidence:
+
+- Updated `Package.swift` to use deterministic manifest selection:
+  local `dist/local` first for contributors, paired env URL/checksum as a
+  staging override when local is absent, checked-in hosted URL/checksum as the
+  default remote fallback, and explicit scaffold mode only when
+  `ECRITUM_LOCAL_RUNTIME=0`.
+- `ECRITUM_RELEASE_RUNTIME_REQUIRED=1` now ignores local artifacts and uses the
+  paired env override when present, otherwise the checked-in default remote.
+- `ECRITUM_LOCAL_RUNTIME=0` now fails clearly if combined with
+  `ECRITUM_RELEASE_RUNTIME_REQUIRED` or runtime URL/checksum env vars.
+- Added fixture-based release tests for local/default/env/release-required/
+  scaffold precedence, partial env failures, `native/pom.xml` non-sentinel
+  behavior, default URL/checksum shape, and no-env default-manifest smoke mode.
+- Added `--use-default-package-runtime` to `scripts/test-release-consumer-smoke.py`
+  so release tests can validate the checked-in manifest default without injecting
+  Ecritum runtime env vars.
+- Recorded `ECRITUM-DEBT-0014`: the checked-in default URL currently points to
+  the existing hosted v0.1.0 Community Core artifact as a live bootstrap. M14
+  must replace it with the next release's single default artifact URL/checksum.
+- Release/SwiftPM review `019ea807-c261-7772-8c44-facb881dff1a` completed; its
+  precedence and temporary-URL concerns were incorporated or recorded as debt.
+- Tests/TDD review `019ea807-c531-7fc3-a912-7e9384e6bd62` completed with Claude
+  agreement; its matrix and no-env smoke recommendations were incorporated.
+- `python3 -B -m unittest Tests/Release/test_package_artifact.py` -> PASS, 43
+  tests.
+- `mise exec -- just test-release-tools` -> PASS, 107 tests.
+- `mise exec -- just test-swift-scaffold` -> PASS.
+- `mise exec -- just test-swift` -> PASS.
+- `ECRITUM_RELEASE_RUNTIME_REQUIRED=1 swift package describe --type json` ->
+  resolves `EcritumRuntime` as `remote/archive/EcritumRuntime.xcframework.zip`.
+- `ECRITUM_LOCAL_RUNTIME=0 ECRITUM_RELEASE_RUNTIME_REQUIRED=1 swift package
+  describe --type json` -> expected FAIL with explicit conflict message.
+- Direct Claude implementation diff review attempted with `claude -p`; timed out
+  after 90 seconds with no output (`CLAUDE_STATUS=124`).
+
+*** DONE M10-002 Collapse release-facing Core/Full lane behavior
+
+Lead persona: Release, Licensing, and Distribution Engineer.
+Reviewer personas: Architecture, Technical Debt, Tests/TDD.
+Depends on: M9-001, M9-002.
+Active review agents: Release `019ea813-0dec-7071-94c5-04c004fbbfc6`;
+Technical Debt `019ea813-107d-70d1-ab08-7e88e7acda56`; TDD/Unix
+`019ea813-148b-7063-9c28-62bec3848eb7`.
+
+Definition of done:
+
+- Release-facing tasks package the single default artifact by default.
+- Any remaining `core`/`full` implementation names are internal, documented, and
+  not visible as product artifacts.
+- `release-check` and `release-check-community` validate the artifact they will
+  publish rather than a stale local lane.
+- Package manifests record included runtimes and resource inventory.
+
+Verification plan:
+
+- `mise exec -- just test-release-tools`
+- `mise exec -- just release-check-community`
+- `mise exec -- just package-artifact`
+- `mise exec -- just package-artifact-verify`
+- `mise exec -- just inspect`
+
+Progress and evidence:
+
+- Collapsed release-facing `just` recipes so `release-check`,
+  `release-check-community`, `release-check-public`, `package-artifact`,
+  `package-artifact-verify`, `size`, `license-report`, `sbom`,
+  `license-report-strict`, `third-party-notices`, and `check-dep-delta` operate
+  on the single default artifact without a public lane argument.
+- Updated `release-check.sh` to reject `--lane`, write unscoped release
+  evidence under `build/release`, package
+  `dist/release/EcritumRuntime.xcframework.zip`, and let community mode validate
+  the checked-in Package.swift default remote target without requiring
+  `ECRITUM_CONSUMER_ARTIFACT_URL`.
+- Updated `package-artifact.py` manifests to record `artifactKind: default`,
+  `implementationProfile`, `includedRuntimes`, `resourceInventory`, checksums,
+  slices, files, and normalized timestamp. Legacy `releaseLane=full` framework
+  metadata is accepted as a transitional internal profile; legacy
+  `releaseLane=core` is rejected for default release packaging.
+- Updated `build-xcframework.sh` to write `Resources/ecritum-runtime.json` with
+  artifact kind, implementation profile, and included runtimes. The old `--lane`
+  flag is retired in favor of internal `--implementation-profile`.
+- Updated `test-release-consumer-smoke.py` so the default smoke is lane-free and
+  proves Clojure, JavaScript, and Lua. `--use-default-package-runtime` now forces
+  remote resolution through the checked-in default without staging URL/checksum
+  env vars, even when `dist/local` exists in the contributor checkout.
+- Updated size, license, SBOM, dependency-delta, public-signing, and inspection
+  tooling/tests to use the default artifact contract.
+- Updated `docs/release-gates.md` and
+  `docs/performance-and-artifact-budgets.md` to remove active public lane
+  commands and document lane-free release paths.
+- Resolved `ECRITUM-DEBT-0013`. The final hosted no-env clean SwiftPM consumer
+  that runs Clojure, JavaScript, and Lua remains assigned to M10-003 and
+  `ECRITUM-DEBT-0014`.
+- Release review `019ea813-0dec-7071-94c5-04c004fbbfc6` completed; it
+  recommended one public `default` artifact and keeping Core/Full only as
+  internal profiles. Implemented.
+- Technical Debt review `019ea813-107d-70d1-ab08-7e88e7acda56` completed; it
+  required removal of public lane recipes, lane-driven release-check behavior,
+  and release-lane package metadata. Implemented and debt ledger updated.
+- TDD/Unix review `019ea813-148b-7063-9c28-62bec3848eb7` completed; it required
+  retired-lane tests, unscoped release paths, runtime/resource inventory, and
+  lane-free Clojure/JavaScript/Lua smoke. Implemented.
+- Claude plan review completed successfully and identified the same critical
+  gaps: community default manifest behavior, runtime metadata migration, Lua in
+  release consumer smoke, default size budgets, dependency/license lane removal,
+  and stale support-claim scan. Implemented.
+- Direct Claude post-change diff review was attempted with `claude -p`, but it
+  hung for several minutes and was terminated (`CLAUDE_STATUS=143`). EM accepted
+  the completed persona reviews and passing release gates as the fallback.
+
+## Verification
+
+Layers tested: Unit, Integration, Packaging, Release
+Commands run:
+- `python3 -B -m unittest Tests/Release/test_size_artifact.py
+  Tests/Release/test_package_artifact.py Tests/Release/test_release_check.py
+  Tests/Release/test_license_report.py Tests/Release/test_check_dep_delta.py
+  Tests/Release/test_public_signing.py` -> PASS, 79 tests.
+- `mise exec -- just test-release-tools` -> PASS, 105 tests.
+- `mise exec -- just package-artifact` -> PASS; manifest has
+  `artifactKind: default`, `implementationProfile: full`, runtimes
+  `clojure,javascript,lua`, resource inventory, and SwiftPM checksum
+  `edfe358e9e98a5133080e147a4069b42a9a8c20a5b1b917464113da61b17358e`.
+- `mise exec -- just package-artifact-verify` -> PASS.
+- `mise exec -- just size` -> PASS; artifact 151,368,769 bytes, private runtime
+  150,734,208 bytes, wrapper 147,504 bytes, no warnings.
+- `mise exec -- just inspect` -> PASS; runtime metadata reports
+  `artifactKind: default`, `implementationProfile: full`, and runtimes
+  `clojure,javascript,lua`.
+- `mise exec -- just release-check-community` -> PASS; full release gate
+  completed, community signing evidence remains explicitly skipped, and
+  clean-consumer manifest validation resolved the checked-in remote binary
+  target instead of `dist/local`.
+- Support-claim scan for active stale public lane commands -> PASS; remaining
+  hits are historical PROJECT/ADR records, explicit legacy-metadata tests, or
+  legacy readers.
+New tests added:
+- Release tests for default artifact manifests, runtime/resource inventory,
+  retired `--lane` behavior, lane-free release paths, community default manifest
+  validation, lane-free Clojure/JavaScript/Lua consumer smoke, default size
+  budgets, and default license/dependency inventory.
+Negative paths tested:
+- retired `--lane`; stale package `releaseLane` metadata; legacy Core metadata
+  rejected for default packaging/size; local artifact ignored by
+  `--use-default-package-runtime`; partial runtime URL/checksum still rejected.
+Size impact:
+- Tooling-only change; current local default artifact measured at 151,368,769
+  bytes by `just size`.
+Sanitizers:
+- C ABI ASAN/UBSAN paths ran inside `release-check-community`.
+Not verified:
+- A fresh external SwiftPM consumer from a GitHub tag executing
+  Clojure/JavaScript/Lua with no Ecritum env vars; owned by M10-003 because the
+  checked-in default URL still points at the v0.1.0 bootstrap artifact.
+
+*** BLOCKED M10-003 Prove no-env consumer and packaged app distribution
+
+Lead persona: Swift API and Developer Experience Engineer.
+Reviewer personas: Release, Unix, Tests/TDD, Security.
+Depends on: M10-001, M10-002.
+Active review agents: Swift DX `019ea834-64c3-7283-8be5-17b645707404`;
+Release/Unix `019ea834-6b5a-74e3-819b-a2438033b255`; Tests/Security
+`019ea834-6e4c-7211-9a21-7b6e67ac5c35`.
+
+Definition of done:
+
+- A fresh external SwiftPM executable package depending on the tag imports
+  Ecritum, builds from an empty cache, reports `runtimeArtifactAvailable == true`,
+  and evaluates Clojure, JavaScript, and Lua.
+- A packaged macOS `.app` embeds the framework, runs without DYLD overrides, and
+  has stable install names/rpaths.
+- The smoke app no longer uses intentional missing-framework launches as a
+  negative test.
+
+Verification plan:
+
+- Clean no-env SwiftPM consumer smoke from a temporary HOME/cache.
+- `mise exec -- just packaged-app-smoke`
+- `mise exec -- just check-xcframework`
+- `otool -L` and `install_name_tool -id`/rpath inspection where applicable.
+- Crash-report count check around packaged app smoke.
+
+Execution split:
+
+- M10-003A local packaged-app proof: update `Examples/MacSmokeApp` and
+  `scripts/test-packaged-app-smoke.sh` so the packaged `.app` evaluates
+  Clojure, JavaScript, and Lua from the embedded framework, runs with an empty
+  command `PATH` and no `DYLD_*` overrides, records link/rpath evidence, and
+  fails if a new `EcritumSmokeApp` crash report appears.
+- M10-003B hosted no-env SwiftPM proof: after an explicit release-operation
+  approval to push/tag/upload, replace the bootstrap default URL/checksum,
+  verify a fresh external SwiftPM consumer from the GitHub tag with no Ecritum
+  env vars and empty caches, and close `ECRITUM-DEBT-0014`.
+
+Local M10-003A acceptance criteria:
+
+- `Examples/MacSmokeApp` creates a runtime with `.clojure`, `.javascript`, and
+  `.lua`, checks `Ecritum.runtimeArtifactAvailable`, registers one host callback,
+  evaluates all three languages through the public Swift API, and prints
+  `EcritumSmokeApp version=0.1.0 clojure=42 javascript=42 lua=42`.
+- `scripts/test-packaged-app-smoke.sh` copies the packaged framework into
+  `Contents/Frameworks`, signs ad hoc when `codesign` exists, runs the copied
+  app from a temporary directory with `env -i`, empty command `PATH`, and no
+  `DYLD_*` variables, then verifies install names/rpaths and rejects workspace,
+  GraalVM, JDK, native-target, or build-native paths.
+- The script counts `EcritumSmokeApp` crash reports before and after the run and
+  fails if the count increases.
+- No hosted release artifact or GitHub tag is created without explicit user
+  approval to push/upload.
+
+Progress and evidence:
+
+- Completed the local packaged-app proof slice. `Examples/MacSmokeApp` now
+  creates a runtime with Clojure, JavaScript, and Lua, verifies
+  `runtimeArtifactAvailable`, registers a host callback, evaluates all three
+  languages, and prints the three-language success line.
+- Hardened `scripts/test-packaged-app-smoke.sh` so it copies the framework into
+  `Contents/Frameworks`, runs the copied app from a temporary directory with
+  `env -i`, an empty command `PATH`, and no `DYLD_*` variables, polls diagnostic
+  reports after the run, rejects new `EcritumSmokeApp` crash reports, checks
+  `@rpath`/`@loader_path` install names, rejects `LC_DYLD_ENVIRONMENT`, and
+  rejects workspace, GraalVM, JDK, native-target, or build-native paths.
+- Added `Tests/Release/test_packaged_app_smoke.py` to protect the packaged-app
+  smoke contract without rebuilding the `.app` in unit tests.
+- Updated `docs/release-gates.md` to use the lane-free
+  `dist/release/EcritumRuntime.xcframework.zip` path in the hosted consumer
+  instructions.
+- Swift DX review `019ea834-64c3-7283-8be5-17b645707404` accepted the local
+  proof shape and verified the packaged-app smoke and rpath checks.
+- Release/Unix review `019ea834-6b5a-74e3-819b-a2438033b255` accepted
+  M10-003A and confirmed M10-003B remains blocked until explicit push/tag/upload
+  approval.
+- Tests/Security review `019ea834-6e4c-7211-9a21-7b6e67ac5c35` verified the
+  smoke and recommended contract tests for guardrails; added.
+- Claude review found one blocking issue in the initial script: crash reports can
+  be written asynchronously. Fixed by polling after the app run. It also
+  recommended rejecting `LC_DYLD_ENVIRONMENT`; fixed.
+
+Current blocker:
+
+- M10-003B cannot be completed without explicit approval to push/tag/upload or
+  otherwise host the next default artifact. The checked-in default URL still
+  points at the v0.1.0 bootstrap artifact, so a full no-env default-runtime
+  consumer correctly fails on legacy Core metadata. This is the remaining
+  blocker for closing M10 and `ECRITUM-DEBT-0014`.
+
+Decision needed:
+
+- Approve the release operation that creates or updates a GitHub release asset
+  for the next default artifact, updates `Package.swift` default URL/checksum,
+  and verifies a fresh external SwiftPM consumer from the tag with no Ecritum env
+  vars.
+
+## Verification
+
+Layers tested: Unit, Integration, Packaging, Release
+Commands run:
+- `bash -n scripts/test-packaged-app-smoke.sh` -> PASS.
+- `python3 -m py_compile Tests/Release/test_packaged_app_smoke.py` -> PASS.
+- `python3 -B -m unittest Tests/Release/test_packaged_app_smoke.py` -> PASS,
+  5 tests.
+- `mise exec -- just packaged-app-smoke` -> PASS; stdout
+  `EcritumSmokeApp version=0.1.0 clojure=42 javascript=42 lua=42`.
+- `mise exec -- just check-xcframework` -> PASS.
+- `mise exec -- just examples` -> PASS; SwiftHost, CHost, and packaged app
+  smoke all passed.
+- `mise exec -- just test-release-tools` -> PASS, 110 tests.
+- `mise exec -- just release-check-community` -> PASS; full community release
+  gate completed and the packaged-app smoke printed
+  `EcritumSmokeApp version=0.1.0 clojure=42 javascript=42 lua=42`.
+New tests added:
+- `Tests/Release/test_packaged_app_smoke.py`
+Negative paths tested:
+- Static release tests assert the packaged-app script retains clean runtime env,
+  crash-report polling, `LC_DYLD_ENVIRONMENT` rejection, rpath/install-name
+  checks, workspace/build-machine path rejection, and no missing-framework
+  negative launch.
+Size impact:
+- N/A; Swift example, shell script, release docs, and tests only.
+Sanitizers:
+- Not run: no C/Java/native runtime implementation changed.
+Not verified:
+- Hosted clean no-env SwiftPM consumer from a GitHub tag executing Clojure,
+  JavaScript, and Lua. Owner: Release, M10-003B; blocked on explicit
+  push/tag/upload approval.
+
+** TODO Milestone M11: GraalPy Runtime Support
+
+Goal: add Python through GraalPy without external Python installs, package
+managers, third-party packages, or native extensions.
+
+Lead persona: GraalVM and Polyglot Runtime Engineer.
+Reviewer personas: Architecture, Security, Tests/TDD, Release, Clean Code.
+Depends on: M9, M10.
+
+Definition of done:
+
+- Current GraalPy embedding, resource, licensing, and Native Image guidance is
+  reviewed and cited in task notes or an ADR update.
+- Maven coordinates are pinned to the repo GraalVM line, or an ADR accepts tested
+  version skew.
+- Python is available through the public C ABI and Swift API with the same
+  lifecycle, value, host-function, and error semantics as other languages.
+- Python imports of `java`, raw `polyglot`, `ctypes`, `cffi`, `socket`,
+  `subprocess`, environment access, unrestricted filesystem access, and native
+  extensions fail clearly.
+- Python strict conformance and strict abuse suites have zero required pending
+  cases before docs claim support.
+- Size, cold start, first Python eval, idle RSS, dependency delta, license/SBOM,
+  and resource inventory evidence is recorded.
+- If M11-001 cannot prove GraalPy feasibility in one focused spike change, the
+  EM marks M11 blocked, records logs and upstream references, writes or updates
+  an ADR with options, and asks the user before changing the five-language
+  release requirement.
+
+Verification plan:
+
+- Focused Java GraalPy evaluator/resource tests.
+- `mise exec -- just native`
+- `mise exec -- just xcframework`
+- `mise exec -- just conformance-python-native`
+- `mise exec -- just security-python`
+- `mise exec -- just check-security-static`
+- `mise exec -- just test-swift`
+- `mise exec -- just check-abi`
+- Python first-eval, size, RSS, license, dependency, and package-resource
+  evidence recorded in PROJECT.org.
+
+*** TODO M11-001 Prove GraalPy coordinates, resources, and Native Image build
+
+Lead persona: GraalVM and Polyglot Runtime Engineer.
+Reviewer personas: Architecture, Release, Security.
+
+Definition of done:
+
+- Dependency tree, resource layout, Native Image flags, and framework resource
+  strategy are documented from local evidence.
+- A minimal Python eval reaches Native Image or records a concrete blocker with
+  logs and upstream references.
+- A blocker outcome does not count as Python support. It blocks M11 until the EM
+  records an ADR/user decision that changes scope or accepts a new implementation
+  path.
+- No package-manager, third-party-package, or native-extension path is enabled by
+  the spike.
+
+Verification plan:
+
+- `mise exec -- mvn -s .mvn/settings.xml -f native/pom.xml dependency:tree
+  -Dscope=runtime`
+- Focused Java Python eval test.
+- Native Image build command and logs.
+- `mise exec -- just inspect`
+
+*** TODO M11-002 Implement Python API, values, errors, and host callbacks
+
+Lead persona: GraalVM and Polyglot Runtime Engineer.
+Reviewer personas: Clean Code, Tests/TDD, Security.
+Depends on: M11-001.
+
+Definition of done:
+
+- Python can be requested in Swift with `.python`, in C runtime configuration
+  with `"python"`, and through the eval/job/value/error C ABI.
+- Python supports scalar, array/list, object/map, nil/null, boolean, integer,
+  double, string, and bytes where the public value model supports them.
+- Python scripts can call registered host functions and receive host-returned
+  values.
+- Python structured script errors map to Ecritum status/category/message/
+  operation/language/source-name without unsafe diagnostic leakage.
+
+Verification plan:
+
+- Java unit tests for Python evaluator/value/error behavior.
+- C native eval smoke with Python.
+- Swift artifact-backed tests with Python.
+- `mise exec -- just conformance-python-native`
+- `mise exec -- just test-swift`
+
+*** TODO M11-003 Add Python security, metrics, and release inventory gates
+
+Lead persona: Security and Capability Model Engineer.
+Reviewer personas: Tests/TDD, Release, GraalVM Runtime.
+Depends on: M11-002.
+
+Definition of done:
+
+- Python abuse probes cover direct Java, raw Polyglot, `ctypes`, `cffi`, socket,
+  subprocess, env, package install/load, native extension, and filesystem denial.
+- Python metrics are captured in the release evidence format.
+- License/SBOM and dependency-delta inventories include GraalPy and bundled
+  resources.
+
+Verification plan:
+
+- `mise exec -- just security-python`
+- `mise exec -- just security`
+- `mise exec -- just bench-first-eval`
+- `mise exec -- just bench-idle-rss`
+- `mise exec -- just license-report-strict`
+- `mise exec -- just check-dep-delta`
+
+** TODO Milestone M12: TruffleRuby Runtime Support
+
+Goal: add Ruby through TruffleRuby without external Ruby installs, RubyGems,
+Bundler installs, third-party gems, native gems, C extensions, or NFI/FFI.
+
+Lead persona: GraalVM and Polyglot Runtime Engineer.
+Reviewer personas: Architecture, Security, Tests/TDD, Release, Clean Code.
+Depends on: M9, M10.
+
+Definition of done:
+
+- TruffleRuby Maven/version feasibility is resolved before implementation.
+  Matching coordinates must work, or an ADR must explicitly accept tested
+  version skew.
+- Ruby is available through the public C ABI and Swift API with the same
+  lifecycle, value, host-function, and error semantics as other languages.
+- RubyGems, Bundler installation, runtime gem installation, native gems,
+  C extensions, NFI/FFI, direct Java, raw Polyglot, subprocess, network,
+  environment, and unrestricted filesystem access are blocked or disabled.
+- Ruby strict conformance and strict abuse suites have zero required pending
+  cases before docs claim support.
+- Size, cold start, first Ruby eval, idle RSS, dependency delta, license/SBOM,
+  and resource inventory evidence is recorded.
+- If M12-001 cannot prove TruffleRuby feasibility in one focused spike change,
+  the EM marks M12 blocked, records logs and upstream references, writes or
+  updates an ADR with options, and asks the user before changing the five-language
+  release requirement.
+
+Verification plan:
+
+- Focused Java TruffleRuby evaluator/resource tests.
+- `mise exec -- just native`
+- `mise exec -- just xcframework`
+- `mise exec -- just conformance-ruby-native`
+- `mise exec -- just security-ruby`
+- `mise exec -- just check-security-static`
+- `mise exec -- just test-swift`
+- `mise exec -- just check-abi`
+- Ruby first-eval, size, RSS, license, dependency, and package-resource evidence
+  recorded in PROJECT.org.
+
+*** TODO M12-001 Resolve TruffleRuby coordinates and resource model
+
+Lead persona: GraalVM and Polyglot Runtime Engineer.
+Reviewer personas: Architecture, Release, Security.
+
+Definition of done:
+
+- Current official TruffleRuby embedding, installation, resource, and Native
+  Image guidance is reviewed and cited.
+- Maven coordinates match the repo GraalVM line, or an ADR accepts tested version
+  skew with reproducible evidence.
+- A blocker outcome does not count as Ruby support. It blocks M12 until the EM
+  records an ADR/user decision that changes scope or accepts a new implementation
+  path.
+- Ruby runtime resources are embedded in the image or copied into deterministic
+  framework resources that work from a clean SwiftPM consumer.
+
+Verification plan:
+
+- `mise exec -- mvn -s .mvn/settings.xml -f native/pom.xml dependency:tree
+  -Dscope=runtime`
+- Focused Java Ruby eval test.
+- Native Image build command and logs.
+- `mise exec -- just inspect`
+
+*** TODO M12-002 Implement Ruby API, values, errors, and host callbacks
+
+Lead persona: GraalVM and Polyglot Runtime Engineer.
+Reviewer personas: Clean Code, Tests/TDD, Security.
+Depends on: M12-001.
+
+Definition of done:
+
+- M12-002 reviews lessons from M11-002 before implementation, especially
+  value-model, bytes, error mapping, and host-callback edge cases.
+- Ruby can be requested in Swift with `.ruby`, in C runtime configuration with
+  `"ruby"`, and through the eval/job/value/error C ABI.
+- Ruby supports scalar, array, object/hash, nil, boolean, integer, double,
+  string, and bytes where the public value model supports them.
+- Ruby scripts can call registered host functions and receive host-returned
+  values.
+- Ruby structured script errors map to Ecritum status/category/message/
+  operation/language/source-name without unsafe diagnostic leakage.
+
+Verification plan:
+
+- Java unit tests for Ruby evaluator/value/error behavior.
+- C native eval smoke with Ruby.
+- Swift artifact-backed tests with Ruby.
+- `mise exec -- just conformance-ruby-native`
+- `mise exec -- just test-swift`
+
+*** TODO M12-003 Add Ruby security, metrics, and release inventory gates
+
+Lead persona: Security and Capability Model Engineer.
+Reviewer personas: Tests/TDD, Release, GraalVM Runtime.
+Depends on: M12-002.
+
+Definition of done:
+
+- Ruby abuse probes cover direct Java, raw Polyglot, RubyGems/Bundler install,
+  gem load, native extension, NFI/FFI, socket, subprocess, env, and filesystem
+  denial.
+- Ruby metrics are captured in the release evidence format.
+- License/SBOM and dependency-delta inventories include TruffleRuby and bundled
+  resources.
+
+Verification plan:
+
+- `mise exec -- just security-ruby`
+- `mise exec -- just security`
+- `mise exec -- just bench-first-eval`
+- `mise exec -- just bench-idle-rss`
+- `mise exec -- just license-report-strict`
+- `mise exec -- just check-dep-delta`
+
+** TODO Milestone M13: Docs, Tutorials, Examples, and Metrics
+
+Goal: make the five-language runtime understandable and useful to framework
+users, with real examples and measured reference numbers in the docs.
+
+Lead persona: Swift API and Developer Experience Engineer.
+Reviewer personas: Release, Security, Tests/TDD, Unix, Clean Code.
+Depends on: M10, M11, M12.
+
+Definition of done:
+
+- README shows normal SwiftPM setup, app-bundle distribution shape, supported
+  languages, unsupported Python/Ruby package/native-extension scope, security
+  defaults, and measured reference metrics.
+- Docs include tutorials for embedding Ecritum in a Swift app, registering host
+  functions and values, writing scripts in each supported language, enabling a
+  narrow filesystem capability, packaging a macOS `.app`, and interpreting
+  errors/default-deny failures.
+- `Examples/` contains useful examples beyond hello world:
+  `ClojureNotebook`, `JavaScriptAutomation`, `LuaRulesEngine`,
+  `PythonTextProcessing`, `RubyTemplateRenderer`, `MultiLanguageHost`, and a
+  packaged macOS app example or equivalent names.
+- Every example has a README with purpose, demonstrated API, build/run commands,
+  expected output, and security notes.
+- Examples are tested by `just examples` or an examples-specific rollup.
+
+Verification plan:
+
+- `mise exec -- just examples`
+- Example-specific build/run commands from each README.
+- `rg -n "0\.1\.0-dev|SNAPSHOT|Core artifact|Full-only" README.md docs
+  Examples`
+- Swift DX readability review.
+- Security review for every example that enables capabilities.
+
+*** TODO M13-001 Add README metrics and support matrix
+
+Lead persona: Swift API and Developer Experience Engineer.
+Reviewer personas: Release, Security, Technical Debt.
+Depends on: M11-003, M12-003.
+
+Definition of done:
+
+- README includes measured zip size, unzipped framework size, app bundle delta,
+  cold start, first eval per language, and idle RSS for the current release
+  candidate.
+- README states unsupported package manager, third-party package, and native
+  extension behavior for Python and Ruby.
+- README explains that the app ships one `.app` bundle containing the app plus
+  `EcritumRuntime.framework`.
+
+Verification plan:
+
+- `mise exec -- just size`
+- `mise exec -- just bench-cold-start`
+- `mise exec -- just bench-first-eval`
+- `mise exec -- just bench-idle-rss`
+- README support-claim scan.
+
+*** TODO M13-002 Build useful five-language examples
+
+Lead persona: Unix and Reusable Components Engineer.
+Reviewer personas: Swift DX, Tests/TDD, Clean Code, Security.
+
+Definition of done:
+
+- Each example demonstrates a real use case rather than only printing hello
+  world.
+- Shared example helpers are reusable without hiding the public API being taught.
+- Each example README explains what it showcases and how to compile/run it.
+- Examples avoid unsafe capabilities unless the example is specifically teaching
+  a narrow, reviewed capability.
+
+Verification plan:
+
+- `mise exec -- just examples`
+- Example-specific README commands.
+- Security review of capability examples.
+
+*** TODO M13-003 Add tutorials for framework users
+
+Lead persona: Swift API and Developer Experience Engineer.
+Reviewer personas: Architecture, Release, Security.
+Depends on: M13-002.
+
+Definition of done:
+
+- Tutorials are task-oriented and tested against current commands.
+- SwiftPM installation, packaged app embedding, host functions, values, errors,
+  and capabilities are covered.
+- Python/Ruby package limitations are explained in user-facing language.
+
+Verification plan:
+
+- Tutorial command smoke tests.
+- Link/readability review.
+- Support-claim scan.
+
+** TODO Milestone M14: Next Community Release Candidate
+
+Goal: publish the next Community release only when the default artifact works as
+a normal SwiftPM dependency and all five languages pass conformance, security,
+distribution, license, metric, docs, and example gates.
+
+Lead persona: Release, Licensing, and Distribution Engineer.
+Reviewer personas: Engineering Manager, Swift DX, Security, Tests/TDD, Unix,
+Architecture.
+Depends on: M9, M10, M11, M12, M13.
+
+Definition of done:
+
+- Release tag and version selected during M10 are confirmed or replaced before
+  publishing.
+- The release artifact is hosted at a tag-specific GitHub Releases HTTPS URL.
+- Normal SwiftPM dependency on the tag resolves the runtime automatically without
+  Ecritum-specific environment variables.
+- A packaged `.app` embeds `EcritumRuntime.framework` and runs all five language
+  smokes without DYLD overrides or crash-report pollution.
+- Release notes clearly state the Community trust tier and unsupported
+  Python/Ruby package/native-extension scope.
+- Release assets include zip, checksum, package manifest, SPDX SBOM, notices or
+  notices reference, and required vulnerability/revocation metadata.
+- `PROJECT.org` records all verification evidence before the EM marks M14 done.
+
+Verification plan:
+
+- `mise exec -- just native`
+- `mise exec -- just xcframework`
+- `mise exec -- just test`
+- `mise exec -- just test-release-tools`
+- `mise exec -- just conformance`
+- `mise exec -- just security`
+- `mise exec -- just release-check-community`
+- Hosted clean SwiftPM consumer from the GitHub tag, no Ecritum env vars.
+- Clean packaged `.app` smoke from the release artifact.
+- `gh release view <tag> --repo jkhoeini/ecritum --json
+  tagName,targetCommitish,url,isDraft,isPrerelease,assets`
+
+*** TODO M14-001 Run release-candidate verification rollup
+
+Lead persona: TDD, Testability, and Verification Engineer.
+Reviewer personas: Release, Security, Unix.
+
+Definition of done:
+
+- All required commands pass or blockers are recorded with owner, impact, and
+  exit condition.
+- Required pending conformance/security cases are zero for all claimed languages.
+- Metrics and release evidence are attached to `PROJECT.org`.
+
+Verification plan:
+
+- Full M14 verification plan.
+- Claude implementation review, or timeout recorded.
+- Persona review from Tests/TDD, Security, Release, and Unix.
+
+*** TODO M14-002 Publish release assets and verify hosted consumption
+
+Lead persona: Release, Licensing, and Distribution Engineer.
+Reviewer personas: Engineering Manager, Swift DX, Security.
+Depends on: M14-001.
+
+Definition of done:
+
+- Release assets are uploaded to GitHub Releases under `jkhoeini/ecritum`.
+- Hosted package URL/checksum match the committed SwiftPM manifest.
+- Clean hosted consumer and packaged app verification pass after upload and both
+  evaluate Clojure, JavaScript, Lua, Python, and Ruby.
+- Release notes include supported languages, unsupported package scope, Community
+  trust tier, and measured metrics.
+
+Verification plan:
+
+- `gh release create` or `gh release upload` for release assets when explicitly
+  approved for the release.
+- `gh release view <tag> --repo jkhoeini/ecritum --json
+  tagName,targetCommitish,url,isDraft,isPrerelease,assets`
+- Clean hosted no-env SwiftPM consumer.
+- Clean packaged `.app` smoke.
+
 * ADR Backlog
 
 ** DONE ADR-001 SwiftPM binary target and package layout
@@ -5403,6 +6441,8 @@ Output of: M1-007.
 Output of: M3-002A.
 ** DONE ADR-024 Diagnostic stack-frame ABI deferral
 Output of: M8-001.
+** DONE ADR-025 Single default runtime artifact policy
+Output of: M9-001.
 
 * Test Pyramid
 

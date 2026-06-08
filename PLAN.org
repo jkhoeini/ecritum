@@ -598,7 +598,11 @@ Record size after each runtime:
 - + GraalPy with stdlib
 - + TruffleRuby with stdlib
 
-Default artifact should include only runtimes that pass the size and reliability gate. If Python/Ruby make the default artifact too large, provide =EcritumFull= and =EcritumCore= artifacts.
+M9 update: ADR-025 supersedes the earlier =EcritumFull=/=EcritumCore= split.
+The next release has one default artifact. Python/Ruby size, reliability,
+resource, license, conformance, and security evidence are still release gates,
+but a smaller public Core artifact is not the planned fallback unless a future
+ADR and user decision changes scope.
 
 * Implementation Sequence
 

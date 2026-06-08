@@ -1,6 +1,12 @@
 # ADR-018: Performance and Artifact Budget Policy
 
-Status: Accepted
+Status: Accepted; next-release artifact policy superseded by ADR-025.
+
+ADR-025 supersedes Core-vs-Full budgeting for M9 and later. This ADR remains the
+historical source for M1-M8 gates. The next release uses single-default-artifact
+measurements and must record zip size, unzipped framework size, app bundle
+delta, cold start, first eval per language, idle RSS, dependency delta,
+license/SBOM inventory, and resource inventory before publication.
 
 ## Context
 

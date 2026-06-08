@@ -217,9 +217,9 @@ def validate_package_sidecars(release_zip, release_zip_sha, package_manifest, vi
             if str(manifest.get(key, "")).lower() != release_zip_sha:
                 violations.append(f"package manifest {key} does not match release zip SHA-256")
     return {
+        "artifactKind": str(manifest.get("artifactKind", "")) if manifest else "",
         "checksumSidecar": str(checksum_sidecar),
         "manifest": str(manifest_path),
-        "releaseLane": str(manifest.get("releaseLane", "")) if manifest else "",
         "swiftPackageChecksum": str(manifest.get("swiftPackageChecksum", "")) if manifest else "",
     }
 

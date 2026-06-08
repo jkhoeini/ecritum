@@ -10,7 +10,7 @@ struct EcritumSmokeApp {
             }
 
             let version = try Ecritum.version
-            let runtime = try EcritumRuntime(.init(languages: [.clojure, .javascript]))
+            let runtime = try EcritumRuntime(.init(languages: [.clojure, .javascript, .lua]))
             let namespace = try runtime.namespace(.init("app"))
             try namespace.register(.init("answer")) { call in
                 guard try call.argumentCount() == 0 else {
@@ -39,7 +39,14 @@ struct EcritumSmokeApp {
             ))
             try expectInt(javascript, equals: 42, label: "javascript")
 
-            print("EcritumSmokeApp version=\(version) clojure=42 javascript=42")
+            let lua = try await context.eval(EcritumScript(
+                "return 40 + (ecritum.app.answer() - 40)",
+                language: .lua,
+                sourceName: "packaged-smoke.lua"
+            ))
+            try expectInt(lua, equals: 42, label: "lua")
+
+            print("EcritumSmokeApp version=\(version) clojure=42 javascript=42 lua=42")
         } catch {
             fputs("EcritumSmokeApp failed: \(error)\n", stderr)
             exit(1)

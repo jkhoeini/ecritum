@@ -84,6 +84,35 @@ def embedded_runtimes(private_symbols, has_wrapper):
     return runtimes
 
 
+def runtime_metadata(framework):
+    resources = framework / "Resources"
+    metadata_path = resources / "ecritum-runtime.json"
+    legacy_path = resources / "ecritum-runtime-lane.json"
+    if metadata_path.exists():
+        with open(metadata_path) as handle:
+            payload = json.load(handle)
+        payload["metadataSource"] = str(metadata_path)
+        return payload
+    if legacy_path.exists():
+        with open(legacy_path) as handle:
+            legacy = json.load(handle)
+        profile = legacy.get("releaseLane")
+        return {
+            "artifactKind": "default" if profile == "full" else "internal",
+            "formatVersion": 1,
+            "implementationProfile": profile,
+            "includedRuntimes": ["clojure", "javascript", "lua"] if profile == "full" else ["clojure"],
+            "metadataSource": str(legacy_path),
+        }
+    return {
+        "artifactKind": None,
+        "formatVersion": None,
+        "implementationProfile": None,
+        "includedRuntimes": [],
+        "metadataSource": None,
+    }
+
+
 parser = argparse.ArgumentParser(description="Inspect the local EcritumRuntime XCFramework.")
 parser.add_argument("--artifact", default="dist/local/EcritumRuntime.xcframework")
 args = parser.parse_args()
@@ -118,6 +147,7 @@ payload = {
     "private_runtime_size_bytes": private_lib.stat().st_size if private_lib.exists() else None,
     "private_runtime_sha256": sha256(private_lib) if private_lib.exists() else None,
     "private_runtime_codesign": run_status(["codesign", "--verify", "--verbose=2", str(private_lib)]) if private_lib.exists() else None,
+    "runtime_metadata": runtime_metadata(framework),
     "headers": headers,
     "resources": resources,
     "public_symbols": public_symbols,
