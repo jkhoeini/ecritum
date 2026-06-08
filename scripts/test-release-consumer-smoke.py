@@ -114,7 +114,11 @@ def validate_ecritum_release_manifest(repo_root, env):
     return runtime_target
 
 
-def package_swift(repo_root):
+def package_swift(repo_root, dependency_url=None, dependency_exact=None):
+    if dependency_url:
+        dependency = f".package(url: {json.dumps(dependency_url)}, exact: {json.dumps(dependency_exact)})"
+    else:
+        dependency = f".package(path: {json.dumps(str(repo_root))})"
     return textwrap.dedent(
         f"""\
         // swift-tools-version: 5.9
@@ -126,7 +130,7 @@ def package_swift(repo_root):
                 .macOS(.v14),
             ],
             dependencies: [
-                .package(path: {json.dumps(str(repo_root))}),
+                {dependency},
             ],
             targets: [
                 .executableTarget(
@@ -313,6 +317,8 @@ def parse_args(argv):
     parser.add_argument("--manifest-only", action="store_true", help="Validate release-mode Package.swift target selection without building a consumer.")
     parser.add_argument("--use-default-package-runtime", action="store_true", help="Do not inject Ecritum runtime env vars; validate the checked-in Package.swift default runtime.")
     parser.add_argument("--validate-workspace-state", default=None, help="Validate a SwiftPM build directory's workspace-state.json and exit.")
+    parser.add_argument("--dependency-url", default=None, help="Use a remote Ecritum package dependency URL instead of a local path dependency.")
+    parser.add_argument("--dependency-exact", default=None, help="Exact Ecritum package version to use with --dependency-url.")
     return parser.parse_args(argv)
 
 
@@ -329,6 +335,10 @@ def main(argv=None):
         fail("missing artifact checksum: pass --checksum or set ECRITUM_CONSUMER_ARTIFACT_CHECKSUM")
     if args.checksum and not CHECKSUM_RE.match(args.checksum):
         fail("artifact checksum must be a 64-character lowercase SHA-256/SwiftPM checksum")
+    if (args.dependency_url is None) != (args.dependency_exact is None):
+        fail("--dependency-url and --dependency-exact must be set together")
+    if args.dependency_url and urlparse(args.dependency_url).scheme != "https":
+        fail("dependency URL must use https")
 
     repo_root = Path(args.package_root).resolve()
     if not (repo_root / "Package.swift").is_file():
@@ -405,7 +415,7 @@ def main(argv=None):
     shutil.rmtree(build_dir, ignore_errors=True)
     source_dir.mkdir(parents=True)
     empty_bin.mkdir(parents=True)
-    (consumer_dir / "Package.swift").write_text(package_swift(repo_root))
+    (consumer_dir / "Package.swift").write_text(package_swift(repo_root, args.dependency_url, args.dependency_exact))
     (source_dir / "main.swift").write_text(main_swift())
     env = build_env(args.artifact_url, args.checksum, build_dir, args.use_default_package_runtime)
 
@@ -457,6 +467,8 @@ def main(argv=None):
         "binaryTargetPath": runtime_target.get("path"),
         "checksum": args.checksum,
         "consumer": str(consumer_dir),
+        "dependencyExact": args.dependency_exact,
+        "dependencyUrl": args.dependency_url,
         "downloadedFramework": str(framework),
         "includedRuntimes": runtime_metadata["includedRuntimes"],
         "ok": True,

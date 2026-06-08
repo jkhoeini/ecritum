@@ -5630,7 +5630,7 @@ Progress and evidence:
 - Direct Claude docs diff review attempted with `claude -p`; timed out after 90
   seconds with no output (`CLAUDE_STATUS=124`).
 
-** IN-PROGRESS Milestone M10: Default SwiftPM Distribution and Existing Runtime Promotion
+** DONE Milestone M10: Default SwiftPM Distribution and Existing Runtime Promotion
 
 Goal: make the current Clojure/SCI, GraalJS, and LuaJ runtime lane the normal
 SwiftPM artifact path before adding Python or Ruby. A clean SwiftPM app must be
@@ -5852,7 +5852,7 @@ Not verified:
   Clojure/JavaScript/Lua with no Ecritum env vars; owned by M10-003 because the
   checked-in default URL still points at the v0.1.0 bootstrap artifact.
 
-*** BLOCKED M10-003 Prove no-env consumer and packaged app distribution
+*** DONE M10-003 Prove no-env consumer and packaged app distribution
 
 Lead persona: Swift API and Developer Experience Engineer.
 Reviewer personas: Release, Unix, Tests/TDD, Security.
@@ -5934,21 +5934,34 @@ Progress and evidence:
 - Claude review found one blocking issue in the initial script: crash reports can
   be written asynchronously. Fixed by polling after the app run. It also
   recommended rejecting `LC_DYLD_ENVIRONMENT`; fixed.
+- Claude post-release review found no blockers and one stale
+  `docs/release-gates.md` sentence that still described M10 distribution proof
+  as future work. Fixed. Claude second review found no blockers.
 
-Current blocker:
+Hosted M10-003B completion:
 
-- M10-003B cannot be completed without explicit approval to push/tag/upload or
-  otherwise host the next default artifact. The checked-in default URL still
-  points at the v0.1.0 bootstrap artifact, so a full no-env default-runtime
-  consumer correctly fails on legacy Core metadata. This is the remaining
-  blocker for closing M10 and `ECRITUM-DEBT-0014`.
-
-Decision needed:
-
-- Approve the release operation that creates or updates a GitHub release asset
-  for the next default artifact, updates `Package.swift` default URL/checksum,
-  and verifies a fresh external SwiftPM consumer from the tag with no Ecritum env
-  vars.
+- User approved creating a public prerelease tag and uploading the artifact.
+- Pushed `main` to commit `d39e36c5ee43ff753914de8a3097a805bd98cb85` with the
+  default runtime URL/checksum updated to
+  `https://github.com/jkhoeini/ecritum/releases/download/v0.2.0-alpha.1/EcritumRuntime.xcframework.zip`
+  and checksum
+  `edfe358e9e98a5133080e147a4069b42a9a8c20a5b1b917464113da61b17358e`.
+- Created public GitHub prerelease
+  `https://github.com/jkhoeini/ecritum/releases/tag/v0.2.0-alpha.1` and
+  uploaded `EcritumRuntime.xcframework.zip`, `.checksum`, `.json`, and
+  `.spdx.json` assets.
+- Verified `ECRITUM_RELEASE_RUNTIME_REQUIRED=1 swift package describe --type
+  json` resolves `EcritumRuntime` as `remote/archive/EcritumRuntime.xcframework.zip`.
+- Verified hosted URL/checksum consumer smoke downloads the release asset and
+  runs Clojure, JavaScript, and Lua.
+- Extended `scripts/test-release-consumer-smoke.py` with exact remote dependency
+  mode and verified a fresh external SwiftPM executable package depending on
+  `https://github.com/jkhoeini/ecritum.git` at exact version
+  `0.2.0-alpha.1` builds from the tag with no Ecritum runtime env vars,
+  downloads the hosted framework, reports runtime availability, and evaluates
+  Clojure, JavaScript, and Lua.
+- Resolved `ECRITUM-DEBT-0014`. Python and Ruby remain future milestones and
+  are not claimed by the `v0.2.0-alpha.1` artifact.
 
 ## Verification
 
@@ -5967,8 +5980,34 @@ Commands run:
 - `mise exec -- just release-check-community` -> PASS; full community release
   gate completed and the packaged-app smoke printed
   `EcritumSmokeApp version=0.1.0 clojure=42 javascript=42 lua=42`.
+- `gh release view v0.2.0-alpha.1 --repo jkhoeini/ecritum --json
+  tagName,url,isPrerelease,targetCommitish,assets` -> PASS; prerelease targets
+  `d39e36c5ee43ff753914de8a3097a805bd98cb85` and includes runtime zip,
+  checksum, manifest, and SPDX assets.
+- `mise exec -- just test-release-consumer-smoke
+  https://github.com/jkhoeini/ecritum/releases/download/v0.2.0-alpha.1/EcritumRuntime.xcframework.zip
+  edfe358e9e98a5133080e147a4069b42a9a8c20a5b1b917464113da61b17358e
+  dist/release/EcritumRuntime.xcframework.zip` -> PASS; output
+  `ReleaseConsumerSmoke version=0.1.0 clojure=42 javascript=42 lua=42`.
+- `ECRITUM_RELEASE_RUNTIME_REQUIRED=1 swift package describe --type json` ->
+  PASS; binary target path `remote/archive/EcritumRuntime.xcframework.zip`.
+- `python3 scripts/test-release-consumer-smoke.py
+  --use-default-package-runtime --dependency-url
+  https://github.com/jkhoeini/ecritum.git --dependency-exact 0.2.0-alpha.1
+  --build-dir build/release-consumer-smoke-tag --release-zip
+  dist/release/EcritumRuntime.xcframework.zip` -> PASS; output
+  `ReleaseConsumerSmoke version=0.1.0 clojure=42 javascript=42 lua=42`.
+- `python3 -B -m unittest Tests/Release/test_package_artifact.py` -> PASS, 44
+  tests.
+- `ECRITUM_CONSUMER_ARTIFACT_URL=https://github.com/jkhoeini/ecritum/releases/download/v0.2.0-alpha.1/EcritumRuntime.xcframework.zip
+  ECRITUM_CONSUMER_ARTIFACT_CHECKSUM=edfe358e9e98a5133080e147a4069b42a9a8c20a5b1b917464113da61b17358e
+  mise exec -- just release-check-community` -> PASS; full hosted community
+  gate completed after the test isolation fix.
+- `mise exec -- just test-release-tools` -> PASS, 112 tests.
 New tests added:
 - `Tests/Release/test_packaged_app_smoke.py`
+- Remote exact-version dependency generation and validation coverage in
+  `Tests/Release/test_package_artifact.py`.
 Negative paths tested:
 - Static release tests assert the packaged-app script retains clean runtime env,
   crash-report polling, `LC_DYLD_ENVIRONMENT` rejection, rpath/install-name
@@ -5979,9 +6018,8 @@ Size impact:
 Sanitizers:
 - Not run: no C/Java/native runtime implementation changed.
 Not verified:
-- Hosted clean no-env SwiftPM consumer from a GitHub tag executing Clojure,
-  JavaScript, and Lua. Owner: Release, M10-003B; blocked on explicit
-  push/tag/upload approval.
+- Python and Ruby distribution from the default artifact. Owner: M11 and M12
+  runtime milestones; not claimed by M10.
 
 ** TODO Milestone M11: GraalPy Runtime Support
 

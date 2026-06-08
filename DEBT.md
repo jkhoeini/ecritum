@@ -19,32 +19,31 @@ not done if it introduced debt without an entry.
 
 ## Active Debt
 
+## Resolved Debt
+
 - ID: ECRITUM-DEBT-0014
 - Source task: M10-001
-- Introduced by: Default remote SwiftPM manifest behavior needs a live hosted
-  artifact URL before the next single default artifact exists.
+- Introduced by: Default remote SwiftPM manifest behavior needed a live hosted
+  artifact URL before the next single default artifact existed.
 - Owner persona: Release, Licensing, and Distribution Engineer
 - Date: 2026-06-08
-- Impact: `Package.swift` currently uses the hosted v0.1.0 Community Core
-  artifact as the checked-in default remote runtime. This proves the default
-  remote manifest path and keeps normal SwiftPM resolution functional, but it is
-  not the final next-release single default artifact and does not satisfy the
-  Clojure/JavaScript/Lua/Python/Ruby support claim.
-- Reason accepted: A checked-in default URL must point at an immutable hosted
-  SwiftPM artifact to be useful during M10. The next single default artifact
-  cannot have its final tag URL/checksum until it is built, packaged, uploaded,
-  and verified later in the release sequence.
-- Resolve-by phase: M14
-- Exit condition: `Package.swift` default URL/checksum point at the next
-  release's single default artifact, hosted clean no-env SwiftPM consumer passes
-  from the tag, and packaged app smoke runs every claimed language from that
-  artifact.
-- Removal task: M14-002 Publish release assets and verify hosted consumption.
-- Verification required: final `gh release view`, SwiftPM checksum match,
-  hosted no-env clean consumer from the release tag, packaged app smoke, and
-  `PROJECT.org` M14 evidence.
-
-## Resolved Debt
+- Resolved in: M10-003
+- Resolution: `Package.swift` now points at the public prerelease
+  `v0.2.0-alpha.1` default artifact and SwiftPM checksum
+  `edfe358e9e98a5133080e147a4069b42a9a8c20a5b1b917464113da61b17358e`.
+  A clean external SwiftPM consumer depending on
+  `https://github.com/jkhoeini/ecritum.git` at exact version
+  `0.2.0-alpha.1` resolved the hosted binary target, downloaded
+  `EcritumRuntime.framework`, and ran Clojure, JavaScript, and Lua.
+- Boundary: Python and Ruby are still future runtime support milestones and are
+  not claimed by the `v0.2.0-alpha.1` artifact.
+- Verification: `gh release view v0.2.0-alpha.1 --repo jkhoeini/ecritum` shows
+  a public prerelease with `EcritumRuntime.xcframework.zip`, checksum, manifest,
+  and SPDX assets; `python3 scripts/test-release-consumer-smoke.py
+  --use-default-package-runtime --dependency-url
+  https://github.com/jkhoeini/ecritum.git --dependency-exact 0.2.0-alpha.1`
+  -> PASS with `ReleaseConsumerSmoke version=0.1.0 clojure=42 javascript=42
+  lua=42`.
 
 - ID: ECRITUM-DEBT-0013
 - Source task: M9-002

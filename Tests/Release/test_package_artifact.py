@@ -478,6 +478,39 @@ class PackageArtifactTest(unittest.TestCase):
         self.assertIn("language: .lua", source)
         self.assertIn("release-consumer-smoke.lua", source)
 
+    def test_release_consumer_smoke_can_generate_exact_remote_dependency(self):
+        smoke = self.load_release_consumer_smoke()
+
+        manifest = smoke.package_swift(
+            ROOT,
+            "https://github.com/jkhoeini/ecritum.git",
+            "0.2.0-alpha.1",
+        )
+
+        self.assertIn('.package(url: "https://github.com/jkhoeini/ecritum.git", exact: "0.2.0-alpha.1")', manifest)
+        self.assertNotIn(".package(path:", manifest)
+
+    def test_release_consumer_smoke_requires_complete_remote_dependency_args(self):
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(RELEASE_CONSUMER_SMOKE),
+                "--use-default-package-runtime",
+                "--dependency-url",
+                "https://github.com/jkhoeini/ecritum.git",
+                "--manifest-only",
+            ],
+            cwd=ROOT,
+            env=self.clean_ecritum_env(),
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("--dependency-url and --dependency-exact must be set together", completed.stderr)
+
     def test_release_consumer_smoke_has_no_lane_argument(self):
         smoke = self.load_release_consumer_smoke()
 

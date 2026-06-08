@@ -59,9 +59,10 @@ export ECRITUM_CONSUMER_ARTIFACT_CHECKSUM=$(cat dist/release/EcritumRuntime.xcfr
 mise exec -- just release-check-community
 ```
 
-The remaining M10 distribution proof is a clean external SwiftPM consumer from a
-tag that runs Clojure, JavaScript, and Lua from the hosted default artifact.
-That is tracked separately from this release-facing lane cleanup.
+M10 closed this distribution proof with the public `v0.2.0-alpha.1` prerelease:
+a clean external SwiftPM consumer from the GitHub tag runs Clojure, JavaScript,
+and Lua from the hosted default artifact with no Ecritum runtime environment
+variables.
 
 ## Next Release Target
 
