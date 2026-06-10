@@ -7873,9 +7873,34 @@ M14 release evidence, 2026-06-10:
   version string remains 0.1.0 (unchanged from alpha.1) -- the release is
   identified by the tag. A future release may align the embedded version string.
 
-Project status: M0-M14 complete. The default Ecritum artifact ships five
-sandboxed languages (Clojure, JavaScript, Lua, Python, Ruby) and is published as
-the v0.2.0-alpha.2 Community pre-release.
+v0.2.0 release, 2026-06-10 (post-M14 promotion + follow-ups):
+
+- Two follow-ups from the alpha.2 release were tracked as GitHub issues, done by
+  the team, and auto-closed on merge to main:
+  - #1 (CLOSED): aligned the embedded runtime/framework version 0.1.0 -> 0.2.0
+    across the canonical EcritumVersion, C ABI, packaging metadata, ABI freeze
+    ledger, smoke/version assertions, and license/dep baselines; the rebuilt
+    artifact self-reports 0.2.0 (check-xcframework, packaged-app smoke,
+    check-abi macho current/compat 0.2.0).
+  - #2 (CLOSED): retired the redundant `ruby-probe` Maven profile + sources +
+    recipes; the runtime-grade denial matrix was ported to and preserved against
+    the production `RubyEvaluator` (RubyEvaluatorTest 16 -> 18); the shipped
+    artifact still asserts the probe symbol is absent.
+- v0.2.0 promoted from v0.2.0-alpha.2 and PUBLISHED as the Latest (non-prerelease)
+  Community release: https://github.com/jkhoeini/ecritum/releases/tag/v0.2.0
+  (release commit cdcaf3dc on main). Assets: xcframework.zip (172,549,709 B,
+  sha256 f721b95b...9051), .checksum, .json manifest, .spdx.json SBOM,
+  THIRD_PARTY_NOTICES.md; release notes attached. Package.swift binaryTarget
+  points at the v0.2.0 asset with the matching checksum.
+- `release-check-community` -> exit 0 (full test, conformance, security, abi,
+  size 477 MB < 800 MB, packaged-app smoke version=0.2.0 clojure/js/lua/python/
+  ruby=42). LIVE hosted clean SwiftPM consumer downloaded the published v0.2.0
+  asset and evaluated all five languages: "ReleaseConsumerSmoke version=0.2.0
+  clojure=42 javascript=42 lua=42 python=42 ruby=42" (ok=true).
+
+Project status: M0-M14 complete; the embedded version now matches the release
+tag. The default Ecritum artifact ships five sandboxed languages (Clojure,
+JavaScript, Lua, Python, Ruby) and is published as the v0.2.0 Community release.
 
 * ADR Backlog
 
