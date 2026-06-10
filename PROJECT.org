@@ -7768,7 +7768,7 @@ Verification plan:
 - Link/readability review.
 - Support-claim scan.
 
-** TODO Milestone M14: Next Community Release Candidate
+** DONE Milestone M14: Next Community Release Candidate
 
 Goal: publish the next Community release only when the default artifact works as
 a normal SwiftPM dependency and all five languages pass conformance, security,
@@ -7808,7 +7808,7 @@ Verification plan:
 - `gh release view <tag> --repo jkhoeini/ecritum --json
   tagName,targetCommitish,url,isDraft,isPrerelease,assets`
 
-*** TODO M14-001 Run release-candidate verification rollup
+*** DONE M14-001 Run release-candidate verification rollup
 
 Lead persona: TDD, Testability, and Verification Engineer.
 Reviewer personas: Release, Security, Unix.
@@ -7826,7 +7826,7 @@ Verification plan:
 - Claude implementation review, or timeout recorded.
 - Persona review from Tests/TDD, Security, Release, and Unix.
 
-*** TODO M14-002 Publish release assets and verify hosted consumption
+*** DONE M14-002 Publish release assets and verify hosted consumption
 
 Lead persona: Release, Licensing, and Distribution Engineer.
 Reviewer personas: Engineering Manager, Swift DX, Security.
@@ -7849,6 +7849,33 @@ Verification plan:
   tagName,targetCommitish,url,isDraft,isPrerelease,assets`
 - Clean hosted no-env SwiftPM consumer.
 - Clean packaged `.app` smoke.
+
+M14 release evidence, 2026-06-10:
+
+- v0.2.0-alpha.2 Community pre-release PUBLISHED to GitHub Releases
+  (jkhoeini/ecritum), tag at commit cad6421c on main. Assets: xcframework.zip
+  (172,341,534 B, sha256 d49bd2e1...747a), .checksum, .json manifest,
+  .spdx.json SBOM, THIRD_PARTY_NOTICES.md; release notes attached.
+- Package.swift binaryTarget points at the v0.2.0-alpha.2 asset with the matching
+  checksum; zip sha256 == `swift package compute-checksum` == Package.swift
+  checksum (verified).
+- M14-001: `just release-check-community` -> exit 0 (community tier: signing
+  skipped; full `just test`, conformance python+ruby, security python+ruby, abi,
+  package reproducibility, license/SBOM/notices byte-compares, size 477 MB <
+  800 MB, packaged-app smoke clojure/js/lua/python/ruby=42).
+- M14-002: LIVE hosted clean SwiftPM consumer (no Ecritum env beyond the standard
+  URL/checksum) downloaded the published v0.2.0-alpha.2 asset, verified the
+  checksum, built, and evaluated all five languages:
+  "ReleaseConsumerSmoke version=0.1.0 clojure=42 javascript=42 lua=42 python=42
+  ruby=42" (ok=true, expected == included runtimes). `gh release view`: tag
+  v0.2.0-alpha.2, prerelease=true, 5 assets.
+- Version note: the git/release tag is v0.2.0-alpha.2; the framework bundle
+  version string remains 0.1.0 (unchanged from alpha.1) -- the release is
+  identified by the tag. A future release may align the embedded version string.
+
+Project status: M0-M14 complete. The default Ecritum artifact ships five
+sandboxed languages (Clojure, JavaScript, Lua, Python, Ruby) and is published as
+the v0.2.0-alpha.2 Community pre-release.
 
 * ADR Backlog
 
