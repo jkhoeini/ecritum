@@ -43,7 +43,7 @@ run_app="$run_root/EcritumSmoke.app"
 run_executable="$run_app/Contents/MacOS/$executable_name"
 run_framework="$run_app/Contents/Frameworks/EcritumRuntime.framework"
 run_private_runtime="$run_framework/Resources/libecritum_graal.dylib"
-success_line="EcritumSmokeApp version=0.1.0 clojure=42 javascript=42 lua=42 python=42 ruby=42"
+success_line="EcritumSmokeApp version=0.2.0 clojure=42 javascript=42 lua=42 python=42 ruby=42"
 
 trap 'rm -rf "$run_root"' EXIT
 
@@ -135,9 +135,9 @@ cat > "$contents/Info.plist" <<'PLIST'
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.1.0</string>
+  <string>0.2.0</string>
   <key>CFBundleVersion</key>
-  <string>0.1.0</string>
+  <string>0.2.0</string>
   <key>LSMinimumSystemVersion</key>
   <string>14.0</string>
 </dict>

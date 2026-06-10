@@ -147,9 +147,6 @@ Verification commands to prefer when relevant:
 - `mise exec -- just plan-check`
 - `mise exec -- just test`
 - `mise exec -- just test-java`
-- `mise exec -- just test-ruby-probe-java`
-- `mise exec -- just native-ruby-probe`
-- `mise exec -- just test-ruby-native-probe`
 - `mise exec -- just native`
 - `mise exec -- just check-native-full`
 - `mise exec -- just test-native-eval-smoke`

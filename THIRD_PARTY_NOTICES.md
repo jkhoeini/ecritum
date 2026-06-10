@@ -20,7 +20,7 @@ This file is an inventory and notice index. It does not include full license tex
 | dev.truffleruby.internal:shared | 34.0.1 | EPL-2.0 | https://github.com/oracle/truffleruby |
 | dev.truffleruby.shadowed:joni | 34.0.1 | MIT | https://github.com/oracle/truffleruby |
 | dev.truffleruby:truffleruby | 34.0.1 | EPL-2.0 AND BSD-3-Clause AND BSD-2-Clause AND MIT AND UPL-1.0 AND ICU | https://github.com/oracle/truffleruby |
-| EcritumRuntime.xcframework | 0.1.0 | MIT | LICENSE |
+| EcritumRuntime.xcframework | 0.2.0 | MIT | LICENSE |
 | GraalVM Native Image embedded runtime code | 25.0.2 | GPL-2.0-only WITH Classpath-exception-2.0 | GraalVM Community 25.0.2 LICENSE_NATIVEIMAGE.txt sha256=11a8fe0c63dcff8bd8674b89a5895dfbcf5f7e5453cf0a33566c4b3fb64e404c and https://www.graalvm.org/faq/ |
 | org.babashka:sci | 0.12.51 | EPL-1.0 | https://github.com/babashka/SCI |
 | org.babashka:sci.impl.types | 0.0.2 | EPL-1.0 | https://clojars.org/org.babashka/sci.impl.types |

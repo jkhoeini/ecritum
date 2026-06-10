@@ -8,8 +8,8 @@
   "artifactHeader": "Headers/ecritum.h",
   "machO": {
     "policy": "pre_release",
-    "currentVersion": "0.1.0",
-    "compatibilityVersion": "0.1.0"
+    "currentVersion": "0.2.0",
+    "compatibilityVersion": "0.2.0"
   },
   "statusConstants": [
     {"c": "ECRITUM_OK", "java": "OK", "swift": "ok", "value": 0},

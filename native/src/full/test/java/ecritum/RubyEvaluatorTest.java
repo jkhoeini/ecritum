@@ -155,6 +155,57 @@ final class RubyEvaluatorTest {
     }
 
     @Test
+    void deniesRequireBypassEscapeSurfacesAtRuntime() {
+        // Ported from the retired ruby-probe RubyDenialMatrixTest (issue #2): the
+        // dangerous-feature requires the probe proved runtime-denied (ffi, openssl,
+        // socket/network, rubygems, bundler, bigdecimal, open3 process spawn) must
+        // ALSO be denied against the PRODUCTION evaluator when the lexical filter is
+        // BYPASSED via a string-built feature name. The production prelude undef's
+        // every loader, so each reaches a SEALED name -> NoMethodError -> folded to
+        // PERMISSION_DENIED (14). This is STRONGER than the probe (which classified
+        // the native-access guard as SCRIPT and let `require 'open3'` return true):
+        // production seals require itself, so no feature ever loads.
+        assertPermissionDenied("require('ff' + 'i')");
+        assertPermissionDenied("require('open' + 'ssl')");
+        assertPermissionDenied("require('big' + 'decimal')");
+        assertPermissionDenied("require('ruby' + 'gems')");
+        assertPermissionDenied("require('bund' + 'ler')");
+        // Network: string-built 'socket' require is sealed before TCPSocket is reachable.
+        assertPermissionDenied(
+            "require('sock' + 'et'); Object.const_get('TCPSocket').new('127.0.0.1', 9)"
+        );
+        // open3 process-spawn family: the probe matrix allowed `require 'open3'` and
+        // relied on the native-access guard at the spawn. Production seals the
+        // bypass-built require first, so Open3 never even loads.
+        assertPermissionDenied("require('open' + '3'); Object.const_get('Open3').popen3('true')");
+        assertPermissionDenied("require('open' + '3'); Object.const_get('Open3').capture2('true')");
+        assertPermissionDenied("require('open' + '3'); Object.const_get('Open3').pipeline('true')");
+
+        // const_get(:File).read with the SYMBOL form (matrix row 11a). The :File
+        // symbol still matches the \bFile\b lexical pattern, so this is denied at the
+        // lexical layer -> PERMISSION_DENIED (complements the string-built "Fil"+"e"
+        // runtime-bypass form already covered in deniesAmbientEscapeHatches).
+        assertPermissionDenied("Object.const_get(:File).read('/etc/hosts')");
+    }
+
+    @Test
+    void rubyGemsAndGemConstantAreUnavailableAtRuntime() {
+        // Matrix row 9b: with ruby.rubygems=false the Gem constant is not defined.
+        // This is an unavailability surface (not a permission denial): referencing
+        // Gem raises "uninitialized constant Gem" -> SCRIPT/runtime, and the
+        // constant is genuinely absent. Assert it never resolves to a working value.
+        SciEvalResult gem = RubyEvaluator.evaluate("Gem", "ruby-gem.rb");
+        assertEquals(EcritumStatus.SCRIPT, gem.status(), gem.message());
+        assertEquals("runtime", gem.category(), gem.message());
+        assertTrue(gem.message().toLowerCase().contains("uninitialized constant gem"), gem.message());
+
+        // defined?(Gem) is nil (the safe, non-raising probe), confirming absence.
+        SciEvalResult defined = RubyEvaluator.evaluate("defined?(Gem)", "ruby-gem-defined.rb");
+        assertEquals(EcritumStatus.OK, defined.status(), defined.message());
+        assertEquals(null, defined.value());
+    }
+
+    @Test
     void deniesOpen3RequireAtRuntimeBypassingLexicalFilter() {
         // GAP-1: require 'open3' must be denied by the RUNTIME prelude even when
         // the lexical filter is bypassed by a string-built feature name. The

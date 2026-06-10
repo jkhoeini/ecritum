@@ -114,8 +114,8 @@ MACOSX_DEPLOYMENT_TARGET="$min_macos" clang \
   -mmacosx-version-min="$min_macos" \
   -fvisibility=hidden \
   -install_name "@rpath/EcritumRuntime.framework/EcritumRuntime" \
-  -current_version 0.1.0 \
-  -compatibility_version 0.1.0 \
+  -current_version 0.2.0 \
+  -compatibility_version 0.2.0 \
   -I "$public_headers" \
   -I "$private_headers" \
   "${clang_defines[@]}" \
@@ -149,9 +149,9 @@ cat > "$framework_dir/Info.plist" <<PLIST
   <key>CFBundlePackageType</key>
   <string>FMWK</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.1.0</string>
+  <string>0.2.0</string>
   <key>CFBundleVersion</key>
-  <string>0.1.0</string>
+  <string>0.2.0</string>
   <key>MinimumOSVersion</key>
   <string>$min_macos</string>
 </dict>

@@ -15,7 +15,6 @@ DEFAULT_ROOTS = [
     "native/src/full/java",
     "native/src/main",
     "native/src/python-probe",
-    "native/src/ruby-probe",
     "Sources",
     "scripts",
 ]
@@ -86,12 +85,6 @@ RULES = [
     ("luaj.luajc", r"\bLuaJC\b"),
 ]
 
-FIXED_OPTION_ALLOWLIST = {
-    '.option("ruby.platform-native", "false")',
-    '.option("ruby.cexts", "false")',
-    '.option("ruby.rubygems", "false")',
-}
-
 # Security-positive TruffleRuby options for the production Ruby evaluator
 # (native/src/full/java/ecritum/RubyEvaluator.java). The first three are deny
 # switches (no native platform, no C-extensions, no RubyGems). ruby.single-threaded
@@ -153,10 +146,6 @@ def line_and_column(text, offset):
     return line, column
 
 
-def is_ruby_probe_path(path):
-    return "native/src/ruby-probe" in path.as_posix()
-
-
 def is_full_ruby_evaluator_path(path):
     return path.as_posix().endswith("native/src/full/java/ecritum/RubyEvaluator.java")
 
@@ -189,8 +178,6 @@ def scan_file(path, compiled_rules):
                 # Allow a trailing ';' so the last option in a builder chain
                 # matches the same fixed allowlist entry as chained options.
                 stripped_line = line.strip().rstrip(";")
-                if is_ruby_probe_path(path) and stripped_line in FIXED_OPTION_ALLOWLIST:
-                    continue
                 if is_full_ruby_evaluator_path(path) and stripped_line in FULL_RUBY_OPTION_ALLOWLIST:
                     continue
             line, column = line_and_column(text, match.start())

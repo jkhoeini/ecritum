@@ -33,7 +33,7 @@ final class EcritumTests: XCTestCase {
         }
 
         XCTAssertEqual(status, ECRITUM_OK)
-        XCTAssertEqual(String(cString: buffer), "0.1.0")
+        XCTAssertEqual(String(cString: buffer), "0.2.0")
         #else
         throw XCTSkip("Run `mise exec -- just xcframework` before testing the C runtime path.")
         #endif
@@ -41,7 +41,7 @@ final class EcritumTests: XCTestCase {
 
     func testVersionReturnsValueWhenRuntimeArtifactExists() throws {
         #if ECRITUM_HAS_RUNTIME_ARTIFACT
-        XCTAssertEqual(try Ecritum.version, "0.1.0")
+        XCTAssertEqual(try Ecritum.version, "0.2.0")
         #else
         throw XCTSkip("Run `mise exec -- just xcframework` before testing the Swift runtime path.")
         #endif

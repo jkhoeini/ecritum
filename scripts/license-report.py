@@ -408,12 +408,12 @@ packages = [
     package(
         "SPDXRef-Package-EcritumRuntime",
         "EcritumRuntime.xcframework",
-        "0.1.0",
+        "0.2.0",
         "shipped",
         FIRST_PARTY_LICENSE_ID,
         created,
         license_source=Path(args.first_party_license_file).name,
-        external_refs=[purl_ref("pkg:generic/ecritum/EcritumRuntime.xcframework@0.1.0")],
+        external_refs=[purl_ref("pkg:generic/ecritum/EcritumRuntime.xcframework@0.2.0")],
         copyright_text=FIRST_PARTY_COPYRIGHT,
     ),
     package(

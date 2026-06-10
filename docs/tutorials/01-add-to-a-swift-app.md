@@ -129,7 +129,7 @@ mise exec -- just example-swift
 Verified output:
 
 ```
-SwiftHost version=0.1.0
+SwiftHost version=0.2.0
 ```
 
 To run your own executable directly against the local artifact, set

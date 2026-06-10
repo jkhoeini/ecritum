@@ -8026,3 +8026,11 @@ Sanitizers:
 Not verified:
 - Full implementation, packaging, ABI, and runtime tests do not exist yet; owned
   by future milestone tasks.
+
+* Note (issue #2): the isolated `ruby-probe` Maven profile and probe sources
+  (`RubyProbeEvaluator`/`RubyProbeEntrypoints`/`RubyProbeEvaluatorTest`/`RubyDenialMatrixTest`),
+  `Tests/C/native_ruby_probe.c`, and the related justfile recipes were RETIRED.
+  Ruby ships via the production `RubyEvaluator` (M12-002, ADR-0028); runtime-grade
+  lexical-bypass denial coverage was ported to `RubyEvaluatorTest` first (no
+  coverage lost). The permanent negative `_ecritum_graal_eval_ruby_probe`
+  symbol-absence guards in `check-native-core`/`check-native-full` are kept.

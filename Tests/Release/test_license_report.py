@@ -117,7 +117,7 @@ class LicenseReportTest(unittest.TestCase):
         graal_runtime = package_named(report, "GraalVM Native Image embedded runtime code")
 
         self.assertIn("pkg:maven/org.graalvm.js/js-language@25.0.2", purls(js_language))
-        self.assertIn("pkg:generic/ecritum/EcritumRuntime.xcframework@0.1.0", purls(first_party))
+        self.assertIn("pkg:generic/ecritum/EcritumRuntime.xcframework@0.2.0", purls(first_party))
         self.assertIn("pkg:generic/oracle/graalvm-native-image-embedded-runtime@25.0.2", purls(graal_runtime))
 
     def test_default_artifact_includes_polyglot_runtime_packages(self):
@@ -154,7 +154,7 @@ class LicenseReportTest(unittest.TestCase):
         self.assertIn("# Ecritum Third Party Notices", completed.stdout)
         self.assertIn("- None", completed.stdout)
         self.assertNotIn("EcritumRuntime.xcframework has unknown shipped license", completed.stdout)
-        self.assertIn("| EcritumRuntime.xcframework | 0.1.0 | MIT | LICENSE |", completed.stdout)
+        self.assertIn("| EcritumRuntime.xcframework | 0.2.0 | MIT | LICENSE |", completed.stdout)
         self.assertIn("| GraalVM Native Image embedded runtime code | 25.0.2 | GPL-2.0-only WITH Classpath-exception-2.0 |", completed.stdout)
         self.assertIn("public release packaging must carry the required upstream license texts", completed.stdout)
 

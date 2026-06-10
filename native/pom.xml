@@ -6,7 +6,7 @@
 
   <groupId>dev.ecritum</groupId>
   <artifactId>ecritum-native</artifactId>
-  <version>0.1.0</version>
+  <version>0.2.0</version>
   <packaging>jar</packaging>
 
   <properties>
@@ -24,7 +24,6 @@
     <ecritum.native.mainClass>ecritum.NativeCoreEntrypoints</ecritum.native.mainClass>
     <ecritum.full>false</ecritum.full>
     <ecritum.pythonProbe>false</ecritum.pythonProbe>
-    <ecritum.rubyProbe>false</ecritum.rubyProbe>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
 
@@ -74,7 +73,6 @@
         <configuration>
           <systemPropertyVariables>
             <ecritum.pythonProbe>${ecritum.pythonProbe}</ecritum.pythonProbe>
-            <ecritum.rubyProbe>${ecritum.rubyProbe}</ecritum.rubyProbe>
           </systemPropertyVariables>
         </configuration>
       </plugin>
@@ -234,84 +232,6 @@
                 <configuration>
                   <sources>
                     <source>src/python-probe/test/java</source>
-                  </sources>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
-    <profile>
-      <id>ruby-probe</id>
-      <properties>
-        <truffleruby.version>34.0.1</truffleruby.version>
-        <ecritum.rubyProbe>true</ecritum.rubyProbe>
-      </properties>
-      <dependencies>
-        <dependency>
-          <groupId>org.graalvm.polyglot</groupId>
-          <artifactId>polyglot</artifactId>
-          <version>${graalvm.version}</version>
-        </dependency>
-        <dependency>
-          <groupId>dev.truffleruby</groupId>
-          <artifactId>truffleruby</artifactId>
-          <version>${truffleruby.version}</version>
-          <type>pom</type>
-        </dependency>
-      </dependencies>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-enforcer-plugin</artifactId>
-            <version>${maven.enforcer.plugin.version}</version>
-            <executions>
-              <execution>
-                <id>ban-full-ruby-probe-coactivation</id>
-                <phase>validate</phase>
-                <goals>
-                  <goal>enforce</goal>
-                </goals>
-                <configuration>
-                  <rules>
-                    <requireProperty>
-                      <property>ecritum.full</property>
-                      <regex>^false$</regex>
-                      <message>Do not co-activate the full and ruby-probe profiles. As of M12-002/ADR-0028 Ruby SHIPS in the full artifact via the production RubyEvaluator (ecritum_graal_eval_ruby_with_stdlib); the ruby-probe profile is the separate isolated denial-matrix validation harness (ecritum_graal_eval_ruby_probe) and must not be merged into the shipped full image.</message>
-                    </requireProperty>
-                  </rules>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-          <plugin>
-            <groupId>org.codehaus.mojo</groupId>
-            <artifactId>build-helper-maven-plugin</artifactId>
-            <version>${build-helper.maven.plugin.version}</version>
-            <executions>
-              <execution>
-                <id>add-ruby-probe-sources</id>
-                <phase>generate-sources</phase>
-                <goals>
-                  <goal>add-source</goal>
-                </goals>
-                <configuration>
-                  <sources>
-                    <source>src/ruby-probe/java</source>
-                  </sources>
-                </configuration>
-              </execution>
-              <execution>
-                <id>add-ruby-probe-test-sources</id>
-                <phase>generate-test-sources</phase>
-                <goals>
-                  <goal>add-test-source</goal>
-                </goals>
-                <configuration>
-                  <sources>
-                    <source>src/ruby-probe/test/java</source>
                   </sources>
                 </configuration>
               </execution>

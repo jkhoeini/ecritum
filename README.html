@@ -1,0 +1,410 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+	"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+<title>README.html</title>
+<meta http-equiv="Content-Type" content="application/xhtml+xml;charset=utf-8"/>
+<link rel="stylesheet" type="text/css" media="all" href="https://cdn.jsdelivr.net/npm/github-markdown-css/github-markdown.min.css"  />
+<link rel="stylesheet" type="text/css" media="all" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release/build/styles/github.min.css"  /><meta name='viewport' content='width=device-width, initial-scale=1, shrink-to-fit=no'><style> body { box-sizing: border-box; max-width: 740px; width: 100%; margin: 40px auto; padding: 0 10px; } </style><script id='MathJax-script' async src='https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js'></script><script src='https://cdn.jsdelivr.net/gh/highlightjs/cdn-release/build/highlight.min.js'></script><script>document.addEventListener('DOMContentLoaded', () => { document.body.classList.add('markdown-body'); document.querySelectorAll('pre[lang] > code').forEach((code) => { code.classList.add(code.parentElement.lang); }); document.querySelectorAll('pre > code').forEach((code) => { hljs.highlightBlock(code); }); });</script>
+</head>
+
+<body>
+
+[WARNING] Deprecated: --highlight-style. Use --syntax-highlighting instead.
+<h1 id="ecritum">Ecritum</h1>
+<p>Ecritum is a planned macOS-first polyglot scripting library for Swift
+apps. It gives desktop app developers a SwiftPM package for exposing
+host functions to embedded user scripts, without asking end users to
+install a JDK or language runtimes.</p>
+<h2 id="what-it-is">What It Is</h2>
+<p>Ecritum is intended to be distributed as a prebuilt native dynamic
+library inside an XCFramework, likely produced with GraalVM Native
+Image. The library exposes a stable C ABI, and the Swift package wraps
+that ABI with a Swift-native API.</p>
+<p>At runtime, a host app registers capabilities:</p>
+<ul>
+<li>functions</li>
+<li>callbacks</li>
+<li>values</li>
+<li>configuration objects</li>
+<li>app-specific services</li>
+</ul>
+<p>User scripts then call those registered capabilities from supported
+scripting languages.</p>
+<h2 id="planned-swift-api">Planned Swift API</h2>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode swift"><code class="sourceCode swift"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">Ecritum</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">let</span> <span class="va">runtime</span> <span class="op">=</span> <span class="cf">try</span> EcritumRuntime<span class="op">(</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span><span class="kw">init</span><span class="op">(</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>        languages<span class="op">:</span> <span class="op">[.</span>clojure<span class="op">],</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>        policy<span class="op">:</span> <span class="op">.</span>defaultDeny<span class="op">.</span>withFilesystem<span class="op">(</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>            <span class="op">.</span>readOnly<span class="op">(</span>roots<span class="op">:</span> <span class="op">[</span><span class="cf">try</span> <span class="op">.</span>directory<span class="op">(</span>appScriptsURL<span class="op">)])</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>        <span class="op">)</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">)</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="op">)</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="kw">let</span> <span class="va">app</span> <span class="op">=</span> <span class="cf">try</span> runtime<span class="op">.</span>namespace<span class="op">(.</span><span class="kw">init</span><span class="op">(</span><span class="st">&quot;app&quot;</span><span class="op">))</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="cf">try</span> app<span class="op">.</span>register<span class="op">(.</span><span class="kw">init</span><span class="op">(</span><span class="st">&quot;notify&quot;</span><span class="op">))</span> <span class="op">{</span> call <span class="cf">in</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="kw">let</span> <span class="va">message</span> <span class="op">=</span> <span class="cf">try</span> call<span class="op">.</span>string<span class="op">(</span>at<span class="op">:</span> <span class="dv">0</span><span class="op">)</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    notifier<span class="op">.</span>enqueue<span class="op">(</span>message<span class="op">)</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span> <span class="op">.</span>null</span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a><span class="kw">let</span> <span class="va">value</span> <span class="op">=</span> <span class="cf">try</span> <span class="cf">await</span> runtime<span class="op">.</span>context<span class="op">().</span>eval<span class="op">(</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    EcritumScript<span class="op">(</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>        source<span class="op">:</span> <span class="st">&quot;(app/notify </span><span class="sc">\&quot;</span><span class="st">hello</span><span class="sc">\&quot;</span><span class="st">)&quot;</span><span class="op">,</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>        language<span class="op">:</span> <span class="op">.</span>clojure<span class="op">,</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>        sourceName<span class="op">:</span> <span class="st">&quot;plugin.clj&quot;</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>    <span class="op">)</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a><span class="op">)</span></span></code></pre></div>
+<p>The public API should be capability-based and deny-by-default:
+scripts only see functions, objects, and standard-library services that
+the host explicitly registers and enables through a versioned policy
+object.</p>
+<h2 id="supported-languages">Supported Languages</h2>
+<p>The target is not “run every language on the JVM.” The target is a
+practical, packageable scripting runtime in one default Ecritum
+artifact. Support is claimed only after strict conformance and strict
+abuse gates pass with zero required pending cases for the language.</p>
+<p>The single default <code>EcritumRuntime.xcframework</code> ships all
+five languages below as supported. There is no separate Core/Full choice
+and no separate Ruby artifact.</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>Language</th>
+<th>Engine</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Clojure</td>
+<td>SCI (Babashka-compatible namespaces)</td>
+<td>Supported in the default artifact</td>
+</tr>
+<tr>
+<td>JavaScript</td>
+<td>GraalJS</td>
+<td>Supported in the default artifact</td>
+</tr>
+<tr>
+<td>Lua</td>
+<td>LuaJ (pure-Java, compiled into Native Image)</td>
+<td>Supported in the default artifact</td>
+</tr>
+<tr>
+<td>Python</td>
+<td>GraalPy</td>
+<td>Supported in the default artifact</td>
+</tr>
+<tr>
+<td>Ruby</td>
+<td>TruffleRuby (pure-Ruby sandboxed mode; LLVM/Sulong backend
+excluded)</td>
+<td>Supported in the default artifact</td>
+</tr>
+</tbody>
+</table>
+<p>JVM bytecode/JARs remain future research, not an MVP promise.</p>
+<h3 id="unsupported-scope">Unsupported Scope</h3>
+<p>Python and Ruby ship as runtime-and-standard-library only. Ecritum
+does not support <code>pip</code>, RubyGems, Bundler, third-party
+package installs, package downloads, native wheels, native gems,
+C/native extensions, <code>ctypes</code>, <code>cffi</code>,
+<code>fiddle</code>, FFI/NFI, mutable package caches, subprocess, raw
+network, unrestricted filesystem, environment access, direct Java
+access, or raw Polyglot access. These are denied by default for every
+language, including Ruby and Python.</p>
+<p>Ruby runs in pure-Ruby sandboxed mode; TruffleRuby’s LLVM/Sulong
+backend is excluded from the shipped artifact (see <a
+href="docs/adr/0028-ruby-size-budget-and-llvm-exclusion.md">ADR-0028</a>),
+so any path that would require native C extensions, FFI, or
+<code>fiddle</code> stays denied.</p>
+<h2 id="standard-library-plan">Standard Library Plan</h2>
+<p>Ecritum should expose useful JDK-backed scripting APIs without
+exposing the whole JDK dynamically.</p>
+<p>Planned modules:</p>
+<ul>
+<li><code>ecritum.fs</code></li>
+<li><code>ecritum.io</code></li>
+<li><code>ecritum.json</code></li>
+<li><code>ecritum.http</code></li>
+<li><code>ecritum.time</code></li>
+<li><code>ecritum.regex</code></li>
+<li><code>ecritum.crypto</code></li>
+<li><code>ecritum.env</code></li>
+<li><code>ecritum.process</code></li>
+<li><code>ecritum.log</code></li>
+</ul>
+<p>Filesystem, network, process, and environment access are denied by
+default and must be enabled by the host app.</p>
+<h2 id="distribution-model">Distribution Model</h2>
+<p>The desired developer experience is:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode swift"><code class="sourceCode swift"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">// SwiftPM dependency, then:</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="kw">import</span> <span class="im">Ecritum</span></span></code></pre></div>
+<p>The desired user experience is that the app ships with everything it
+needs:</p>
+<ul>
+<li>no separate GraalVM install</li>
+<li>no separate JDK install</li>
+<li>no separate Python/Ruby/Node/Clojure install</li>
+<li>one <code>.app</code> bundle containing the app executable plus
+<code>Contents/Frameworks/EcritumRuntime.framework</code></li>
+<li>language runtimes and resources bundled inside that framework</li>
+</ul>
+<p>This is why the current plan favors Native Image shared-library
+output over embedding a full JVM distribution. SwiftPM consumers should
+receive a prebuilt binary target; contributors use <code>mise</code> and
+<code>just</code> to build the runtime from source.</p>
+<p>Normal SwiftPM consumers do not set Ecritum environment variables.
+SwiftPM should resolve the checked-in GitHub Release URL/checksum for
+<code>EcritumRuntime.xcframework.zip</code>; contributors may use
+<code>dist/local</code>. Current v0.2.0-alpha.1 prerelease validation
+uses that checked-in URL/checksum path for normal consumers, while
+release staging can still override the URL/checksum with paired
+environment variables.</p>
+<h2 id="what-it-is-not">What It Is Not</h2>
+<p>Ecritum is not planned as a full embedded JDK. It should not
+initially promise arbitrary JAR execution, arbitrary Kotlin execution,
+or full Node.js compatibility.</p>
+<p>Those are possible research tracks, but they change the product
+shape: larger bundles, more licensing work, more compatibility testing,
+and a weaker SwiftPM “it just works” story.</p>
+<h2 id="core-architecture">Core Architecture</h2>
+<pre class="text"><code>Swift app
+  |
+  | SwiftPM wrapper
+  v
+Ecritum C ABI
+  |
+  | opaque handles, callbacks, registered host capabilities
+  v
+Native Image shared library
+  |
+  | curated embedded runtimes
+  v
+SCI / GraalJS / GraalPy / TruffleRuby / LuaJ</code></pre>
+<h2 id="development">Development</h2>
+<p>Install tools:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="ex">mise</span> trust</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="ex">mise</span> install</span></code></pre></div>
+<p>List tasks:</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="ex">mise</span> exec <span class="at">--</span> just</span></code></pre></div>
+<p>Run available checks:</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="ex">mise</span> exec <span class="at">--</span> just test</span></code></pre></div>
+<p>Release gate baselines are documented in <a
+href="docs/release-gates.md">docs/release-gates.md</a>. See <a
+href="PLAN.org">PLAN.org</a> and <a href="PROJECT.org">PROJECT.org</a>
+for the implementation sequence.</p>
+<h2 id="tutorials">Tutorials</h2>
+<p>Task-oriented how-tos for using Ecritum from a Swift app live in <a
+href="docs/tutorials/README.md">docs/tutorials/</a>:</p>
+<ol type="1">
+<li><a href="docs/tutorials/01-add-to-a-swift-app.md">Add Ecritum to a
+Swift app and run a first eval</a></li>
+<li><a href="docs/tutorials/02-register-host-functions.md">Register host
+functions and call them from a script</a></li>
+<li><a href="docs/tutorials/03-scripts-in-each-language.md">Write and
+evaluate scripts in each language</a></li>
+<li><a href="docs/tutorials/04-narrow-filesystem-capability.md">Enable a
+narrow filesystem capability</a></li>
+<li><a href="docs/tutorials/05-package-a-macos-app.md">Package a macOS
+.app that embeds the runtime</a></li>
+<li><a
+href="docs/tutorials/06-interpret-errors-and-denials.md">Interpret
+errors and default-deny failures</a></li>
+</ol>
+<p>Each tutorial points to a runnable example under <a
+href="Examples">Examples/</a>.</p>
+<h2 id="current-reference-metrics">Current Reference Metrics</h2>
+<p>All values below are measured on macOS arm64 for the current
+five-language default artifact
+(<code>dist/local/EcritumRuntime.xcframework</code>, runtimes: Clojure,
+JavaScript, Lua, Python, Ruby). Reproduce with
+<code>mise exec -- just size</code>, the <code>bench-*</code> recipes,
+and <code>package-artifact</code>/<code>inspect</code>.</p>
+<h3 id="artifact-size">Artifact size</h3>
+<table>
+<colgroup>
+<col style="width: 30%" />
+<col style="width: 40%" />
+<col style="width: 30%" />
+</colgroup>
+<thead>
+<tr>
+<th>Metric</th>
+<th style="text-align: right;">Value</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Unzipped XCFramework artifact</td>
+<td style="text-align: right;">476,886,393 bytes (~476.9 MB)</td>
+<td><code>just size</code></td>
+</tr>
+<tr>
+<td>Private runtime (<code>libecritum_graal.dylib</code>)</td>
+<td style="text-align: right;">476,230,752 bytes</td>
+<td><code>just size</code></td>
+</tr>
+<tr>
+<td>Public wrapper binary</td>
+<td style="text-align: right;">164,160 bytes</td>
+<td><code>just size</code></td>
+</tr>
+<tr>
+<td>Hosted release zip</td>
+<td style="text-align: right;">172,157,157 bytes</td>
+<td><code>package-artifact</code></td>
+</tr>
+<tr>
+<td>SwiftPM package checksum</td>
+<td
+style="text-align: right;"><code>2f8170d74abe0f95aafb3e247489c814e0b6165be475790f014f7fcb6f94f146</code></td>
+<td><code>package-artifact-verify</code></td>
+</tr>
+</tbody>
+</table>
+<p>The 800 MB default-artifact size budget and the TruffleRuby
+LLVM/Sulong exclusion are recorded in <a
+href="docs/adr/0028-ruby-size-budget-and-llvm-exclusion.md">ADR-0028</a>.</p>
+<h3 id="startup-and-memory">Startup and memory</h3>
+<table>
+<colgroup>
+<col style="width: 30%" />
+<col style="width: 40%" />
+<col style="width: 30%" />
+</colgroup>
+<thead>
+<tr>
+<th>Metric</th>
+<th style="text-align: right;">Value</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C host cold start (process elapsed)</td>
+<td style="text-align: right;">p50 23.272 ms, p95 113.579 ms</td>
+<td><code>just bench-cold-start</code></td>
+</tr>
+<tr>
+<td><code>dlopen</code>+<code>dlsym</code></td>
+<td style="text-align: right;">p50 9.545 ms, p95 13.018 ms</td>
+<td><code>just bench-cold-start</code></td>
+</tr>
+<tr>
+<td>First wrapper call</td>
+<td style="text-align: right;">p50 2.536 ms, p95 3.156 ms</td>
+<td><code>just bench-cold-start</code></td>
+</tr>
+<tr>
+<td>Swift host cold start (process elapsed)</td>
+<td style="text-align: right;">p50 28.198 ms, p95 96.312 ms</td>
+<td><code>just bench-swift-cold-start</code></td>
+</tr>
+<tr>
+<td>Idle RSS after first call</td>
+<td style="text-align: right;">p50 21,741,568 bytes, p95 21,741,568
+bytes</td>
+<td><code>just bench-idle-rss</code></td>
+</tr>
+<tr>
+<td>Python RSS after eval</td>
+<td style="text-align: right;">p50 229,146,624 bytes, p95 242,532,352
+bytes</td>
+<td><code>just bench-python-rss</code></td>
+</tr>
+<tr>
+<td>Ruby RSS after eval</td>
+<td style="text-align: right;">p50 198,000,640 bytes, p95 202,997,760
+bytes</td>
+<td><code>just bench-ruby-rss</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="first-eval-per-language">First eval per language</h3>
+<table>
+<colgroup>
+<col style="width: 30%" />
+<col style="width: 40%" />
+<col style="width: 30%" />
+</colgroup>
+<thead>
+<tr>
+<th>Language</th>
+<th style="text-align: right;">First eval</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Lua</td>
+<td style="text-align: right;">p50 1.225 ms, p95 1.595 ms</td>
+<td><code>just bench-lua-first-eval</code></td>
+</tr>
+<tr>
+<td>Clojure (default <code>bench-first-eval</code>)</td>
+<td style="text-align: right;">p50 1.732 ms, p95 2.647 ms</td>
+<td><code>just bench-first-eval</code></td>
+</tr>
+<tr>
+<td>JavaScript</td>
+<td style="text-align: right;">p50 8.083 ms, p95 11.282 ms</td>
+<td><code>just bench-javascript-first-eval</code></td>
+</tr>
+<tr>
+<td>Python</td>
+<td style="text-align: right;">p50 46.759 ms, p95 53.341 ms</td>
+<td><code>just bench-python-first-eval</code></td>
+</tr>
+<tr>
+<td>Ruby</td>
+<td style="text-align: right;">p50 62.010 ms, p95 115.695 ms</td>
+<td><code>just bench-ruby-first-eval</code></td>
+</tr>
+</tbody>
+</table>
+<p>App bundle delta (the size a <code>.app</code> grows by when it
+embeds Ecritum versus a comparable app without it) is not yet measured
+by a release recipe. The hosted zip and unzipped artifact sizes above
+are the authoritative size references.</p>
+<h2 id="design-priorities">Design Priorities</h2>
+<ul>
+<li>Simple SwiftPM integration.</li>
+<li>Stable C ABI for future Rust, Zig, C++, and other wrappers.</li>
+<li>No C++ ABI in the public interface.</li>
+<li>Explicit host capability model.</li>
+<li>Measured binary size and startup cost.</li>
+<li>MIT first-party license with clear third-party runtime
+inventory.</li>
+<li>macOS first; other platforms later.</li>
+</ul>
+<h2 id="open-questions">Open Questions</h2>
+<ul>
+<li>Async host callback and executor behavior.</li>
+<li>Complete five-language sandbox evidence for user-provided
+scripts.</li>
+<li>App bundle delta measurement against a comparable app without
+Ecritum.</li>
+<li>Optional Trusted macOS release operations with Developer ID signing
+and notarization.</li>
+</ul>
+
+</body>
+</html>

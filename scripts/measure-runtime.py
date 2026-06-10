@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
         fprintf(stderr, "status=%d\n", status);
         return 5;
     }
-    if (strcmp(buffer, "0.1.0") != 0) {
+    if (strcmp(buffer, "0.2.0") != 0) {
         fprintf(stderr, "version=%s\n", buffer);
         return 6;
     }

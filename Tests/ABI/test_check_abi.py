@@ -109,8 +109,8 @@ esac
           cmd LC_ID_DYLIB
       cmdsize 80
          name @rpath/EcritumRuntime.framework/EcritumRuntime
- current version 0.1.0
-compatibility version 0.1.0
+ current version 0.2.0
+compatibility version 0.2.0
 """)
 
     def _append_symbols(self, slice_name, text):

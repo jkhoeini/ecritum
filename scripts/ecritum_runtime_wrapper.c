@@ -98,7 +98,7 @@ int graal_tear_down_isolate(graal_isolatethread_t *thread) {
 
 int ecritum_graal_version(graal_isolatethread_t *thread, char *buffer, size_t buffer_len) {
     (void)thread;
-    static const char *version = "0.1.0";
+    static const char *version = "0.2.0";
     size_t required = strlen(version) + 1;
     if (buffer == NULL) {
         return ECRITUM_ERROR_INVALID_ARGUMENT;

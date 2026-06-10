@@ -96,7 +96,10 @@ class SecurityBaselineTests(unittest.TestCase):
         self.assertIn("native/src/core/java", payload["scanned"]["roots"])
         self.assertIn("native/src/full/java", payload["scanned"]["roots"])
         self.assertIn("native/src/python-probe", payload["scanned"]["roots"])
-        self.assertIn("native/src/ruby-probe", payload["scanned"]["roots"])
+        # The ruby-probe scan root was removed with the probe retirement (issue
+        # #2). Ruby is scanned only via the production evaluator under
+        # native/src/full/java.
+        self.assertNotIn("native/src/ruby-probe", payload["scanned"]["roots"])
 
     def test_static_check_detects_forbidden_polyglot_pattern(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -152,10 +155,13 @@ class SecurityBaselineTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertTrue(payload["ok"])
 
-    def test_static_check_allows_fixed_ruby_probe_options_only_under_ruby_probe(self):
+    def test_static_check_allows_fixed_ruby_options_only_in_production_evaluator(self):
+        # After the ruby-probe retirement (issue #2) the ONLY place the fixed
+        # TruffleRuby deny-options (plus the single-threaded interlock) are
+        # allowlisted is the production native/src/full/java/ecritum/RubyEvaluator.java.
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            path = root / "native" / "src" / "ruby-probe" / "java" / "Good.java"
+            path = root / "native" / "src" / "full" / "java" / "ecritum" / "RubyEvaluator.java"
             path.parent.mkdir(parents=True)
             path.write_text(
                 textwrap.dedent(
@@ -163,9 +169,11 @@ class SecurityBaselineTests(unittest.TestCase):
                     class Good {
                         void good() {
                             builder
+                                .allowCreateThread(true)
                                 .option("ruby.platform-native", "false")
                                 .option("ruby.cexts", "false")
                                 .option("ruby.rubygems", "false")
+                                .option("ruby.single-threaded", "true")
                                 .build();
                         }
                     }
@@ -180,7 +188,7 @@ class SecurityBaselineTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertTrue(payload["ok"])
 
-    def test_static_check_rejects_fixed_ruby_probe_options_outside_ruby_probe(self):
+    def test_static_check_rejects_fixed_ruby_options_outside_production_evaluator(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             path = root / "native" / "src" / "full" / "java" / "Bad.java"
@@ -196,10 +204,10 @@ class SecurityBaselineTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertEqual(payload["violations"][0]["rule"], "polyglot.raw_option_passthrough")
 
-    def test_static_check_rejects_unlisted_options_inside_ruby_probe(self):
+    def test_static_check_rejects_unlisted_options_inside_production_evaluator(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            path = root / "native" / "src" / "ruby-probe" / "java" / "Bad.java"
+            path = root / "native" / "src" / "full" / "java" / "ecritum" / "RubyEvaluator.java"
             path.parent.mkdir(parents=True)
             path.write_text(
                 'class Bad { void bad() { builder.option("ruby.allow-all", "true"); } }\n',

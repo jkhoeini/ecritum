@@ -10,12 +10,10 @@ native_stable_dir := "build/native/macos-arm64"
 native_core_stable_dir := "build/native/core/macos-arm64"
 native_full_stable_dir := "build/native/full/macos-arm64"
 native_python_probe_stable_dir := "build/native/python-probe/macos-arm64"
-native_ruby_probe_stable_dir := "build/native/ruby-probe/macos-arm64"
 native_private_headers_dir := "build/native/macos-arm64/include/private"
 native_core_private_headers_dir := "build/native/core/macos-arm64/include/private"
 native_full_private_headers_dir := "build/native/full/macos-arm64/include/private"
 native_python_probe_private_headers_dir := "build/native/python-probe/macos-arm64/include/private"
-native_ruby_probe_private_headers_dir := "build/native/ruby-probe/macos-arm64/include/private"
 
 default:
     @just --list
@@ -82,16 +80,6 @@ native-python-probe:
     cp native/target/graal_isolate.h native/target/graal_isolate_dynamic.h native/target/libecritum.h native/target/libecritum_dynamic.h {{native_python_probe_private_headers_dir}}/
     just check-native-python-probe
 
-native-ruby-probe:
-    test -f {{maven_project}}
-    MACOSX_DEPLOYMENT_TARGET={{min_macos}} mvn -s {{maven_settings}} -f {{maven_project}} clean package -Pnative,ruby-probe -Decritum.native.mainClass=ecritum.RubyProbeEntrypoints -Dmaven.test.skip=true
-    test -f {{native_output}}
-    mkdir -p {{native_ruby_probe_stable_dir}}
-    mkdir -p {{native_ruby_probe_private_headers_dir}}
-    cp {{native_output}} {{native_ruby_probe_stable_dir}}/libecritum.dylib
-    cp native/target/graal_isolate.h native/target/graal_isolate_dynamic.h native/target/libecritum.h native/target/libecritum_dynamic.h {{native_ruby_probe_private_headers_dir}}/
-    just check-native-ruby-probe
-
 check-native:
     just check-native-full {{native_stable_dir}}
 
@@ -129,16 +117,6 @@ check-native-python-probe dir="build/native/python-probe/macos-arm64":
     test -f {{dir}}/libecritum.dylib
     test -f {{dir}}/include/private/libecritum.h
     nm -gU {{dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_python_probe$'
-    nm -gU {{dir}}/libecritum.dylib | grep -q ' _graal_create_isolate$'
-    nm -gU {{dir}}/libecritum.dylib | grep -q ' _graal_tear_down_isolate$'
-
-check-native-ruby-probe dir="build/native/ruby-probe/macos-arm64":
-    test -f {{dir}}/libecritum.dylib
-    test -f {{dir}}/include/private/libecritum.h
-    nm -gU {{dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_ruby_probe$'
-    ! nm -gU {{dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_javascript_with_stdlib$'
-    ! nm -gU {{dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_lua_with_stdlib$'
-    ! nm -gU {{dir}}/libecritum.dylib | grep -q ' _ecritum_graal_eval_python_with_stdlib$'
     nm -gU {{dir}}/libecritum.dylib | grep -q ' _graal_create_isolate$'
     nm -gU {{dir}}/libecritum.dylib | grep -q ' _graal_tear_down_isolate$'
 
@@ -341,15 +319,6 @@ test-python-native-probe:
     clang -I {{native_python_probe_private_headers_dir}} Tests/C/native_python_probe.c -L {{native_python_probe_stable_dir}} -lecritum -o build/c-abi/native_python_probe
     DYLD_LIBRARY_PATH={{native_python_probe_stable_dir}} build/c-abi/native_python_probe
 
-test-ruby-probe-java:
-    mvn -s {{maven_settings}} -f {{maven_project}} -Pruby-probe -Dtest=RubyProbeEvaluatorTest test
-
-test-ruby-native-probe:
-    test -f {{native_ruby_probe_stable_dir}}/libecritum.dylib
-    mkdir -p build/c-abi
-    clang -I {{native_ruby_probe_private_headers_dir}} Tests/C/native_ruby_probe.c -L {{native_ruby_probe_stable_dir}} -lecritum -o build/c-abi/native_ruby_probe
-    DYLD_LIBRARY_PATH={{native_ruby_probe_stable_dir}} build/c-abi/native_ruby_probe
-
 test-javascript-native-smoke: test-native-eval-smoke
 
 test-lua-native-smoke: test-native-eval-smoke
@@ -536,7 +505,7 @@ bench-swift-cold-start:
         binary="$tmp_build/$(uname -m)-apple-macosx/debug/SwiftHost" && \
         ECRITUM_LOCAL_RUNTIME=1 ECRITUM_LOCAL_RUNTIME_STATE=v4:runtime:runtime-present:examples swift build --quiet --build-path "$tmp_build" && \
         DYLD_FRAMEWORK_PATH="../../dist/local/EcritumRuntime.xcframework/$slice" "$binary" >/dev/null && \
-        DYLD_FRAMEWORK_PATH="../../dist/local/EcritumRuntime.xcframework/$slice" python3 ../../scripts/measure-command.py --name swift-host --runs 30 --max-p50-ms 1000 --max-p95-ms 2000 --expect-stdout "SwiftHost version=0.1.0" -- "$binary"
+        DYLD_FRAMEWORK_PATH="../../dist/local/EcritumRuntime.xcframework/$slice" python3 ../../scripts/measure-command.py --name swift-host --runs 30 --max-p50-ms 1000 --max-p95-ms 2000 --expect-stdout "SwiftHost version=0.2.0" -- "$binary"
 
 bench-idle-rss:
     @python3 scripts/measure-runtime.py --mode rss

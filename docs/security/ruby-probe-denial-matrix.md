@@ -1,10 +1,35 @@
 # Ruby Probe Runtime Denial Matrix (M12-001C Part A)
 
-Status: preparation-only. This is NOT a Ruby support claim. The `ruby-probe`
-profile is private validation infrastructure (see ADR-0027) and must not become
-a public API, Swift language support claim, README support-matrix entry,
-release-note claim, or default artifact dependency until the new-coordinate
-validation path passes all release/security gates.
+> **RETIRED (issue #2).** The isolated `ruby-probe` profile and its sources
+> (`RubyProbeEvaluator`, `RubyProbeEntrypoints`, `RubyProbeEvaluatorTest`,
+> `RubyDenialMatrixTest`) and the C harness `Tests/C/native_ruby_probe.c` have
+> been removed. Ruby now ships in the production `full` artifact via the
+> hardened production `RubyEvaluator`
+> (`native/src/full/java/ecritum/RubyEvaluator.java`,
+> `ecritum_graal_eval_ruby_with_stdlib`; M12-002, ADR-0028), whose denials are
+> STRONGER than the probe's (sealed loaders via `undef_method`, `eval` family
+> denied, frozen `$LOAD_PATH`, runtime native-access folded to
+> `PERMISSION_DENIED`). The runtime-grade, lexical-bypass denial matrix now runs
+> against the PRODUCTION evaluator in
+> `native/src/full/test/java/ecritum/RubyEvaluatorTest.java` (see
+> `deniesAmbientEscapeHatches`, `deniesRequireBypassEscapeSurfacesAtRuntime`,
+> `rubyGemsAndGemConstantAreUnavailableAtRuntime`,
+> `deniesOpen3RequireAtRuntimeBypassingLexicalFilter`,
+> `resealsRequireAgainstReflectionAndReopenBypasses`,
+> `deniesEvalFamilyForPythonParity`,
+> `deniesLoadPathMutationAtRuntimeBypassingLexicalFilter`,
+> `deniesGuestConcurrencyButAllowsCooperativeFibers`,
+> `objectSpaceCannotReachWorkingLoaderOrHostInternals`,
+> `lexicallyDeniedAndRuntimeDeniedEscapesBothReportPermissionDenied`).
+> The matrix below is retained as the original HISTORICAL evidence (probe
+> context) plus the CURRENT production-evaluator hardening review further down.
+> The "GAP" rows (`require 'open3'`, `$LOAD_PATH` mutation) describe the PROBE
+> context only; both are CLOSED in production (sealed `require`, frozen load
+> path). The reproduction commands in this section reference deleted
+> probe recipes and are kept only for historical traceability.
+
+Status (historical): preparation-only. This was NOT a Ruby support claim. The
+`ruby-probe` profile was private validation infrastructure (see ADR-0027).
 
 ## Purpose
 

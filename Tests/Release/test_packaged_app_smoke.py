@@ -26,7 +26,7 @@ class PackagedAppSmokeContractTest(unittest.TestCase):
         self.assertIn("clojure=42 javascript=42 lua=42 python=42 ruby=42", self.app)
 
     def test_script_runs_copied_app_with_clean_runtime_environment(self):
-        self.assertIn('success_line="EcritumSmokeApp version=0.1.0 clojure=42 javascript=42 lua=42 python=42 ruby=42"', self.script)
+        self.assertIn('success_line="EcritumSmokeApp version=0.2.0 clojure=42 javascript=42 lua=42 python=42 ruby=42"', self.script)
         run_command = re.search(r'output="\$\(env -i ([^\n]+)\)"', self.script)
         self.assertIsNotNone(run_command)
         self.assertIn('PATH="$run_root/empty-bin"', run_command.group(1))

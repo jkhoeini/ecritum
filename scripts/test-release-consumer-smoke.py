@@ -56,7 +56,7 @@ def expected_runtimes(use_default_package_runtime):
 
 def success_line(included_runtimes):
     runtime_values = " ".join(f"{runtime}=42" for runtime in included_runtimes)
-    return f"ReleaseConsumerSmoke version=0.1.0 {runtime_values}"
+    return f"ReleaseConsumerSmoke version=0.2.0 {runtime_values}"
 
 
 def swift_language_list(included_runtimes):

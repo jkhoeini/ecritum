@@ -27,7 +27,7 @@ mise exec -- just packaged-app-smoke
 On success the packaged app prints exactly (verified):
 
 ```
-EcritumSmokeApp version=0.1.0 clojure=42 javascript=42 lua=42 python=42 ruby=42
+EcritumSmokeApp version=0.2.0 clojure=42 javascript=42 lua=42 python=42 ruby=42
 ```
 
 The script also asserts, as part of the smoke gate, that the bundle:
